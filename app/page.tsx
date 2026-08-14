@@ -70,6 +70,8 @@ export default function Rite() {
   const [linkMode, setLinkMode] = useState(false);
   const [linkName, setLinkName] = useState('');
   const [linkIds, setLinkIds] = useState<string[]>([]);
+  const [ritModal, setRitModal] = useState<any>(null);
+  const [remInput, setRemInput] = useState('');
 
   const today = iso(new Date());
   const day = selDate || today;
@@ -128,7 +130,7 @@ export default function Rite() {
   }
 
   async function loadData(clientId: string) {
-    const r = await supabase.from('dog_rituals').select('id,ad,zaman,kategori,tip,kaynak,mezun,aktif,alan,rutin,sira,baslangic,bitis').eq('client_id', clientId).order('zaman');
+    const r = await supabase.from('dog_rituals').select('id,ad,zaman,kategori,tip,kaynak,mezun,aktif,alan,rutin,sira,baslangic,bitis,activity_id,hatirlatma_saat').eq('client_id', clientId).order('zaman');
     setRituals(r.data || []);
     const lg = await supabase.from('dog_ritual_logs').select('id,ritual_id,tarih,yapildi').eq('client_id', clientId);
     setLogs(lg.data || []);
@@ -169,11 +171,35 @@ export default function Rite() {
     else await supabase.from('dog_ritual_logs').insert({ client_id: client.id, ritual_id: ritId, tarih: day, yapildi: true });
     loadData(client.id);
   }
-  async function ritEkle(ad: string, zaman = 'gün', kaynak = 'Kendi', tip = 'aliskanlik', alan: string | null = null) {
+  async function ritEkle(ad: string, zaman = 'gün', kaynak = 'Kendi', tip = 'aliskanlik', alan: string | null = null, activityId: string | null = null) {
     if (!client || !ad.trim()) return;
-    await supabase.from('dog_rituals').insert({ client_id: client.id, ad: ad.trim(), zaman, kaynak, tip, alan, aktif: true, mezun: false, baslangic: today });
+    await supabase.from('dog_rituals').insert({ client_id: client.id, ad: ad.trim(), zaman, kaynak, tip, alan, activity_id: activityId, aktif: true, mezun: false, baslangic: today });
     setYeniRit('');
     loadData(client.id);
+  }
+  function openRit(rt: any) { setRitModal(rt); setRemInput(rt.hatirlatma_saat || ''); }
+  async function setRitZaman(id: string, z: string) {
+    if (!client) return;
+    await supabase.from('dog_rituals').update({ zaman: z }).eq('id', id);
+    setRitModal((p: any) => (p ? { ...p, zaman: z } : p));
+    loadData(client.id);
+  }
+  async function setRitTip(id: string, t: string) {
+    if (!client) return;
+    await supabase.from('dog_rituals').update({ tip: t }).eq('id', id);
+    setRitModal((p: any) => (p ? { ...p, tip: t } : p));
+    loadData(client.id);
+  }
+  async function setRitReminder(id: string, saat: string) {
+    if (!client) return;
+    await supabase.from('dog_rituals').update({ hatirlatma_saat: saat || null }).eq('id', id);
+    setRitModal((p: any) => (p ? { ...p, hatirlatma_saat: saat || null } : p));
+    loadData(client.id);
+  }
+  async function openKB(rt: any) {
+    if (!rt.activity_id) return;
+    const a = await supabase.from('dog_activities').select('*').eq('id', rt.activity_id).single();
+    if (a.data) { setRitModal(null); setActModal(a.data); }
   }
   async function ritSil(id: string) {
     if (!client) return;
@@ -320,13 +346,13 @@ export default function Rite() {
       <div>
         <div className="rit">
           <div className={'chk' + (done ? ' on' : '')} onClick={() => toggleRit(rt.id)}>{done ? '✓' : ''}</div>
-          <div style={{ flex: 1 }}>
+          <div style={{ flex: 1, cursor: 'pointer' }} onClick={() => openRit(rt)}>
             <div className="t">{rt.ad}
               <span className={'typechip ' + (rt.tip === 'hatirlatma' ? 't-rem' : 't-hab')}>{rt.tip === 'hatirlatma' ? 'hatırlatma' : 'alışkanlık'}</span>
               {providerTag(rt.kaynak)}
               {rt.alan && <span className="tagp p-alan">{rt.alan}</span>}
             </div>
-            <div className="m">{rt.zaman || 'gün'}{rt.kategori ? ' · ' + rt.kategori : ''} · toplam {total}</div>
+            <div className="m">{rt.zaman || 'gün'}{rt.hatirlatma_saat ? ' · 🔔 ' + rt.hatirlatma_saat : ''} · toplam {total}</div>
           </div>
           <button className="rmx" onClick={() => ritSil(rt.id)} title="Kaldır">✕</button>
         </div>
@@ -395,7 +421,7 @@ export default function Rite() {
                           return (
                             <div key={rt.id} className="cstep">
                               <div className={'cdot' + (done ? ' on' : '')} onClick={() => toggleRit(rt.id)}>{done ? '✓' : ''}</div>
-                              <div className="cbody"><div className="t">{rt.ad}{rt.alan && <span className="tagp p-alan">{rt.alan}</span>}</div><div className="m">toplam {ritTotal(rt.id)}</div></div>
+                              <div className="cbody" style={{ cursor: 'pointer' }} onClick={() => openRit(rt)}><div className="t">{rt.ad}{rt.alan && <span className="tagp p-alan">{rt.alan}</span>}</div><div className="m">{rt.hatirlatma_saat ? '🔔 ' + rt.hatirlatma_saat + ' · ' : ''}toplam {ritTotal(rt.id)}</div></div>
                               <div className="cact">
                                 <button onClick={() => moveStep(rn, i, -1)}>↑</button>
                                 <button onClick={() => moveStep(rn, i, 1)}>↓</button>
@@ -644,7 +670,45 @@ export default function Rite() {
             {(actModal.alternatifler || []).length > 0 && <div className="kv"><div className="k">Alternatifler</div><div className="v">{actModal.alternatifler.join(' · ')}</div></div>}
             {actModal.dikkat && <div className="kv"><div className="k">Dikkat edilecekler</div><div className="dikkat">⚠ {actModal.dikkat}</div></div>}
             {actModal.kaynak && <div className="kv"><div className="k">Kaynak</div><div className="v">{actModal.kaynak}</div></div>}
-            <div style={{ marginTop: 16 }}><button className="btn" onClick={() => { ritEkle(actModal.ad, actModal.zaman || 'gün', actModal.kaynak_etiket || 'Rite', 'aliskanlik', actModal.grup || null); setActModal(null); setScreen('ajanda'); }}>Ritüellerime ekle</button></div>
+            <div style={{ marginTop: 16 }}><button className="btn" onClick={() => { ritEkle(actModal.ad, actModal.zaman || 'gün', actModal.kaynak_etiket || 'Rite', 'aliskanlik', actModal.grup || null, actModal.id || null); setActModal(null); setScreen('ajanda'); }}>Ritüellerime ekle</button></div>
+          </div>
+        </div>
+      )}
+
+      {ritModal && (
+        <div className="modal" onClick={() => setRitModal(null)}>
+          <div className="sheet" onClick={(e) => e.stopPropagation()}>
+            <button className="x" onClick={() => setRitModal(null)}>×</button>
+            <h2>{ritModal.ad}</h2>
+            <div className="m">{ritModal.alan || ''}{ritModal.kaynak ? ' · ' + ritModal.kaynak : ''}</div>
+
+            <div className="kv"><div className="k">Tür</div>
+              <div>{[['aliskanlik', 'Alışkanlık'], ['hatirlatma', 'Hatırlatma']].map(([t, l]) => (
+                <span key={t} className={'chip' + ((ritModal.tip || 'aliskanlik') === t ? ' on' : '')} onClick={() => setRitTip(ritModal.id, t)}>{l}</span>
+              ))}</div>
+            </div>
+
+            <div className="kv"><div className="k">Zaman dilimi</div>
+              <div>{TODS.map(([z, l]) => <span key={z} className={'chip' + ((ritModal.zaman || 'gün') === z ? ' on' : '')} onClick={() => setRitZaman(ritModal.id, z)}>{l}</span>)}</div>
+            </div>
+
+            <div className="kv"><div className="k">Günlük hatırlatma</div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <input type="time" style={{ width: 'auto' }} value={remInput} onChange={(e) => setRemInput(e.target.value)} />
+                <button className="btn sm" onClick={() => setRitReminder(ritModal.id, remInput)}>Kaydet</button>
+                {ritModal.hatirlatma_saat && <button className="btn sm ghost" onClick={() => { setRemInput(''); setRitReminder(ritModal.id, ''); }}>Kapat</button>}
+              </div>
+              <div className="note">Uygulama kapalıyken de bildirim gelir (push açıksa). Saat: Türkiye saati.</div>
+            </div>
+
+            {ritModal.activity_id && (
+              <div style={{ marginTop: 14 }}><button className="btn ghost" onClick={() => openKB(ritModal)}>📖 Bilgi kartını aç (nasıl yapılır · kaynak · video)</button></div>
+            )}
+
+            <div className="rowbtns" style={{ marginTop: 14 }}>
+              <button className="btn sm ghost" onClick={() => { const id = ritModal.id; setRitModal(null); ritSil(id); }}>Kaldır</button>
+              {!ritModal.mezun && !ritModal.bitis && <button className="btn sm ghost" onClick={() => { const id = ritModal.id; setRitModal(null); emekli(id); }}>Emekli et</button>}
+            </div>
           </div>
         </div>
       )}
