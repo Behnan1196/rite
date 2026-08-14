@@ -18,6 +18,7 @@ input{width:100%;font-size:15px;padding:11px 12px;border:1px solid var(--line);b
 .btn{width:100%;background:var(--green);color:#fff;border:none;border-radius:11px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;}
 .btn.sm{width:auto;padding:8px 14px;font-size:12.5px;border-radius:20px;}
 .btn.ghost{background:#fff;color:var(--green);border:1px solid #bfe2d4;}
+.btn:disabled{opacity:.4;cursor:default;}
 .rit{display:flex;align-items:center;gap:10px;padding:12px 4px;border-top:1px solid var(--line);}
 .rit:first-child{border-top:none;}
 .rit .chk{width:26px;height:26px;border-radius:50%;border:2px solid var(--line);flex:0 0 26px;display:flex;align-items:center;justify-content:center;font-size:14px;color:#fff;cursor:pointer;}

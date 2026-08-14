@@ -192,8 +192,9 @@ export default function Rite() {
   }
   async function setRitReminder(id: string, saat: string) {
     if (!client) return;
-    await supabase.from('dog_rituals').update({ hatirlatma_saat: saat || null }).eq('id', id);
-    setRitModal((p: any) => (p ? { ...p, hatirlatma_saat: saat || null } : p));
+    // Saati değiştirince "bugün gönderildi" işaretini sıfırla → yeni saat aynı gün de tetiklenir
+    await supabase.from('dog_rituals').update({ hatirlatma_saat: saat || null, son_bildirim: null }).eq('id', id);
+    setRitModal((p: any) => (p ? { ...p, hatirlatma_saat: saat || null, son_bildirim: null } : p));
     loadData(client.id);
   }
   async function openKB(rt: any) {
@@ -695,7 +696,7 @@ export default function Rite() {
             <div className="kv"><div className="k">Günlük hatırlatma</div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <input type="time" style={{ width: 'auto' }} value={remInput} onChange={(e) => setRemInput(e.target.value)} />
-                <button className="btn sm" onClick={() => setRitReminder(ritModal.id, remInput)}>Kaydet</button>
+                <button className="btn sm" disabled={remInput === (ritModal.hatirlatma_saat || '')} onClick={() => setRitReminder(ritModal.id, remInput)}>Kaydet</button>
                 {ritModal.hatirlatma_saat && <button className="btn sm ghost" onClick={() => { setRemInput(''); setRitReminder(ritModal.id, ''); }}>Kapat</button>}
               </div>
               <div className="note">Uygulama kapalıyken de bildirim gelir (push açıksa). Saat: Türkiye saati.</div>
