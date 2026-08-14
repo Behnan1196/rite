@@ -33,13 +33,14 @@ async function run() {
   const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL as string, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string);
   const { min, dstr } = istNow();
 
-  const { data: rits } = await sb.from('dog_rituals').select('id,ad,client_id,hatirlatma_saat,baslangic,bitis').not('hatirlatma_saat', 'is', null);
+  const { data: rits } = await sb.from('dog_rituals').select('id,ad,client_id,hatirlatma_saat,baslangic,bitis,son_bildirim').not('hatirlatma_saat', 'is', null);
   const due = (rits || []).filter((r: any) => {
     const [h, m] = String(r.hatirlatma_saat).split(':').map(Number);
     const rm = h * 60 + m;
     const diff = min - rm;
     const active = (!r.baslangic || r.baslangic <= dstr) && (!r.bitis || dstr <= r.bitis);
-    return active && diff >= 0 && diff < WINDOW;
+    const notSentToday = !r.son_bildirim || r.son_bildirim !== dstr;
+    return active && notSentToday && diff >= 0 && diff < WINDOW;
   });
 
   let sent = 0;
@@ -55,6 +56,8 @@ async function run() {
         if (st === 404 || st === 410) await sb.from('dog_push_subs').delete().eq('endpoint', (s as any).endpoint);
       }
     }
+    // Günde bir kez: bu ritüel için işaretle (cron sık çağrılsa da tekrar gönderme)
+    await sb.from('dog_rituals').update({ son_bildirim: dstr }).eq('id', (r as any).id);
   }
   return NextResponse.json({ checked: (rits || []).length, due: due.length, sent });
 }
