@@ -127,3 +127,6 @@ input{width:100%;font-size:15px;padding:11px 12px;border:1px solid var(--line);b
 .cact{display:flex;gap:1px;flex:0 0 auto;}
 .cact button{background:none;border:none;color:#c4bca8;font-size:14px;cursor:pointer;padding:3px 4px;line-height:1;}
 .cact button:hover{color:var(--ink);}
+.sortrow{display:flex;align-items:center;gap:4px;}
+.draghandle{background:none;border:none;color:#c4bca8;font-size:15px;line-height:1;cursor:grab;padding:6px 3px;flex:0 0 auto;touch-action:none;align-self:center;}
+.draghandle:active{cursor:grabbing;color:var(--muted);}

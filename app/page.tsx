@@ -1,6 +1,20 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { supabase } from '@/lib/supabaseClient';
+import { DndContext, PointerSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+
+function SortableItem({ id, children }: { id: string; children: ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.55 : 1 };
+  return (
+    <div ref={setNodeRef} style={style} className="sortrow">
+      <button className="draghandle" {...attributes} {...listeners} aria-label="taşı">⋮⋮</button>
+      <div style={{ flex: 1, minWidth: 0 }}>{children}</div>
+    </div>
+  );
+}
 
 type Client = { id: string; ad: string; code: string };
 const LS = 'rite_client';
@@ -72,6 +86,7 @@ export default function Rite() {
   const [linkIds, setLinkIds] = useState<string[]>([]);
   const [ritModal, setRitModal] = useState<any>(null);
   const [remInput, setRemInput] = useState('');
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { delay: 180, tolerance: 6 } }));
 
   const today = iso(new Date());
   const day = selDate || today;
@@ -130,7 +145,7 @@ export default function Rite() {
   }
 
   async function loadData(clientId: string) {
-    const r = await supabase.from('dog_rituals').select('id,ad,zaman,kategori,tip,kaynak,mezun,aktif,alan,rutin,sira,baslangic,bitis,activity_id,hatirlatma_saat').eq('client_id', clientId).order('zaman');
+    const r = await supabase.from('dog_rituals').select('id,ad,zaman,kategori,tip,kaynak,mezun,aktif,alan,rutin,sira,baslangic,bitis,activity_id,hatirlatma_saat,blok_sira').eq('client_id', clientId).order('zaman');
     setRituals(r.data || []);
     const lg = await supabase.from('dog_ritual_logs').select('id,ritual_id,tarih,yapildi').eq('client_id', clientId);
     setLogs(lg.data || []);
@@ -173,14 +188,16 @@ export default function Rite() {
   }
   async function ritEkle(ad: string, zaman = 'gün', kaynak = 'Kendi', tip = 'aliskanlik', alan: string | null = null, activityId: string | null = null) {
     if (!client || !ad.trim()) return;
-    await supabase.from('dog_rituals').insert({ client_id: client.id, ad: ad.trim(), zaman, kaynak, tip, alan, activity_id: activityId, aktif: true, mezun: false, baslangic: today });
+    await supabase.from('dog_rituals').insert({ client_id: client.id, ad: ad.trim(), zaman, kaynak, tip, alan, activity_id: activityId, aktif: true, mezun: false, baslangic: today, blok_sira: Date.now() });
     setYeniRit('');
     loadData(client.id);
   }
   function openRit(rt: any) { setRitModal(rt); setRemInput(rt.hatirlatma_saat || ''); }
   async function setRitZaman(id: string, z: string) {
     if (!client) return;
-    await supabase.from('dog_rituals').update({ zaman: z }).eq('id', id);
+    const rt = rituals.find((r) => r.id === id);
+    if (rt?.rutin) await supabase.from('dog_rituals').update({ zaman: z }).eq('rutin', rt.rutin); // zincirse tüm üyeler
+    else await supabase.from('dog_rituals').update({ zaman: z }).eq('id', id);
     setRitModal((p: any) => (p ? { ...p, zaman: z } : p));
     loadData(client.id);
   }
@@ -223,7 +240,8 @@ export default function Rite() {
     if (linkIds.length < 2) return setMsg('En az 2 aktivite seç');
     const rid = 'r' + Date.now().toString(36);
     const firstSlot = rituals.find((r) => r.id === linkIds[0])?.zaman || 'gün';
-    await Promise.all(linkIds.map((id, i) => supabase.from('dog_rituals').update({ rutin: rid, sira: i, zaman: firstSlot }).eq('id', id)));
+    const bs = Date.now();
+    await Promise.all(linkIds.map((id, i) => supabase.from('dog_rituals').update({ rutin: rid, sira: i, zaman: firstSlot, blok_sira: bs }).eq('id', id)));
     cancelLink();
     loadData(client.id);
   }
@@ -241,6 +259,16 @@ export default function Rite() {
     if (!client) return;
     await supabase.from('dog_rituals').update({ rutin: null }).eq('id', id);
     loadData(client.id);
+  }
+  async function onDragEndSlot(items: any[], e: any) {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const oldIndex = items.findIndex((i) => i.key === active.id);
+    const newIndex = items.findIndex((i) => i.key === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+    const ordered = arrayMove(items, oldIndex, newIndex);
+    await Promise.all(ordered.flatMap((it: any, idx: number) => it.members.map((m: any) => supabase.from('dog_rituals').update({ blok_sira: idx }).eq('id', m.id))));
+    if (client) loadData(client.id);
   }
   async function rutinBoz(name: string) {
     if (!client) return;
@@ -411,36 +439,49 @@ export default function Rite() {
                 {TODS.map(([z, lbl]) => {
                   const slotRits = habits.filter((r) => (r.zaman || 'gün') === z);
                   if (!slotRits.length) return null;
-                  const routineIds = Array.from(new Set(slotRits.filter((r) => r.rutin).map((r) => r.rutin as string)));
-                  const singles = slotRits.filter((r) => !r.rutin);
+                  const map = new Map<string, any>();
+                  for (const r of slotRits) {
+                    const key = r.rutin ? 'r:' + r.rutin : 's:' + r.id;
+                    if (!map.has(key)) map.set(key, { key, rutin: r.rutin || null, members: [] });
+                    map.get(key).members.push(r);
+                  }
+                  const items = Array.from(map.values());
+                  for (const it of items) it.members.sort((a: any, b: any) => (a.sira || 0) - (b.sira || 0));
+                  items.sort((a, b) => (Number(a.members[0].blok_sira) || 0) - (Number(b.members[0].blok_sira) || 0));
                   return (
                     <div key={z}>
                       <div className="tod">{lbl}</div>
-                      {routineIds.map((rid) => {
-                        const steps = slotRits.filter((r) => r.rutin === rid).sort((a, b) => (a.sira || 0) - (b.sira || 0));
-                        return (
-                          <div key={rid} className="card routine">
-                            <div className="chain">
-                              {steps.map((rt, i) => {
-                                const done = ritDone(rt.id);
-                                return (
-                                  <div key={rt.id} className="cstep">
-                                    <div className={'cdot' + (done ? ' on' : '')} onClick={() => toggleRit(rt.id)}>{done ? '✓' : ''}</div>
-                                    <div className="cbody" style={{ cursor: 'pointer' }} onClick={() => openRit(rt)}><div className="t">{i === 0 && <span style={{ marginRight: 4 }}>🔗</span>}{rt.ad}{rt.alan && <span className="tagp p-alan">{rt.alan}</span>}</div><div className="m">{rt.hatirlatma_saat ? '🔔 ' + rt.hatirlatma_saat + ' · ' : ''}toplam {ritTotal(rt.id)}</div></div>
-                                    <div className="cact">
-                                      <button onClick={() => moveStep(rid, i, -1)}>↑</button>
-                                      <button onClick={() => moveStep(rid, i, 1)}>↓</button>
-                                      <button onClick={() => rutinCikar(rt.id)} title="Zincirden çıkar">✕</button>
-                                    </div>
+                      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => onDragEndSlot(items, e)}>
+                        <SortableContext items={items.map((i) => i.key)} strategy={verticalListSortingStrategy}>
+                          {items.map((it) => (
+                            <SortableItem key={it.key} id={it.key}>
+                              {it.rutin ? (
+                                <div className="card routine">
+                                  <div className="chain">
+                                    {it.members.map((rt: any, i: number) => {
+                                      const done = ritDone(rt.id);
+                                      return (
+                                        <div key={rt.id} className="cstep">
+                                          <div className={'cdot' + (done ? ' on' : '')} onClick={() => toggleRit(rt.id)}>{done ? '✓' : ''}</div>
+                                          <div className="cbody" style={{ cursor: 'pointer' }} onClick={() => openRit(rt)}><div className="t">{i === 0 && <span style={{ marginRight: 4 }}>🔗</span>}{rt.ad}{rt.alan && <span className="tagp p-alan">{rt.alan}</span>}</div><div className="m">{rt.hatirlatma_saat ? '🔔 ' + rt.hatirlatma_saat + ' · ' : ''}toplam {ritTotal(rt.id)}</div></div>
+                                          <div className="cact">
+                                            <button onClick={() => moveStep(it.rutin, i, -1)}>↑</button>
+                                            <button onClick={() => moveStep(it.rutin, i, 1)}>↓</button>
+                                            <button onClick={() => rutinCikar(rt.id)} title="Zincirden çıkar">✕</button>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
                                   </div>
-                                );
-                              })}
-                            </div>
-                            <div style={{ textAlign: 'right', marginTop: 2 }}><button className="rboz" onClick={() => rutinBoz(rid)}>zinciri boz</button></div>
-                          </div>
-                        );
-                      })}
-                      {singles.length > 0 && <div className="card" style={{ padding: '4px 14px' }}>{singles.map((rt) => <RitItem key={rt.id} rt={rt} />)}</div>}
+                                  <div style={{ textAlign: 'right', marginTop: 2 }}><button className="rboz" onClick={() => rutinBoz(it.rutin)}>zinciri boz</button></div>
+                                </div>
+                              ) : (
+                                <div className="card" style={{ padding: '4px 14px' }}><RitItem rt={it.members[0]} /></div>
+                              )}
+                            </SortableItem>
+                          ))}
+                        </SortableContext>
+                      </DndContext>
                     </div>
                   );
                 })}
