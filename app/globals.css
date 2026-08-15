@@ -72,6 +72,8 @@ input{width:100%;font-size:15px;padding:11px 12px;border:1px solid var(--line);b
 .tabs{display:flex;gap:6px;overflow-x:auto;margin:4px 0 12px;padding-bottom:2px;}
 .tab{font-size:11px;font-weight:700;padding:7px 12px;border-radius:20px;border:1px solid var(--line);background:#fff;color:var(--muted);white-space:nowrap;cursor:pointer;}
 .tab.on{background:var(--ink);color:#fff;border-color:var(--ink);}
+.chip{display:inline-block;font-size:11.5px;font-weight:700;padding:7px 13px;border-radius:20px;border:1px solid var(--line);background:#f4efe6;color:#7a715e;cursor:pointer;margin:3px 5px 3px 0;user-select:none;}
+.chip.on{background:var(--green);color:#fff;border-color:var(--green);}
 .prov{border:1px solid var(--line);border-radius:12px;padding:12px;margin:9px 0;background:#fff;}
 .prov .ptop{display:flex;align-items:center;gap:10px;}
 .prov .pic{width:34px;height:34px;border-radius:9px;background:#3a56b0;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;flex:0 0 34px;}
