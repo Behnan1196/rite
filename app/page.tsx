@@ -220,9 +220,10 @@ export default function Rite() {
   function toggleLink(id: string) { setLinkIds((a) => (a.includes(id) ? a.filter((x) => x !== id) : [...a, id])); }
   async function saveLink() {
     if (!client) return;
-    if (!linkName.trim()) return setMsg('Rutin adı gir');
     if (linkIds.length < 2) return setMsg('En az 2 aktivite seç');
-    await Promise.all(linkIds.map((id, i) => supabase.from('dog_rituals').update({ rutin: linkName.trim(), sira: i }).eq('id', id)));
+    const rid = 'r' + Date.now().toString(36);
+    const firstSlot = rituals.find((r) => r.id === linkIds[0])?.zaman || 'gün';
+    await Promise.all(linkIds.map((id, i) => supabase.from('dog_rituals').update({ rutin: rid, sira: i, zaman: firstSlot }).eq('id', id)));
     cancelLink();
     loadData(client.id);
   }
@@ -321,7 +322,6 @@ export default function Rite() {
   const habits = rituals.filter((r) => r.tip !== 'hatirlatma' && activeOn(r, day));
   const reminders = rituals.filter((r) => r.tip === 'hatirlatma' && activeOn(r, day));
   const mezunlar = rituals.filter((r) => r.mezun);
-  const routineNames = Array.from(new Set(habits.filter((r) => r.rutin).map((r) => r.rutin as string)));
   const measByKey: Record<string, any[]> = {};
   meas.forEach((m) => { (measByKey[m.anahtar] = measByKey[m.anahtar] || []).push(m); });
   const days7 = lastDays(7);
@@ -389,10 +389,8 @@ export default function Rite() {
 
             {ajView === 'gun' && (linkMode ? (
               <div className="card">
-                <h3>Rutin oluştur — aktiviteleri sırayla bağla</h3>
-                <label>Rutin adı</label>
-                <input value={linkName} onChange={(e) => setLinkName(e.target.value)} placeholder="ör. Sabah Rutini" />
-                <p className="note" style={{ marginTop: 8 }}>Aktivitelere sırayla dokun (numara = sıra). En az 2 aktivite. Drag-drop ileride.</p>
+                <h3>Zincir (rutin) oluştur — aktiviteleri sırayla bağla</h3>
+                <p className="note" style={{ marginTop: 4 }}>Aktivitelere sırayla dokun (numara = sıra). En az 2. Ad gerekmez; ilk sıradakine 🔗 gelir. İlk seçtiğinin zaman dilimi kullanılır, hepsi o dilime taşınır.</p>
                 <div style={{ marginTop: 4 }}>
                   {habits.filter((r) => !r.rutin).map((rt) => {
                     const idx = linkIds.indexOf(rt.id);
@@ -410,39 +408,39 @@ export default function Rite() {
               </div>
             ) : (
               <div>
-                {routineNames.map((rn) => {
-                  const steps = habits.filter((r) => r.rutin === rn).sort((a, b) => (a.sira || 0) - (b.sira || 0));
-                  if (!steps.length) return null;
-                  return (
-                    <div key={rn} className="card routine">
-                      <div className="rh"><span>🔗</span> {rn} <button className="rboz" onClick={() => rutinBoz(rn)}>rutini boz</button></div>
-                      <div className="chain">
-                        {steps.map((rt, i) => {
-                          const done = ritDone(rt.id);
-                          return (
-                            <div key={rt.id} className="cstep">
-                              <div className={'cdot' + (done ? ' on' : '')} onClick={() => toggleRit(rt.id)}>{done ? '✓' : ''}</div>
-                              <div className="cbody" style={{ cursor: 'pointer' }} onClick={() => openRit(rt)}><div className="t">{rt.ad}{rt.alan && <span className="tagp p-alan">{rt.alan}</span>}</div><div className="m">{rt.hatirlatma_saat ? '🔔 ' + rt.hatirlatma_saat + ' · ' : ''}toplam {ritTotal(rt.id)}</div></div>
-                              <div className="cact">
-                                <button onClick={() => moveStep(rn, i, -1)}>↑</button>
-                                <button onClick={() => moveStep(rn, i, 1)}>↓</button>
-                                <button onClick={() => rutinCikar(rt.id)} title="Rutinden çıkar">✕</button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
-
                 {TODS.map(([z, lbl]) => {
-                  const singles = habits.filter((r) => !r.rutin && (r.zaman || 'gün') === z);
-                  if (!singles.length) return null;
+                  const slotRits = habits.filter((r) => (r.zaman || 'gün') === z);
+                  if (!slotRits.length) return null;
+                  const routineIds = Array.from(new Set(slotRits.filter((r) => r.rutin).map((r) => r.rutin as string)));
+                  const singles = slotRits.filter((r) => !r.rutin);
                   return (
                     <div key={z}>
                       <div className="tod">{lbl}</div>
-                      <div className="card" style={{ padding: '4px 14px' }}>{singles.map((rt) => <RitItem key={rt.id} rt={rt} />)}</div>
+                      {routineIds.map((rid) => {
+                        const steps = slotRits.filter((r) => r.rutin === rid).sort((a, b) => (a.sira || 0) - (b.sira || 0));
+                        return (
+                          <div key={rid} className="card routine">
+                            <div className="chain">
+                              {steps.map((rt, i) => {
+                                const done = ritDone(rt.id);
+                                return (
+                                  <div key={rt.id} className="cstep">
+                                    <div className={'cdot' + (done ? ' on' : '')} onClick={() => toggleRit(rt.id)}>{done ? '✓' : ''}</div>
+                                    <div className="cbody" style={{ cursor: 'pointer' }} onClick={() => openRit(rt)}><div className="t">{i === 0 && <span style={{ marginRight: 4 }}>🔗</span>}{rt.ad}{rt.alan && <span className="tagp p-alan">{rt.alan}</span>}</div><div className="m">{rt.hatirlatma_saat ? '🔔 ' + rt.hatirlatma_saat + ' · ' : ''}toplam {ritTotal(rt.id)}</div></div>
+                                    <div className="cact">
+                                      <button onClick={() => moveStep(rid, i, -1)}>↑</button>
+                                      <button onClick={() => moveStep(rid, i, 1)}>↓</button>
+                                      <button onClick={() => rutinCikar(rt.id)} title="Zincirden çıkar">✕</button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            <div style={{ textAlign: 'right', marginTop: 2 }}><button className="rboz" onClick={() => rutinBoz(rid)}>zinciri boz</button></div>
+                          </div>
+                        );
+                      })}
+                      {singles.length > 0 && <div className="card" style={{ padding: '4px 14px' }}>{singles.map((rt) => <RitItem key={rt.id} rt={rt} />)}</div>}
                     </div>
                   );
                 })}
