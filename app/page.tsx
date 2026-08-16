@@ -87,6 +87,12 @@ export default function Rite() {
   const [ritModal, setRitModal] = useState<any>(null);
   const [remInput, setRemInput] = useState('');
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { delay: 180, tolerance: 6 } }));
+  const [faydaList, setFaydaList] = useState<any[]>([]);
+  const [stAd, setStAd] = useState('');
+  const [stFaydalar, setStFaydalar] = useState<string[]>([]);
+  const [stZaman, setStZaman] = useState('gün');
+  const [stSaat, setStSaat] = useState('');
+  const [stMsg, setStMsg] = useState('');
 
   const today = iso(new Date());
   const day = selDate || today;
@@ -135,7 +141,11 @@ export default function Rite() {
     } catch (_) {}
   }
 
-  useEffect(() => { loadActivities(); }, []);
+  useEffect(() => { loadActivities(); loadFaydalar(); }, []);
+  async function loadFaydalar() {
+    const r = await supabase.from('dog_faydalar').select('kod,ad,alan,kanit_duzeyi,sira').eq('aktif', true).order('sira');
+    setFaydaList(r.data || []);
+  }
   async function loadActivities() {
     const r = await supabase.from('dog_activities').select('*').eq('aktif', true).order('grup').order('sira');
     const data = r.data || [];
@@ -191,6 +201,21 @@ export default function Rite() {
     await supabase.from('dog_rituals').insert({ client_id: client.id, ad: ad.trim(), zaman, kaynak, tip, alan, activity_id: activityId, aktif: true, mezun: false, baslangic: today, blok_sira: Date.now() });
     setYeniRit('');
     loadData(client.id);
+  }
+  function toggleFayda(kod: string) { setStFaydalar((a) => (a.includes(kod) ? a.filter((x) => x !== kod) : [...a, kod])); }
+  async function studioKaydet() {
+    if (!client) return;
+    if (!stAd.trim()) return setStMsg('Aktivite adı gir');
+    const alan0 = stFaydalar.length ? (faydaList.find((f) => f.kod === stFaydalar[0])?.alan || null) : null;
+    const r = await supabase.from('dog_rituals').insert({
+      client_id: client.id, ad: stAd.trim(), zaman: stZaman, kaynak: 'Kendi', tip: 'aliskanlik',
+      alan: alan0, faydalar: stFaydalar, activity_id: null, hatirlatma_saat: stSaat || null,
+      aktif: true, mezun: false, baslangic: today, blok_sira: Date.now(),
+    });
+    if (r.error) return setStMsg('Hata: ' + r.error.message);
+    setStAd(''); setStFaydalar([]); setStZaman('gün'); setStSaat(''); setStMsg('');
+    loadData(client.id);
+    setScreen('ajanda');
   }
   function openRit(rt: any) { setRitModal(rt); setRemInput(rt.hatirlatma_saat || ''); }
   async function setRitZaman(id: string, z: string) {
@@ -350,6 +375,12 @@ export default function Rite() {
   const habits = rituals.filter((r) => r.tip !== 'hatirlatma' && activeOn(r, day));
   const reminders = rituals.filter((r) => r.tip === 'hatirlatma' && activeOn(r, day));
   const mezunlar = rituals.filter((r) => r.mezun);
+  const faydaMap: Record<string, any> = {};
+  faydaList.forEach((f) => { faydaMap[f.kod] = f; });
+  const ritAreas = (rt: any): string[] => {
+    if (rt.faydalar && rt.faydalar.length) return Array.from(new Set(rt.faydalar.map((k: string) => faydaMap[k]?.alan).filter(Boolean)));
+    return rt.alan ? [rt.alan] : [];
+  };
   const measByKey: Record<string, any[]> = {};
   meas.forEach((m) => { (measByKey[m.anahtar] = measByKey[m.anahtar] || []).push(m); });
   const days7 = lastDays(7);
@@ -379,7 +410,7 @@ export default function Rite() {
             <div className="t">{rt.ad}
               <span className={'typechip ' + (rt.tip === 'hatirlatma' ? 't-rem' : 't-hab')}>{rt.tip === 'hatirlatma' ? 'hatırlatma' : 'alışkanlık'}</span>
               {providerTag(rt.kaynak)}
-              {rt.alan && <span className="tagp p-alan">{rt.alan}</span>}
+              {ritAreas(rt).map((a) => <span key={a} className="tagp p-alan">{a}</span>)}
             </div>
             <div className="m">{rt.zaman || 'gün'}{rt.hatirlatma_saat ? ' · 🔔 ' + rt.hatirlatma_saat : ''} · toplam {total}</div>
           </div>
@@ -463,7 +494,7 @@ export default function Rite() {
                                       return (
                                         <div key={rt.id} className="cstep">
                                           <div className={'cdot' + (done ? ' on' : '')} onClick={() => toggleRit(rt.id)}>{done ? '✓' : ''}</div>
-                                          <div className="cbody" style={{ cursor: 'pointer' }} onClick={() => openRit(rt)}><div className="t">{i === 0 && <span style={{ marginRight: 4 }}>🔗</span>}{rt.ad}{rt.alan && <span className="tagp p-alan">{rt.alan}</span>}</div><div className="m">{rt.hatirlatma_saat ? '🔔 ' + rt.hatirlatma_saat + ' · ' : ''}toplam {ritTotal(rt.id)}</div></div>
+                                          <div className="cbody" style={{ cursor: 'pointer' }} onClick={() => openRit(rt)}><div className="t">{i === 0 && <span style={{ marginRight: 4 }}>🔗</span>}{rt.ad}{ritAreas(rt).map((a) => <span key={a} className="tagp p-alan">{a}</span>)}</div><div className="m">{rt.hatirlatma_saat ? '🔔 ' + rt.hatirlatma_saat + ' · ' : ''}toplam {ritTotal(rt.id)}</div></div>
                                           <div className="cact">
                                             <button onClick={() => moveStep(it.rutin, i, -1)}>↑</button>
                                             <button onClick={() => moveStep(it.rutin, i, 1)}>↓</button>
@@ -537,14 +568,25 @@ export default function Rite() {
             <p className="sub">Anlamlı gruplar; her aktivitenin detay + kaynak sayfası var. Beğendiğini ritüellerine ekle.</p>
             <div className="tabs">
               {actGroups.map((g) => <div key={g} className={'tab' + (actGroup === g ? ' on' : '')} onClick={() => setActGroup(g)}>{g}</div>)}
-              <div className={'tab' + (actGroup === '__own' ? ' on' : '')} onClick={() => setActGroup('__own')}>Kendi</div>
+              <div className={'tab' + (actGroup === '__own' ? ' on' : '')} onClick={() => setActGroup('__own')}>＋ Tasarla</div>
             </div>
             {actGroup === '__own' ? (
               <div className="card">
-                <label>Kendi ritüelini oluştur</label>
-                <input value={yeniRit} onChange={(e) => setYeniRit(e.target.value)} placeholder="ör. 20 dk İspanyolca" />
-                <div style={{ marginTop: 10 }}><button className="btn ghost" onClick={() => ritEkle(yeniRit, 'gün', 'Kendi')}>Ekle</button></div>
-                <p className="note" style={{ marginTop: 8 }}>Rite sadece wellbeing için değil — kendi ritüellerini de tutabilirsin.</p>
+                <h3>Aktivite tasarla — Rite Studio</h3>
+                <label>Aktivite adı</label>
+                <input value={stAd} onChange={(e) => setStAd(e.target.value)} placeholder="ör. Badem'le sabah parkı" />
+                <label className="fldlbl">Kapsadığı faydalar (sırayla seç = öncelik)</label>
+                <div>{faydaList.map((f) => { const idx = stFaydalar.indexOf(f.kod); return (
+                  <span key={f.kod} className={'chip' + (idx >= 0 ? ' on' : '')} onClick={() => toggleFayda(f.kod)}>{idx >= 0 ? (idx + 1) + '. ' : ''}{f.ad}</span>
+                ); })}</div>
+                {stFaydalar.length > 0 && <div className="note" style={{ marginTop: 6 }}>Kapsanan alanlar: <b>{Array.from(new Set(stFaydalar.map((k) => faydaMap[k]?.alan).filter(Boolean))).join(' · ')}</b></div>}
+                <div className="grid" style={{ marginTop: 8 }}>
+                  <div><label>Zaman dilimi</label><select value={stZaman} onChange={(e) => setStZaman(e.target.value)}><option value="sabah">Sabah</option><option value="gün">Gün</option><option value="akşam">Akşam</option></select></div>
+                  <div><label>Hatırlatma (ops.)</label><input type="time" value={stSaat} onChange={(e) => setStSaat(e.target.value)} /></div>
+                </div>
+                <div style={{ marginTop: 10 }}><button className="btn" onClick={studioKaydet}>Ajandama ekle</button></div>
+                <div className="msg">{stMsg}</div>
+                <p className="note" style={{ marginTop: 8 }}>Gerçek hayattaki aktiviteni tanımla, kapsadığı faydaları seç — Rite bunları yaşam alanlarına dönüştürür.</p>
               </div>
             ) : (
               <div className="card">
@@ -720,7 +762,9 @@ export default function Rite() {
           <div className="sheet" onClick={(e) => e.stopPropagation()}>
             <button className="x" onClick={() => setRitModal(null)}>×</button>
             <h2>{ritModal.ad}</h2>
-            <div className="m">{ritModal.alan || ''}{ritModal.kaynak ? ' · ' + ritModal.kaynak : ''}</div>
+            <div className="m">{ritModal.kaynak || ''}</div>
+            {ritAreas(ritModal).length > 0 && <div className="kv"><div className="k">Yaşam alanları</div><div>{ritAreas(ritModal).map((a) => <span key={a} className="tagp p-alan">{a}</span>)}</div></div>}
+            {(ritModal.faydalar || []).length > 0 && <div className="kv"><div className="k">Faydalar</div><div className="v">{ritModal.faydalar.map((k: string) => faydaMap[k]?.ad || k).join(' · ')}</div></div>}
 
             <div className="kv"><div className="k">Tür</div>
               <div>{[['aliskanlik', 'Alışkanlık'], ['hatirlatma', 'Hatırlatma']].map(([t, l]) => (
