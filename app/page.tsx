@@ -140,7 +140,7 @@ export default function Rite() {
     setSelDate(iso(new Date()));
     try {
       const s = localStorage.getItem(LS);
-      if (s) { const c = JSON.parse(s); setClient(c); loadData(c.id); loadInbox(c.id); ensureShareCode(c); }
+      if (s) { const c = JSON.parse(s); setClient(c); loadData(c.id); loadInbox(c.id); ensureShareCode(c); reassignPush(c.id); }
     } catch (_) {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -202,9 +202,22 @@ export default function Rite() {
     if (!r.data || !r.data.length) return setMsg('Kod bulunamadı (ör. RITE-AB12C).');
     const cli = r.data[0] as Client;
     setClient(cli); localStorage.setItem(LS, JSON.stringify(cli)); setMsg('');
-    loadData(cli.id); loadInbox(cli.id); ensureShareCode(cli);
+    loadData(cli.id); loadInbox(cli.id); ensureShareCode(cli); reassignPush(cli.id);
   }
-  function cikis() { localStorage.removeItem(LS); setClient(null); setCode(''); }
+  async function currentSub() {
+    try { if (!('serviceWorker' in navigator)) return null; const reg = await navigator.serviceWorker.ready; return await reg.pushManager.getSubscription(); } catch (_) { return null; }
+  }
+  async function reassignPush(clientId: string) {
+    const sub = await currentSub(); if (!sub) return;
+    const j: any = sub.toJSON();
+    await supabase.from('dog_push_subs').upsert({ client_id: clientId, endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth }, { onConflict: 'endpoint' });
+  }
+  async function removePushForDevice() {
+    const sub = await currentSub(); if (!sub) return;
+    const j: any = sub.toJSON();
+    await supabase.from('dog_push_subs').delete().eq('endpoint', j.endpoint);
+  }
+  async function cikis() { await removePushForDevice(); localStorage.removeItem(LS); setClient(null); setCode(''); setPushOn(false); }
   async function resetAjanda() {
     if (!client) return;
     if (!confirm('Ajandadaki TÜM ritüeller ve işaretler silinsin mi? (Kişisel aktiviteler havuzda kalır; geri alınamaz)')) return;
