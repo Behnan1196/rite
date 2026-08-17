@@ -88,6 +88,7 @@ export default function Rite() {
   const [remInput, setRemInput] = useState('');
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { delay: 180, tolerance: 6 } }));
   const [faydaList, setFaydaList] = useState<any[]>([]);
+  const [alanList, setAlanList] = useState<string[]>([]);
   const [stAd, setStAd] = useState('');
   const [stFaydalar, setStFaydalar] = useState<string[]>([]);
   const [stZaman, setStZaman] = useState('gün');
@@ -141,10 +142,14 @@ export default function Rite() {
     } catch (_) {}
   }
 
-  useEffect(() => { loadActivities(); loadFaydalar(); }, []);
+  useEffect(() => { loadActivities(); loadFaydalar(); loadAreas(); }, []);
   async function loadFaydalar() {
     const r = await supabase.from('dog_faydalar').select('kod,ad,alan,kanit_duzeyi,sira').eq('aktif', true).order('sira');
     setFaydaList(r.data || []);
+  }
+  async function loadAreas() {
+    const r = await supabase.from('dog_ref_items').select('ad,sira').eq('tur', 'wellbeing_alan').eq('aktif', true).order('sira');
+    setAlanList((r.data || []).map((x: any) => x.ad));
   }
   async function loadActivities() {
     const r = await supabase.from('dog_activities').select('*').eq('aktif', true).order('grup').order('sira');
@@ -644,6 +649,35 @@ export default function Rite() {
         {screen === 'gelisim' && (
           <div>
             <h2>Gelişim</h2>
+            <div className="card"><h3>Kapsama — bu hafta</h3>
+              {(() => {
+                const base = alanList.length ? alanList : Array.from(new Set(faydaList.map((f) => f.alan)));
+                const areaCount: Record<string, number> = {};
+                base.forEach((a) => { areaCount[a] = 0; });
+                days7.forEach((d) => rituals.forEach((rt) => {
+                  if (logs.some((l) => l.ritual_id === rt.id && l.tarih === d && l.yapildi)) ritAreas(rt).forEach((a) => { areaCount[a] = (areaCount[a] || 0) + 1; });
+                }));
+                const areas = Object.keys(areaCount);
+                const max = Math.max(1, ...areas.map((a) => areaCount[a]));
+                const touched = areas.filter((a) => areaCount[a] > 0).length;
+                if (!areas.length) return <div className="note">Alan tanımlı değil.</div>;
+                return (
+                  <>
+                    <div className="note" style={{ marginTop: 0, marginBottom: 8 }}><b>{touched}/{areas.length}</b> yaşam alanına dokundun.</div>
+                    {areas.map((a) => {
+                      const c = areaCount[a];
+                      return (
+                        <div key={a} className="mbar">
+                          <div className="l"><span style={{ color: c ? undefined : 'var(--muted)' }}>{a}{c ? '' : ' · boş'}</span><b>{c}</b></div>
+                          <div className="track"><div className="fill" style={{ width: (c / max) * 100 + '%', opacity: c ? 1 : 0.25 }} /></div>
+                        </div>
+                      );
+                    })}
+                    <div className="soul">Boş alanlar = fırsat. Bir aktivitenin çok alanı birden kapsaması = kaldıraç (Badem yürüyüşü gibi tek aktivite 3-4 alan).</div>
+                  </>
+                );
+              })()}
+            </div>
             <div className="card"><h3>Readiness (son 7 gün)</h3>
               <div className="spark">{days7.map((d) => {
                 const sched = gelHabits.filter((r) => activeOn(r, d));
