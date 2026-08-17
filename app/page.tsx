@@ -37,7 +37,8 @@ const POOL: Record<string, { ad: string; dsc: string; zaman: string; flag?: stri
   ],
 };
 const POOL_KAYNAK: Record<string, string> = { def: 'Rite', afh: 'AfH', mer: 'Meridyen' };
-const TODS: [string, string][] = [['sabah', 'Sabah'], ['gün', 'Gün'], ['akşam', 'Akşam']];
+const TODS: [string, string][] = [['sabah', 'Sabah'], ['gün', 'Gün içi'], ['akşam', 'Akşam']];
+const SLOTBG: Record<string, string> = { sabah: '#fbf6ec', 'gün': '#f2f5ee', 'akşam': '#eef1f7' };
 const WD = ['Pz', 'Pt', 'Sa', 'Ça', 'Pe', 'Cu', 'Ct'];
 const WDFULL = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
 const MONTHS = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
@@ -78,6 +79,7 @@ export default function Rite() {
   const [dayNote, setDayNote] = useState('');
   const [inbox, setInbox] = useState<any[]>([]);
   const [ib, setIb] = useState({ t: '', u: '' });
+  const [addSlot, setAddSlot] = useState<string | null>(null);
   const [msg, setMsg] = useState('');
   const [pushOn, setPushOn] = useState(false);
   const [pushMsg, setPushMsg] = useState('');
@@ -254,9 +256,9 @@ export default function Rite() {
       const rr = await supabase.from('dog_rituals').insert({ client_id: client.id, ad: stAd.trim(), zaman: stZaman, kaynak: 'Kendi', tip: 'aliskanlik', alan: alan0, faydalar: stFaydalar, activity_id: act.data.id, hatirlatma_saat: stSaat || null, aktif: true, mezun: false, baslangic: today, blok_sira: Date.now() });
       if (rr.error) return setStMsg('Aktivite kaydedildi; ajanda hatası: ' + rr.error.message);
     }
-    setStAd(''); setStFaydalar([]); setStZaman('gün'); setStSaat(''); setStMsg('');
+    setStAd(''); setStFaydalar([]); setStZaman('gün'); setStSaat(''); setStMsg(''); setAddSlot(null);
     loadActivities(); loadData(client.id);
-    setActGroup(stAjanda ? '__kisisel' : '__kisisel'); if (stAjanda) setScreen('ajanda');
+    setActGroup('__kisisel'); if (stAjanda) setScreen('ajanda');
   }
   function openKAct(a: any) { setKAct(a); setKAd(a.ad || ''); setKAcik(a.aciklama || ''); setKFaydalar(a.faydalar || []); setKVids(a.videolar || []); setKVin({ baslik: '', url: '' }); setKMsg(''); }
   function kToggleFayda(kod: string) { setKFaydalar((a) => (a.includes(kod) ? a.filter((x) => x !== kod) : [...a, kod])); }
@@ -272,8 +274,8 @@ export default function Rite() {
   async function kEkleAjanda() {
     if (!kAct || !client) return;
     const alan0 = kFaydalar.length ? (faydaList.find((f) => f.kod === kFaydalar[0])?.alan || null) : null;
-    await ritEkle(kAd.trim() || kAct.ad, kAct.zaman || 'gün', 'Kendi', 'aliskanlik', alan0, kAct.id, kFaydalar);
-    setKAct(null); setScreen('ajanda');
+    await ritEkle(kAd.trim() || kAct.ad, addSlot || kAct.zaman || 'gün', 'Kendi', 'aliskanlik', alan0, kAct.id, kFaydalar);
+    setKAct(null); setAddSlot(null); setScreen('ajanda');
   }
   async function kSil() {
     if (!kAct) return;
@@ -392,9 +394,9 @@ export default function Rite() {
     setDayNote(v);
     if (client) localStorage.setItem('rite_note_' + client.id + '_' + day, v);
   }
-  async function inboxEkle() {
+  async function inboxCapture(tur: string) {
     if (!client || !ib.t.trim()) return;
-    await supabase.from('dog_inbox').insert({ client_id: client.id, tur: 'link', baslik: ib.t.trim(), url: ib.u.trim() || null, durum: 'yeni' });
+    await supabase.from('dog_inbox').insert({ client_id: client.id, tur, baslik: ib.t.trim(), url: tur === 'link' ? (ib.u.trim() || null) : null, durum: 'yeni' });
     setIb({ t: '', u: '' });
     loadInbox(client.id);
   }
@@ -525,7 +527,6 @@ export default function Rite() {
       <div className="hd">
         <div className="b">Rite <span>· {client.ad}</span></div>
         <button className="ibtn" onClick={() => setScreen('inbox')}>📥{ibBadge > 0 && <span className="bdg">{ibBadge}</span>}</button>
-        <button className={'bell' + (pushOn ? ' on' : '')} onClick={enableNotifs}>{pushOn ? '🔔' : '🔔'}</button>
       </div>
 
       <div className="main">
@@ -566,7 +567,6 @@ export default function Rite() {
               <div>
                 {TODS.map(([z, lbl]) => {
                   const slotRits = habits.filter((r) => (r.zaman || 'gün') === z);
-                  if (!slotRits.length) return null;
                   const map = new Map<string, any>();
                   for (const r of slotRits) {
                     const key = r.rutin ? 'r:' + r.rutin : 's:' + r.id;
@@ -577,8 +577,12 @@ export default function Rite() {
                   for (const it of items) it.members.sort((a: any, b: any) => (a.sira || 0) - (b.sira || 0));
                   items.sort((a, b) => (Number(a.members[0].blok_sira) || 0) - (Number(b.members[0].blok_sira) || 0));
                   return (
-                    <div key={z}>
-                      <div className="tod">{lbl}</div>
+                    <div key={z} style={{ background: SLOTBG[z], borderRadius: 12, padding: '2px 8px 6px', margin: '10px 0' }}>
+                      <div className="slothead">
+                        <div className="tod" style={{ margin: '6px 4px 2px' }}>{lbl}</div>
+                        <button className="slotadd" onClick={() => { setAddSlot(z); setStZaman(z); setScreen('havuz'); }} aria-label="ekle">+</button>
+                      </div>
+                      {items.length === 0 ? <div className="note" style={{ padding: '2px 4px 6px' }}>Boş — sağdaki + ile ekle.</div> : (
                       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => onDragEndSlot(items, e)}>
                         <SortableContext items={items.map((i) => i.key)} strategy={verticalListSortingStrategy}>
                           {items.map((it) => (
@@ -610,10 +614,10 @@ export default function Rite() {
                           ))}
                         </SortableContext>
                       </DndContext>
+                      )}
                     </div>
                   );
                 })}
-                {habits.length === 0 && <div className="card"><div className="note">Henüz ritüel yok. <button className="linkbtn" onClick={() => setScreen('havuz')}>Havuz&apos;dan ekle →</button></div></div>}
 
                 {reminders.length > 0 && <>
                   <div className="tod">Randevu & hatırlatma</div>
@@ -626,8 +630,7 @@ export default function Rite() {
                 </div>
 
                 <div className="rowbtns">
-                  <button className="btn ghost sm" onClick={() => setScreen('havuz')}>+ Ritüel ekle</button>
-                  <button className="btn ghost sm" onClick={startLink}>＋ Rutin oluştur</button>
+                  <button className="btn ghost sm" onClick={startLink}>＋ Zincir/rutin oluştur</button>
                   {mezunlar.length > 0 && <button className="btn ghost sm" onClick={() => setScreen('mezunlar')}>🎓 Mezunlar ({mezunlar.length})</button>}
                 </div>
                 {pushMsg && <div className="msg">{pushMsg}</div>}
@@ -663,6 +666,7 @@ export default function Rite() {
           <div>
             <h2>Aktivite Havuzu</h2>
             <p className="sub">Anlamlı gruplar; her aktivitenin detay + kaynak sayfası var. Beğendiğini ritüellerine ekle.</p>
+            {addSlot && <div className="banner">➕ <div><b>{TODS.find((t) => t[0] === addSlot)?.[1]}</b>&apos;a ekleniyor — bir aktivite seç.</div><button className="bb" onClick={() => setAddSlot(null)}>İptal</button></div>}
             <div className="tabs">
               <div className={'tab' + (actGroup === '__kisisel' ? ' on' : '')} onClick={() => setActGroup('__kisisel')}>Kişisel</div>
               {actGroups.map((g) => <div key={g} className={'tab' + (actGroup === g ? ' on' : '')} onClick={() => setActGroup(g)}>{g}</div>)}
@@ -819,7 +823,7 @@ export default function Rite() {
         {screen === 'inbox' && (
           <div>
             <h2>📥 Inbox</h2>
-            <p className="sub">Sana gelen aktivite paylaşımları ve kaydettiğin link/videolar. Önizle, havuzuna al ya da bir güne yerleştir.</p>
+            <p className="sub">Aklına takılan / yeri belli olmayan her şeyin ilk durağı: not, görev, link, ve sana gelen paylaşımlar. Sonra bir güne yerleştir ya da havuza/ritüele çevir.</p>
             <div className="card">
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <div className="note" style={{ marginTop: 0, flex: 1 }}>Paylaşım kodun: <b>{client.share_code || '…'}</b> <span style={{ color: 'var(--muted)' }}>· başkaları buraya gönderebilir</span></div>
@@ -827,11 +831,16 @@ export default function Rite() {
               </div>
             </div>
             <div className="card">
-              <label>Link/başlık ekle</label>
-              <input value={ib.t} onChange={(e) => setIb((s) => ({ ...s, t: e.target.value }))} placeholder="Başlık (ör. Sabah mobilite akışı)" />
-              <input style={{ marginTop: 8 }} value={ib.u} onChange={(e) => setIb((s) => ({ ...s, u: e.target.value }))} placeholder="https:// (opsiyonel)" />
-              <div className="rowbtns"><button className="btn ghost sm" onClick={panodanEkle}>📋 Panodan ekle</button><button className="btn ghost sm" onClick={inboxEkle}>Ekle</button></div>
-              <p className="note" style={{ marginTop: 6 }}>YouTube&apos;da <b>Linki Kopyala</b> → burada <b>Panodan ekle</b>. (iOS&apos;ta doğrudan &quot;Paylaş → Rite&quot; native uygulamada gelecek.)</p>
+              <label>Yakala</label>
+              <input value={ib.t} onChange={(e) => setIb((s) => ({ ...s, t: e.target.value }))} placeholder="Bir şey yaz — not, görev ya da link başlığı…" />
+              <input style={{ marginTop: 8 }} value={ib.u} onChange={(e) => setIb((s) => ({ ...s, u: e.target.value }))} placeholder="https:// (link için, ops.)" />
+              <div className="rowbtns">
+                <button className="btn ghost sm" onClick={() => inboxCapture('not')}>📝 Not</button>
+                <button className="btn ghost sm" onClick={() => inboxCapture('gorev')}>✓ Görev</button>
+                <button className="btn ghost sm" onClick={() => inboxCapture('link')}>🔗 Link</button>
+                <button className="btn ghost sm" onClick={panodanEkle}>📋 Panodan</button>
+              </div>
+              <p className="note" style={{ marginTop: 6 }}>YouTube&apos;da <b>Linki Kopyala</b> → <b>Panodan</b> → <b>Link</b>. (iOS&apos;ta doğrudan &quot;Paylaş → Rite&quot; native uygulamada gelecek.)</p>
             </div>
             {inbox.length === 0 && <div className="note" style={{ textAlign: 'center', marginTop: 10 }}>Inbox boş.</div>}
             {inbox.map((v) => (
@@ -851,7 +860,7 @@ export default function Rite() {
                   </>
                 ) : (
                   <>
-                    <div style={{ fontSize: 13, fontWeight: 700 }}>{v.baslik}</div>
+                    <div style={{ fontSize: 13, fontWeight: 700 }}>{v.tur === 'not' ? '📝 ' : v.tur === 'gorev' ? '✓ ' : '🔗 '}{v.baslik}</div>
                     {v.url && <a href={v.url} target="_blank" rel="noreferrer" style={{ fontSize: 11 }}>{v.url}</a>}
                     <div className="rowbtns">
                       {['Bugün', 'Yarın', 'Hafta sonu'].map((s) => <button key={s} className="btn ghost sm" onClick={() => inboxSlot(v.id, s)}>{v.slot === s ? '✓ ' + s : s}</button>)}
@@ -882,7 +891,7 @@ export default function Rite() {
         {/* ---------- BİLGİ ---------- */}
         {screen === 'bilgi' && (
           <div>
-            <h2>Rite hakkında</h2>
+            <h2>Ayarlar</h2>
             <div className="card"><h3>Gizlilik-önce</h3><p className="note">Anonim. Hesap yok, e-posta yok. Reklam/veri satışı yok — Rite bir hediye.</p></div>
             <div className="card"><h3>Anti-retention</h3><p className="note">Olgunlaşan ritüelleri emekli eder; seni bağımlı değil özerk kılar. Düşük uyumu suçlamaz, sinyal sayar.</p></div>
             <div className="card"><h3>Bildirimler</h3>
@@ -901,7 +910,7 @@ export default function Rite() {
       </div>
 
       <div className="nav">
-        {[['ajanda', '🗓', 'Ajanda'], ['havuz', '⊕', 'Havuz'], ['destek', '🩺', 'Destek'], ['gelisim', '📈', 'Gelişim'], ['bilgi', 'ⓘ', 'Bilgi']].map(([k, ic, l]) => (
+        {[['ajanda', '🗓', 'Ajanda'], ['havuz', '⊕', 'Havuz'], ['destek', '🩺', 'Destek'], ['gelisim', '📈', 'Gelişim'], ['bilgi', '⚙', 'Ayarlar']].map(([k, ic, l]) => (
           <button key={k} className={['ajanda', 'mezunlar'].includes(screen) && k === 'ajanda' ? 'on' : screen === k ? 'on' : ''} onClick={() => setScreen(k)}><span className="ic">{ic}</span>{l}</button>
         ))}
       </div>
@@ -919,7 +928,7 @@ export default function Rite() {
             {(actModal.alternatifler || []).length > 0 && <div className="kv"><div className="k">Alternatifler</div><div className="v">{actModal.alternatifler.join(' · ')}</div></div>}
             {actModal.dikkat && <div className="kv"><div className="k">Dikkat edilecekler</div><div className="dikkat">⚠ {actModal.dikkat}</div></div>}
             {actModal.kaynak && <div className="kv"><div className="k">Kaynak</div><div className="v">{actModal.kaynak}</div></div>}
-            <div style={{ marginTop: 16 }}><button className="btn" onClick={() => { ritEkle(actModal.ad, actModal.zaman || 'gün', actModal.kaynak_etiket || 'Rite', 'aliskanlik', actModal.grup || (actModal.faydalar?.length ? faydaMap[actModal.faydalar[0]]?.alan : null) || null, actModal.id || null, actModal.faydalar || []); setActModal(null); setScreen('ajanda'); }}>Ritüellerime ekle</button></div>
+            <div style={{ marginTop: 16 }}><button className="btn" onClick={() => { ritEkle(actModal.ad, addSlot || actModal.zaman || 'gün', actModal.kaynak_etiket || 'Rite', 'aliskanlik', actModal.grup || (actModal.faydalar?.length ? faydaMap[actModal.faydalar[0]]?.alan : null) || null, actModal.id || null, actModal.faydalar || []); setActModal(null); setAddSlot(null); setScreen('ajanda'); }}>Ritüellerime ekle{addSlot ? ' (' + (TODS.find((t) => t[0] === addSlot)?.[1]) + ')' : ''}</button></div>
           </div>
         </div>
       )}

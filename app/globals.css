@@ -44,6 +44,9 @@ input{width:100%;font-size:15px;padding:11px 12px;border:1px solid var(--line);b
 .vseg{flex:1;text-align:center;font-size:12.5px;font-weight:700;padding:8px;border-radius:8px;color:var(--muted);cursor:pointer;}
 .vseg.on{background:#fff;color:var(--ink);}
 .tod{font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;margin:16px 2px 4px;}
+.slothead{display:flex;align-items:center;justify-content:space-between;}
+.slotadd{background:#fff;border:1px solid var(--line);border-radius:50%;width:28px;height:28px;font-size:18px;line-height:1;color:var(--green);cursor:pointer;flex:0 0 auto;}
+.slotadd:active{background:var(--green2);}
 .typechip{font-size:9px;font-weight:800;border-radius:20px;padding:2px 7px;margin-left:6px;}
 .t-hab{background:#e7efe1;color:#3f6b2f;}.t-rem{background:#f3e7dd;color:#9a6a3a;}.t-not{background:#efe8da;color:#7a715e;}
 .tagp{font-size:9px;font-weight:800;border-radius:20px;padding:2px 7px;margin-left:5px;}
