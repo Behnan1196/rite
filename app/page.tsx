@@ -800,7 +800,10 @@ export default function Rite() {
             <h2>📥 Inbox</h2>
             <p className="sub">Sana gelen aktivite paylaşımları ve kaydettiğin link/videolar. Önizle, havuzuna al ya da bir güne yerleştir.</p>
             <div className="card">
-              <div className="note" style={{ marginTop: 0 }}>Paylaşım kodun: <b>{client.share_code || '…'}</b> <span style={{ color: 'var(--muted)' }}>· başkaları buraya aktivite gönderebilir</span></div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div className="note" style={{ marginTop: 0, flex: 1 }}>Paylaşım kodun: <b>{client.share_code || '…'}</b> <span style={{ color: 'var(--muted)' }}>· başkaları buraya gönderebilir</span></div>
+                <button className="btn ghost sm" onClick={() => client && loadInbox(client.id)}>🔄 Yenile</button>
+              </div>
             </div>
             <div className="card">
               <label>Link/başlık ekle</label>
@@ -819,7 +822,9 @@ export default function Rite() {
                     {(v.payload?.faydalar || []).length > 0 && <div>{Array.from(new Set((v.payload.faydalar || []).map((k: string) => faydaMap[k]?.alan).filter(Boolean))).map((a: any) => <span key={a} className="tagp p-alan">{a}</span>)}</div>}
                     {v.payload?.aciklama && <div className="note" style={{ marginTop: 4 }}>{v.payload.aciklama}</div>}
                     <div className="rowbtns">
-                      <button className="btn ghost sm" onClick={() => inboxAktiviteEkle(v)}>Havuzuma ekle</button>
+                      {v.durum === 'alindi'
+                        ? <span className="note" style={{ margin: 0, color: 'var(--green)', fontWeight: 700 }}>✓ Havuzuna eklendi</span>
+                        : <button className="btn ghost sm" onClick={() => inboxAktiviteEkle(v)}>Havuzuma ekle</button>}
                       <button className="btn ghost sm" style={{ color: 'var(--red)', borderColor: '#e6c4bd' }} onClick={() => inboxSil(v.id)}>Sil</button>
                     </div>
                   </>
