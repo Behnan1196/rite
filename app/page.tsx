@@ -16,7 +16,7 @@ function SortableItem({ id, children }: { id: string; children: ReactNode }) {
   );
 }
 
-type Client = { id: string; ad: string; code: string };
+type Client = { id: string; ad: string; code: string; share_code?: string };
 const LS = 'rite_client';
 
 const POOL: Record<string, { ad: string; dsc: string; zaman: string; flag?: string }[]> = {
@@ -102,6 +102,7 @@ export default function Rite() {
   const [kVids, setKVids] = useState<any[]>([]);
   const [kVin, setKVin] = useState({ baslik: '', url: '' });
   const [kMsg, setKMsg] = useState('');
+  const [kShareTo, setKShareTo] = useState('');
 
   const today = iso(new Date());
   const day = selDate || today;
@@ -139,15 +140,21 @@ export default function Rite() {
     setSelDate(iso(new Date()));
     try {
       const s = localStorage.getItem(LS);
-      if (s) { const c = JSON.parse(s); setClient(c); loadData(c.id); loadLocal(c.id); }
+      if (s) { const c = JSON.parse(s); setClient(c); loadData(c.id); loadInbox(c.id); ensureShareCode(c); }
     } catch (_) {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function loadLocal(cid: string) {
-    try {
-      setInbox(JSON.parse(localStorage.getItem('rite_inbox_' + cid) || '[]'));
-    } catch (_) {}
+  async function loadInbox(cid: string) {
+    const r = await supabase.from('dog_inbox').select('*').eq('client_id', cid).order('created_at', { ascending: false });
+    setInbox(r.data || []);
+  }
+  async function ensureShareCode(cli: Client) {
+    if (cli.share_code) return;
+    const sc = 'RT-' + Math.random().toString(36).slice(2, 7).toUpperCase();
+    await supabase.from('dog_clients').update({ share_code: sc }).eq('id', cli.id);
+    const nc = { ...cli, share_code: sc };
+    setClient(nc); localStorage.setItem(LS, JSON.stringify(nc));
   }
 
   useEffect(() => { loadActivities(); loadFaydalar(); loadAreas(); }, []);
@@ -190,12 +197,12 @@ export default function Rite() {
   async function pair() {
     const c = code.trim().toUpperCase();
     if (!c) return setMsg('Kod gir');
-    const r = await supabase.from('dog_clients').select('id,ad,code').eq('code', c).limit(1);
+    const r = await supabase.from('dog_clients').select('id,ad,code,share_code').eq('code', c).limit(1);
     if (r.error) return setMsg('Hata: ' + r.error.message);
     if (!r.data || !r.data.length) return setMsg('Kod bulunamadı (ör. RITE-AB12C).');
     const cli = r.data[0] as Client;
     setClient(cli); localStorage.setItem(LS, JSON.stringify(cli)); setMsg('');
-    loadData(cli.id); loadLocal(cli.id);
+    loadData(cli.id); loadInbox(cli.id); ensureShareCode(cli);
   }
   function cikis() { localStorage.removeItem(LS); setClient(null); setCode(''); }
 
@@ -253,6 +260,16 @@ export default function Rite() {
     const r = await supabase.from('dog_activities').delete().eq('id', kAct.id);
     if (r.error) return setKMsg('Hata: ' + r.error.message);
     setKAct(null); loadActivities();
+  }
+  async function kPaylas() {
+    if (!kAct) return;
+    const kod = kShareTo.trim().toUpperCase();
+    if (!kod) return setKMsg('Alıcının paylaşım kodunu gir');
+    const rc = await supabase.from('dog_clients').select('id').eq('share_code', kod).limit(1);
+    if (rc.error || !rc.data || !rc.data.length) return setKMsg('Kod bulunamadı: ' + kod);
+    const ins = await supabase.from('dog_inbox').insert({ client_id: rc.data[0].id, tur: 'aktivite', baslik: kAd.trim() || kAct.ad, payload: { ad: kAd.trim() || kAct.ad, faydalar: kFaydalar, aciklama: kAcik || null, videolar: kVids }, from_code: client?.share_code || null, durum: 'yeni' });
+    if (ins.error) return setKMsg('Hata: ' + ins.error.message);
+    setKShareTo(''); setKMsg('Gönderildi → ' + kod);
   }
   function openRit(rt: any) { setRitModal(rt); setRemInput(rt.hatirlatma_saat || ''); }
   async function setRitZaman(id: string, z: string) {
@@ -354,15 +371,35 @@ export default function Rite() {
     setDayNote(v);
     if (client) localStorage.setItem('rite_note_' + client.id + '_' + day, v);
   }
-  function inboxEkle() {
+  async function inboxEkle() {
     if (!client || !ib.t.trim()) return;
-    const next = [{ id: Date.now(), title: ib.t.trim(), url: ib.u.trim(), slot: '' }, ...inbox];
-    setInbox(next); localStorage.setItem('rite_inbox_' + client.id, JSON.stringify(next)); setIb({ t: '', u: '' });
+    await supabase.from('dog_inbox').insert({ client_id: client.id, tur: 'link', baslik: ib.t.trim(), url: ib.u.trim() || null, durum: 'yeni' });
+    setIb({ t: '', u: '' });
+    loadInbox(client.id);
   }
-  function inboxSlot(id: number, slot: string) {
+  async function panodanEkle() {
+    try {
+      const txt = (await navigator.clipboard.readText())?.trim();
+      if (!txt) return setKMsg('');
+      const isUrl = /^https?:\/\//i.test(txt);
+      setIb({ t: isUrl ? '' : txt.slice(0, 80), u: isUrl ? txt : '' });
+    } catch (_) { /* izin verilmedi */ }
+  }
+  async function inboxSlot(id: string, slot: string) {
+    await supabase.from('dog_inbox').update({ slot, durum: 'alindi' }).eq('id', id);
+    if (client) loadInbox(client.id);
+  }
+  async function inboxSil(id: string) {
+    await supabase.from('dog_inbox').delete().eq('id', id);
+    if (client) loadInbox(client.id);
+  }
+  async function inboxAktiviteEkle(item: any) {
     if (!client) return;
-    const next = inbox.map((x) => (x.id === id ? { ...x, slot } : x));
-    setInbox(next); localStorage.setItem('rite_inbox_' + client.id, JSON.stringify(next));
+    const p = item.payload || {};
+    const alan0 = (p.faydalar && p.faydalar.length) ? (faydaList.find((f) => f.kod === p.faydalar[0])?.alan || null) : null;
+    await supabase.from('dog_activities').insert({ client_id: client.id, ad: p.ad, grup: alan0, faydalar: p.faydalar || [], aciklama: p.aciklama || null, videolar: p.videolar || null, kaynak_etiket: 'Paylaşılan', aktif: true });
+    await supabase.from('dog_inbox').update({ durum: 'alindi' }).eq('id', item.id);
+    loadActivities(); loadInbox(client.id);
   }
 
   async function enableNotifs() {
@@ -426,7 +463,7 @@ export default function Rite() {
   const gelHabits = rituals.filter((r) => r.tip !== 'hatirlatma');
   const weekHabits = rituals.filter((r) => r.tip !== 'hatirlatma' && weekArr.some((d) => activeOn(r, d)));
   const beslenmePlan = plans.find((p) => p.vertical === 'beslenme');
-  const ibBadge = inbox.filter((x) => !x.slot).length;
+  const ibBadge = inbox.filter((x) => x.durum === 'yeni').length;
   const curatedActs = activities.filter((a) => !a.client_id);
   const personalActs = activities.filter((a) => a.client_id === client.id);
   const actGroups = curatedActs.map((a) => a.grup).filter((v, i, arr) => arr.indexOf(v) === i);
@@ -761,20 +798,41 @@ export default function Rite() {
         {screen === 'inbox' && (
           <div>
             <h2>📥 Inbox</h2>
-            <p className="sub">Başka uygulamalardan gönderdiğin video/linkler buraya düşer. Önizle, sonra bir güne yerleştir — &quot;watch later mezarlığı&quot; bitsin.</p>
+            <p className="sub">Sana gelen aktivite paylaşımları ve kaydettiğin link/videolar. Önizle, havuzuna al ya da bir güne yerleştir.</p>
+            <div className="card">
+              <div className="note" style={{ marginTop: 0 }}>Paylaşım kodun: <b>{client.share_code || '…'}</b> <span style={{ color: 'var(--muted)' }}>· başkaları buraya aktivite gönderebilir</span></div>
+            </div>
             <div className="card">
               <label>Link/başlık ekle</label>
               <input value={ib.t} onChange={(e) => setIb((s) => ({ ...s, t: e.target.value }))} placeholder="Başlık (ör. Sabah mobilite akışı)" />
               <input style={{ marginTop: 8 }} value={ib.u} onChange={(e) => setIb((s) => ({ ...s, u: e.target.value }))} placeholder="https:// (opsiyonel)" />
-              <div style={{ marginTop: 10 }}><button className="btn ghost" onClick={inboxEkle}>Ekle</button></div>
+              <div className="rowbtns"><button className="btn ghost sm" onClick={panodanEkle}>📋 Panodan ekle</button><button className="btn ghost sm" onClick={inboxEkle}>Ekle</button></div>
+              <p className="note" style={{ marginTop: 6 }}>YouTube&apos;da <b>Linki Kopyala</b> → burada <b>Panodan ekle</b>. (iOS&apos;ta doğrudan &quot;Paylaş → Rite&quot; native uygulamada gelecek.)</p>
             </div>
+            {inbox.length === 0 && <div className="note" style={{ textAlign: 'center', marginTop: 10 }}>Inbox boş.</div>}
             {inbox.map((v) => (
               <div key={v.id} className="card">
-                <div style={{ fontSize: 13, fontWeight: 700 }}>{v.title}</div>
-                {v.url && <a href={v.url} target="_blank" rel="noreferrer" style={{ fontSize: 11 }}>{v.url}</a>}
-                <div className="rowbtns">
-                  {['Bugün', 'Yarın', 'Hafta sonu'].map((s) => <button key={s} className={'btn ghost sm'} onClick={() => inboxSlot(v.id, s)}>{v.slot === s ? '✓ ' + s : s}</button>)}
-                </div>
+                {v.tur === 'aktivite' ? (
+                  <>
+                    <div style={{ fontSize: 13, fontWeight: 700 }}>🎁 {v.baslik || v.payload?.ad}</div>
+                    <div className="note" style={{ margin: '2px 0' }}>Aktivite paylaşımı{v.from_code ? ' · ' + v.from_code : ''}</div>
+                    {(v.payload?.faydalar || []).length > 0 && <div>{Array.from(new Set((v.payload.faydalar || []).map((k: string) => faydaMap[k]?.alan).filter(Boolean))).map((a: any) => <span key={a} className="tagp p-alan">{a}</span>)}</div>}
+                    {v.payload?.aciklama && <div className="note" style={{ marginTop: 4 }}>{v.payload.aciklama}</div>}
+                    <div className="rowbtns">
+                      <button className="btn ghost sm" onClick={() => inboxAktiviteEkle(v)}>Havuzuma ekle</button>
+                      <button className="btn ghost sm" style={{ color: 'var(--red)', borderColor: '#e6c4bd' }} onClick={() => inboxSil(v.id)}>Sil</button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 13, fontWeight: 700 }}>{v.baslik}</div>
+                    {v.url && <a href={v.url} target="_blank" rel="noreferrer" style={{ fontSize: 11 }}>{v.url}</a>}
+                    <div className="rowbtns">
+                      {['Bugün', 'Yarın', 'Hafta sonu'].map((s) => <button key={s} className="btn ghost sm" onClick={() => inboxSlot(v.id, s)}>{v.slot === s ? '✓ ' + s : s}</button>)}
+                      <button className="btn ghost sm" style={{ color: 'var(--red)', borderColor: '#e6c4bd' }} onClick={() => inboxSil(v.id)}>Sil</button>
+                    </div>
+                  </>
+                )}
               </div>
             ))}
           </div>
@@ -899,6 +957,11 @@ export default function Rite() {
               <div><label>URL</label><input value={kVin.url} onChange={(e) => setKVin((s) => ({ ...s, url: e.target.value }))} placeholder="https://youtube.com/…" /></div>
             </div>
             <div style={{ marginTop: 6 }}><button className="btn ghost sm" onClick={kVidEkle}>+ Video ekle</button></div>
+            <label className="fldlbl">Başka kullanıcıya gönder (paylaşım kodu)</label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input value={kShareTo} onChange={(e) => setKShareTo(e.target.value)} placeholder="RT-XXXXX" autoCapitalize="characters" />
+              <button className="btn sm" style={{ whiteSpace: 'nowrap' }} onClick={kPaylas}>Gönder</button>
+            </div>
             <div className="rowbtns" style={{ marginTop: 14 }}>
               <button className="btn" onClick={kSave}>Kaydet</button>
               <button className="btn ghost sm" onClick={kEkleAjanda}>Ajandama ekle</button>
