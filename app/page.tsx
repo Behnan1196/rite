@@ -402,9 +402,9 @@ export default function Rite() {
     setDayNote(v);
     if (client) localStorage.setItem('rite_note_' + client.id + '_' + day, v);
   }
-  async function inboxCapture(tur: string) {
+  async function inboxYakala() {
     if (!client || !ib.t.trim()) return;
-    await supabase.from('dog_inbox').insert({ client_id: client.id, tur, baslik: ib.t.trim(), url: tur === 'link' ? (ib.u.trim() || null) : null, durum: 'yeni' });
+    await supabase.from('dog_inbox').insert({ client_id: client.id, tur: 'not', baslik: ib.t.trim(), url: ib.u.trim() || null, durum: 'yeni' });
     setIb({ t: '', u: '' });
     loadInbox(client.id);
   }
@@ -850,15 +850,13 @@ export default function Rite() {
             </div>
             <div className="card">
               <label>Yakala</label>
-              <input value={ib.t} onChange={(e) => setIb((s) => ({ ...s, t: e.target.value }))} placeholder="Bir şey yaz — not, görev ya da link başlığı…" />
-              <input style={{ marginTop: 8 }} value={ib.u} onChange={(e) => setIb((s) => ({ ...s, u: e.target.value }))} placeholder="https:// (link için, ops.)" />
+              <input value={ib.t} onChange={(e) => setIb((s) => ({ ...s, t: e.target.value }))} placeholder="Aklına ne takıldıysa yaz…" />
+              <input style={{ marginTop: 8 }} value={ib.u} onChange={(e) => setIb((s) => ({ ...s, u: e.target.value }))} placeholder="https:// (varsa link, ops.)" />
               <div className="rowbtns">
-                <button className="btn ghost sm" onClick={() => inboxCapture('not')}>📝 Not</button>
-                <button className="btn ghost sm" onClick={() => inboxCapture('gorev')}>✓ Görev</button>
-                <button className="btn ghost sm" onClick={() => inboxCapture('link')}>🔗 Link</button>
+                <button className="btn" onClick={inboxYakala}>Yakala</button>
                 <button className="btn ghost sm" onClick={panodanEkle}>📋 Panodan</button>
               </div>
-              <p className="note" style={{ marginTop: 6 }}>YouTube&apos;da <b>Linki Kopyala</b> → <b>Panodan</b> → <b>Link</b>. (iOS&apos;ta doğrudan &quot;Paylaş → Rite&quot; native uygulamada gelecek.)</p>
+              <p className="note" style={{ marginTop: 6 }}>YouTube&apos;da <b>Linki Kopyala</b> → <b>Panodan</b> → <b>Yakala</b>. (iOS&apos;ta doğrudan &quot;Paylaş → Rite&quot; native uygulamada gelecek.)</p>
             </div>
             {inbox.length === 0 && <div className="note" style={{ textAlign: 'center', marginTop: 10 }}>Inbox boş.</div>}
             {inbox.map((v) => (
@@ -878,7 +876,7 @@ export default function Rite() {
                   </>
                 ) : (
                   <>
-                    <div style={{ fontSize: 13, fontWeight: 700 }}>{v.tur === 'not' ? '📝 ' : v.tur === 'gorev' ? '✓ ' : '🔗 '}{v.baslik}</div>
+                    <div style={{ fontSize: 13, fontWeight: 700 }}>{v.url ? '🔗 ' : '📌 '}{v.baslik}</div>
                     {v.url && <a href={v.url} target="_blank" rel="noreferrer" style={{ fontSize: 11 }}>{v.url}</a>}
                     <div className="rowbtns">
                       <button className="btn ghost sm" onClick={() => inboxToRitual(v, 0)}>→ Bugüne</button>
