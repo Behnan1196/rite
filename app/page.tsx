@@ -205,6 +205,14 @@ export default function Rite() {
     loadData(cli.id); loadInbox(cli.id); ensureShareCode(cli);
   }
   function cikis() { localStorage.removeItem(LS); setClient(null); setCode(''); }
+  async function resetAjanda() {
+    if (!client) return;
+    if (!confirm('Ajandadaki TÜM ritüeller ve işaretler silinsin mi? (Kişisel aktiviteler havuzda kalır; geri alınamaz)')) return;
+    await supabase.from('dog_ritual_logs').delete().eq('client_id', client.id);
+    await supabase.from('dog_rituals').delete().eq('client_id', client.id);
+    loadData(client.id);
+    setScreen('ajanda');
+  }
 
   const ritDone = (id: string) => logs.some((l) => l.ritual_id === id && l.tarih === day && l.yapildi);
   const ritTotal = (id: string) => logs.filter((l) => l.ritual_id === id && l.yapildi).length;
@@ -870,6 +878,10 @@ export default function Rite() {
               {pushMsg && <div className="msg">{pushMsg}</div>}
             </div>
             <div className="card"><h3>Güvenlik</h3><p className="note">Bazı ritüeller hekim onayı ister (⚠). Rite teşhis/tedavi aracı değildir; doğru kapıyı gösterir.</p></div>
+            <div className="card"><h3>Test</h3>
+              <div className="note" style={{ marginTop: 0 }}>Ajandayı sıfırla: tüm ritüeller ve işaretler silinir (kişisel aktiviteler havuzda kalır).</div>
+              <div className="rowbtns"><button className="btn ghost sm" style={{ color: 'var(--red)', borderColor: '#e6c4bd' }} onClick={resetAjanda}>Ajandayı sıfırla</button></div>
+            </div>
             <div style={{ textAlign: 'center', marginTop: 6 }}><button className="btn ghost sm" onClick={cikis}>Bağlantıyı kes / çıkış</button></div>
           </div>
         )}
