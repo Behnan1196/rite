@@ -416,6 +416,14 @@ export default function Rite() {
     await supabase.from('dog_inbox').delete().eq('id', id);
     if (client) loadInbox(client.id);
   }
+  async function inboxToRitual(item: any, dayOffset: number) {
+    if (!client) return;
+    const d = parseD(today); d.setDate(d.getDate() + dayOffset); const ds = iso(d);
+    const ad = (item.tur === 'link' ? 'İzle: ' : '') + (item.baslik || '');
+    await supabase.from('dog_rituals').insert({ client_id: client.id, ad, zaman: 'gün', kaynak: 'Inbox', tip: 'aliskanlik', baslangic: ds, bitis: ds, aktif: true, mezun: false, blok_sira: Date.now() });
+    await supabase.from('dog_inbox').delete().eq('id', item.id);
+    loadInbox(client.id); loadData(client.id);
+  }
   async function inboxAktiviteEkle(item: any) {
     if (!client) return;
     const p = item.payload || {};
@@ -863,7 +871,8 @@ export default function Rite() {
                     <div style={{ fontSize: 13, fontWeight: 700 }}>{v.tur === 'not' ? '📝 ' : v.tur === 'gorev' ? '✓ ' : '🔗 '}{v.baslik}</div>
                     {v.url && <a href={v.url} target="_blank" rel="noreferrer" style={{ fontSize: 11 }}>{v.url}</a>}
                     <div className="rowbtns">
-                      {['Bugün', 'Yarın', 'Hafta sonu'].map((s) => <button key={s} className="btn ghost sm" onClick={() => inboxSlot(v.id, s)}>{v.slot === s ? '✓ ' + s : s}</button>)}
+                      <button className="btn ghost sm" onClick={() => inboxToRitual(v, 0)}>→ Bugüne</button>
+                      <button className="btn ghost sm" onClick={() => inboxToRitual(v, 1)}>→ Yarına</button>
                       <button className="btn ghost sm" style={{ color: 'var(--red)', borderColor: '#e6c4bd' }} onClick={() => inboxSil(v.id)}>Sil</button>
                     </div>
                   </>
