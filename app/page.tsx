@@ -88,6 +88,7 @@ export default function Rite() {
   const [linkIds, setLinkIds] = useState<string[]>([]);
   const [ritModal, setRitModal] = useState<any>(null);
   const [remInput, setRemInput] = useState('');
+  const [urlInput, setUrlInput] = useState('');
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { delay: 180, tolerance: 6 } }));
   const [faydaList, setFaydaList] = useState<any[]>([]);
   const [alanList, setAlanList] = useState<string[]>([]);
@@ -177,7 +178,7 @@ export default function Rite() {
   }
 
   async function loadData(clientId: string) {
-    const r = await supabase.from('dog_rituals').select('id,ad,zaman,kategori,tip,kaynak,mezun,aktif,alan,rutin,sira,baslangic,bitis,activity_id,hatirlatma_saat,blok_sira,faydalar').eq('client_id', clientId).order('zaman');
+    const r = await supabase.from('dog_rituals').select('id,ad,zaman,kategori,tip,kaynak,mezun,aktif,alan,rutin,sira,baslangic,bitis,activity_id,hatirlatma_saat,blok_sira,faydalar,url').eq('client_id', clientId).order('zaman');
     setRituals(r.data || []);
     const lg = await supabase.from('dog_ritual_logs').select('id,ritual_id,tarih,yapildi').eq('client_id', clientId);
     setLogs(lg.data || []);
@@ -239,9 +240,9 @@ export default function Rite() {
     else await supabase.from('dog_ritual_logs').insert({ client_id: client.id, ritual_id: ritId, tarih: day, yapildi: true });
     loadData(client.id);
   }
-  async function ritEkle(ad: string, zaman = 'gün', kaynak = 'Kendi', tip = 'aliskanlik', alan: string | null = null, activityId: string | null = null, faydalar: string[] = []) {
+  async function ritEkle(ad: string, zaman = 'gün', kaynak = 'Kendi', tip = 'aliskanlik', alan: string | null = null, activityId: string | null = null, faydalar: string[] = [], url: string | null = null) {
     if (!client || !ad.trim()) return;
-    await supabase.from('dog_rituals').insert({ client_id: client.id, ad: ad.trim(), zaman, kaynak, tip, alan, activity_id: activityId, faydalar, aktif: true, mezun: false, baslangic: today, blok_sira: Date.now() });
+    await supabase.from('dog_rituals').insert({ client_id: client.id, ad: ad.trim(), zaman, kaynak, tip, alan, activity_id: activityId, faydalar, url, aktif: true, mezun: false, baslangic: today, blok_sira: Date.now() });
     setYeniRit('');
     loadData(client.id);
   }
@@ -274,7 +275,7 @@ export default function Rite() {
   async function kEkleAjanda() {
     if (!kAct || !client) return;
     const alan0 = kFaydalar.length ? (faydaList.find((f) => f.kod === kFaydalar[0])?.alan || null) : null;
-    await ritEkle(kAd.trim() || kAct.ad, addSlot || kAct.zaman || 'gün', 'Kendi', 'aliskanlik', alan0, kAct.id, kFaydalar);
+    await ritEkle(kAd.trim() || kAct.ad, addSlot || kAct.zaman || 'gün', 'Kendi', 'aliskanlik', alan0, kAct.id, kFaydalar, (kVids && kVids[0]?.url) || null);
     setKAct(null); setAddSlot(null); setScreen('ajanda');
   }
   async function kSil() {
@@ -294,7 +295,14 @@ export default function Rite() {
     if (ins.error) return setKMsg('Hata: ' + ins.error.message);
     setKShareTo(''); setKMsg('Gönderildi → ' + kod);
   }
-  function openRit(rt: any) { setRitModal(rt); setRemInput(rt.hatirlatma_saat || ''); }
+  function openRit(rt: any) { setRitModal(rt); setRemInput(rt.hatirlatma_saat || ''); setUrlInput(rt.url || ''); }
+  async function setRitUrl(id: string, url: string) {
+    if (!client) return;
+    const u = url.trim() || null;
+    await supabase.from('dog_rituals').update({ url: u }).eq('id', id);
+    setRitModal((p: any) => (p ? { ...p, url: u } : p));
+    loadData(client.id);
+  }
   async function setRitZaman(id: string, z: string) {
     if (!client) return;
     const rt = rituals.find((r) => r.id === id);
@@ -420,7 +428,7 @@ export default function Rite() {
     if (!client) return;
     const d = parseD(today); d.setDate(d.getDate() + dayOffset); const ds = iso(d);
     const ad = (item.tur === 'link' ? 'İzle: ' : '') + (item.baslik || '');
-    await supabase.from('dog_rituals').insert({ client_id: client.id, ad, zaman: 'gün', kaynak: 'Inbox', tip: 'aliskanlik', baslangic: ds, bitis: ds, aktif: true, mezun: false, blok_sira: Date.now() });
+    await supabase.from('dog_rituals').insert({ client_id: client.id, ad, zaman: 'gün', kaynak: 'Inbox', tip: 'aliskanlik', url: item.url || null, baslangic: ds, bitis: ds, aktif: true, mezun: false, blok_sira: Date.now() });
     await supabase.from('dog_inbox').delete().eq('id', item.id);
     loadInbox(client.id); loadData(client.id);
   }
@@ -521,6 +529,7 @@ export default function Rite() {
             </div>
             <div className="m">{rt.zaman || 'gün'}{rt.hatirlatma_saat ? ' · 🔔 ' + rt.hatirlatma_saat : ''} · toplam {total}</div>
           </div>
+          {rt.url && <a className="playbtn" href={rt.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} title="Aç">▶</a>}
           <button className="rmx" onClick={() => ritSil(rt.id)} title="Kaldır">✕</button>
         </div>
         {!rt.mezun && !rt.bitis && total >= 21 && (
@@ -605,6 +614,7 @@ export default function Rite() {
                                           <div className={'cdot' + (done ? ' on' : '')} onClick={() => toggleRit(rt.id)}>{done ? '✓' : ''}</div>
                                           <div className="cbody" style={{ cursor: 'pointer' }} onClick={() => openRit(rt)}><div className="t">{i === 0 && <span style={{ marginRight: 4 }}>🔗</span>}{rt.ad}{ritAreas(rt).map((a) => <span key={a} className="tagp p-alan">{a}</span>)}</div><div className="m">{rt.hatirlatma_saat ? '🔔 ' + rt.hatirlatma_saat + ' · ' : ''}toplam {ritTotal(rt.id)}</div></div>
                                           <div className="cact">
+                                            {rt.url && <a href={rt.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} title="Aç">▶</a>}
                                             <button onClick={() => moveStep(it.rutin, i, -1)}>↑</button>
                                             <button onClick={() => moveStep(it.rutin, i, 1)}>↓</button>
                                             <button onClick={() => rutinCikar(rt.id)} title="Zincirden çıkar">✕</button>
@@ -937,7 +947,7 @@ export default function Rite() {
             {(actModal.alternatifler || []).length > 0 && <div className="kv"><div className="k">Alternatifler</div><div className="v">{actModal.alternatifler.join(' · ')}</div></div>}
             {actModal.dikkat && <div className="kv"><div className="k">Dikkat edilecekler</div><div className="dikkat">⚠ {actModal.dikkat}</div></div>}
             {actModal.kaynak && <div className="kv"><div className="k">Kaynak</div><div className="v">{actModal.kaynak}</div></div>}
-            <div style={{ marginTop: 16 }}><button className="btn" onClick={() => { ritEkle(actModal.ad, addSlot || actModal.zaman || 'gün', actModal.kaynak_etiket || 'Rite', 'aliskanlik', actModal.grup || (actModal.faydalar?.length ? faydaMap[actModal.faydalar[0]]?.alan : null) || null, actModal.id || null, actModal.faydalar || []); setActModal(null); setAddSlot(null); setScreen('ajanda'); }}>Ritüellerime ekle{addSlot ? ' (' + (TODS.find((t) => t[0] === addSlot)?.[1]) + ')' : ''}</button></div>
+            <div style={{ marginTop: 16 }}><button className="btn" onClick={() => { ritEkle(actModal.ad, addSlot || actModal.zaman || 'gün', actModal.kaynak_etiket || 'Rite', 'aliskanlik', actModal.grup || (actModal.faydalar?.length ? faydaMap[actModal.faydalar[0]]?.alan : null) || null, actModal.id || null, actModal.faydalar || [], (actModal.videolar && actModal.videolar[0]?.url) || null); setActModal(null); setAddSlot(null); setScreen('ajanda'); }}>Ritüellerime ekle{addSlot ? ' (' + (TODS.find((t) => t[0] === addSlot)?.[1]) + ')' : ''}</button></div>
           </div>
         </div>
       )}
@@ -950,6 +960,14 @@ export default function Rite() {
             <div className="m">{ritModal.kaynak || ''}</div>
             {ritAreas(ritModal).length > 0 && <div className="kv"><div className="k">Yaşam alanları</div><div>{ritAreas(ritModal).map((a) => <span key={a} className="tagp p-alan">{a}</span>)}</div></div>}
             {(ritModal.faydalar || []).length > 0 && <div className="kv"><div className="k">Faydalar</div><div className="v">{ritModal.faydalar.map((k: string) => faydaMap[k]?.ad || k).join(' · ')}</div></div>}
+
+            <div className="kv"><div className="k">Bağlantı</div>
+              <div className="daterow">
+                <input value={urlInput} onChange={(e) => setUrlInput(e.target.value)} placeholder="https://youtube.com/…" style={{ flex: 1 }} />
+                <button className="btn ghost sm" onClick={() => setRitUrl(ritModal.id, urlInput)}>Kaydet</button>
+                {ritModal.url && <a className="btn ghost sm" href={ritModal.url} target="_blank" rel="noreferrer">▶ Aç</a>}
+              </div>
+            </div>
 
             <div className="kv"><div className="k">Tür</div>
               <div>{[['aliskanlik', 'Alışkanlık'], ['hatirlatma', 'Hatırlatma']].map(([t, l]) => (
