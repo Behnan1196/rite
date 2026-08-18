@@ -642,7 +642,7 @@ export default function Rite() {
                     <div key={z} style={{ background: SLOTBG[z], borderRadius: 12, padding: '2px 8px 6px', margin: '10px 0' }}>
                       <div className="slothead">
                         <div className="tod" style={{ margin: '6px 4px 2px' }}>{lbl}</div>
-                        <button className="slotadd" onClick={() => { setAddSlot(z); setStZaman(z); setScreen('havuz'); }} aria-label="ekle">+</button>
+                        <button className="slotadd" onClick={() => { setAddSlot(z); setKZaman(z); setScreen('havuz'); }} aria-label="ekle">+</button>
                       </div>
                       {items.length === 0 ? <div className="note" style={{ padding: '2px 4px 6px' }}>Boş — sağdaki + ile ekle.</div> : (
                       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => onDragEndSlot(items, e)}>
