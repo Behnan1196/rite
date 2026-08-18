@@ -54,12 +54,13 @@ function kisaTarih(d?: string | null): string {
 }
 // Adım pencerelerini çöz: ardisik=true ise önceki adımın bitişinden başlar.
 function programSpans(adimlar: any[], sure?: number | null) {
-  let cursor = 0;
+  let cursor = 0; let prev = { o: 0, d: 0, end: 0 };
   return (adimlar || []).map((st: any, i: number) => {
-    const d = st.sureGun && st.sureGun > 0 ? st.sureGun : (sure || 0);
-    const o = (st.ardisik && i > 0) ? cursor : (st.baslaGun || 0);
+    let o: number; let d: number;
+    if (st.zincirli && i > 0) { o = prev.o; d = prev.d; } // gün-içi zincir → liderin penceresini devral
+    else { d = st.sureGun && st.sureGun > 0 ? st.sureGun : (sure || 0); o = (st.ardisik && i > 0) ? cursor : (st.baslaGun || 0); cursor = o + (d || 0); }
     const end = o + (d || 0);
-    cursor = end;
+    prev = { o, d, end };
     return { o, d, end };
   });
 }
@@ -175,6 +176,7 @@ export default function Rite() {
   const [adBas, setAdBas] = useState('');
   const [adSure, setAdSure] = useState('');
   const [adArd, setAdArd] = useState(false);
+  const [adZinc, setAdZinc] = useState(false);
   const [adEdit, setAdEdit] = useState<number | null>(null);
 
   const today = iso(new Date());
@@ -310,13 +312,13 @@ export default function Rite() {
     else await supabase.from('dog_ritual_logs').insert({ client_id: client.id, ritual_id: ritId, tarih: day, yapildi: true });
     loadData(client.id);
   }
-  async function ritEkle(ad: string, zaman = 'gün', kaynak = 'Kendi', tip = 'aliskanlik', alan: string | null = null, activityId: string | null = null, faydalar: string[] = [], url: string | null = null, gunler: number[] | null = null, sureG: number | null = null, programId: string | null = null, programAd: string | null = null, reload = true, basGun = 0) {
+  async function ritEkle(ad: string, zaman = 'gün', kaynak = 'Kendi', tip = 'aliskanlik', alan: string | null = null, activityId: string | null = null, faydalar: string[] = [], url: string | null = null, gunler: number[] | null = null, sureG: number | null = null, programId: string | null = null, programAd: string | null = null, reload = true, basGun = 0, rutin: string | null = null, sira = 0) {
     if (!client || !ad.trim()) return;
     const g = gunler && gunler.length > 0 && gunler.length < 7 ? gunler : null;
     const bas = parseD(today); bas.setDate(bas.getDate() + (basGun || 0)); const basStr = iso(bas);
     let bitis: string | null = null;
     if (sureG && sureG > 0) { const e = parseD(basStr); e.setDate(e.getDate() + sureG - 1); bitis = iso(e); }
-    await supabase.from('dog_rituals').insert({ client_id: client.id, ad: ad.trim(), zaman, kaynak, tip, alan, activity_id: activityId, faydalar, url, gunler: g, program: programId, program_ad: programAd, aktif: true, mezun: false, baslangic: basStr, bitis, blok_sira: Date.now() });
+    await supabase.from('dog_rituals').insert({ client_id: client.id, ad: ad.trim(), zaman, kaynak, tip, alan, activity_id: activityId, faydalar, url, gunler: g, program: programId, program_ad: programAd, rutin, sira, aktif: true, mezun: false, baslangic: basStr, bitis, blok_sira: Date.now() });
     setYeniRit('');
     if (reload) loadData(client.id);
   }
@@ -329,23 +331,39 @@ export default function Rite() {
     for (const s of slots) await ritEkle(o.ad, s, o.kaynak_etiket || (o.client_id ? 'Kendi' : 'Rite'), 'aliskanlik', alan0, o.id || null, o.faydalar || [], url0, o.gunler || null, o.sure_gun || null, null, null, false);
     loadData(client.id);
   }
-  // Programı ajandaya başlat: her adım × her slot için bir ritüel, ortak program kimliğiyle.
+  // Programı ajandaya başlat: her adım × her slot için ritüel, ortak program kimliğiyle.
+  // Gün-içi zincir (zincirli) adımlar tek slotta, liderin penceresinde, rutin+sıra ile bağlanır.
   async function programBaslat(prog: any) {
     if (!client) return;
+    const adimlar = prog.adimlar || [];
     const pid = 'P' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-    const spans = programSpans(prog.adimlar || [], prog.sure_gun || null);
-    for (let i = 0; i < (prog.adimlar || []).length; i++) {
-      const st = prog.adimlar[i];
-      const alan0 = st.faydalar?.length ? faydaMap[st.faydalar[0]]?.alan || null : null;
-      const slots = st.zamanlar && st.zamanlar.length ? st.zamanlar : ['gün'];
-      for (const s of slots) await ritEkle(st.ad, s, 'Program', 'aliskanlik', alan0, null, st.faydalar || [], st.url || null, st.gunler || null, spans[i].d || null, pid, prog.ad, false, spans[i].o);
+    const spans = programSpans(adimlar, prog.sure_gun || null);
+    // Gün-içi zincir gruplarını çıkar: zincirli adım öncekine katılır.
+    const gruplar: number[][] = []; let cur: number[] | null = null;
+    adimlar.forEach((st: any, i: number) => { if (st.zincirli && cur) cur.push(i); else { cur = [i]; gruplar.push(cur); } });
+    for (const grp of gruplar) {
+      const zincir = grp.length > 1;
+      const lider = adimlar[grp[0]];
+      const liderSlot = lider.zamanlar && lider.zamanlar.length ? lider.zamanlar[0] : 'gün';
+      const rutinId = zincir ? pid + '-z' + grp[0] : null;
+      for (let k = 0; k < grp.length; k++) {
+        const idx = grp[k]; const st = adimlar[idx];
+        const alan0 = st.faydalar?.length ? faydaMap[st.faydalar[0]]?.alan || null : null;
+        if (zincir) {
+          // zincir üyesi: tek slot (lider), liderin penceresi/günleri, rutin+sıra
+          await ritEkle(st.ad, liderSlot, 'Program', 'aliskanlik', alan0, null, st.faydalar || [], st.url || null, lider.gunler || null, spans[grp[0]].d || null, pid, prog.ad, false, spans[grp[0]].o, rutinId, k);
+        } else {
+          const slots = st.zamanlar && st.zamanlar.length ? st.zamanlar : ['gün'];
+          for (const s of slots) await ritEkle(st.ad, s, 'Program', 'aliskanlik', alan0, null, st.faydalar || [], st.url || null, st.gunler || null, spans[idx].d || null, pid, prog.ad, false, spans[idx].o);
+        }
+      }
     }
     loadData(client.id);
   }
   function kToggleFayda(kod: string) { setKFaydalar((a) => (a.includes(kod) ? a.filter((x) => x !== kod) : [...a, kod])); }
   function kVidEkle() { if (!kVin.baslik.trim()) return; setKVids((a) => [...a, { baslik: kVin.baslik.trim(), url: kVin.url.trim() }]); setKVin({ baslik: '', url: '' }); }
   const kVidSil = (i: number) => setKVids((a) => a.filter((_, j) => j !== i));
-  function studioReset() { setKAd(''); setKAcik(''); setKFaydalar([]); setKVids([]); setKVin({ baslik: '', url: '' }); setKZamanlar(['gün']); setKGunler([]); setKSure(''); setKEditId(null); setKMsg(''); setStMode('aktivite'); setStAdimlar([]); setAdAd(''); setAdZ(['gün']); setAdG([]); setAdU(''); setAdBas(''); setAdSure(''); setAdArd(false); setAdEdit(null); }
+  function studioReset() { setKAd(''); setKAcik(''); setKFaydalar([]); setKVids([]); setKVin({ baslik: '', url: '' }); setKZamanlar(['gün']); setKGunler([]); setKSure(''); setKEditId(null); setKMsg(''); setStMode('aktivite'); setStAdimlar([]); setAdAd(''); setAdZ(['gün']); setAdG([]); setAdU(''); setAdBas(''); setAdSure(''); setAdArd(false); setAdZinc(false); setAdEdit(null); }
   function openStudioNew() { studioReset(); setStudioOpen(true); }
   function openStudioEdit(a: any) {
     studioReset();
@@ -356,16 +374,18 @@ export default function Rite() {
   }
   const slotToggle = (arr: string[], set: (f: (c: string[]) => string[]) => void, z: string) => set((c) => c.includes(z) ? (c.length > 1 ? c.filter((x) => x !== z) : c) : [...c, z]);
   const gunToggle = (set: (f: (c: number[]) => number[]) => void, n: number) => set((c) => c.includes(n) ? c.filter((x) => x !== n) : [...c, n]);
-  function adimResetDraft() { setAdAd(''); setAdZ(['gün']); setAdG([]); setAdU(''); setAdBas(''); setAdSure(''); setAdArd(false); setAdEdit(null); setKMsg(''); }
-  function adimDuzenle(i: number) { const st = stAdimlar[i]; setAdAd(st.ad || ''); setAdZ(st.zamanlar && st.zamanlar.length ? st.zamanlar : ['gün']); setAdG(st.gunler || []); setAdU(st.url || ''); setAdBas(st.baslaGun ? String(st.baslaGun) : ''); setAdSure(st.sureGun ? String(st.sureGun) : ''); setAdArd(!!st.ardisik); setAdEdit(i); setKMsg(''); }
+  function adimResetDraft() { setAdAd(''); setAdZ(['gün']); setAdG([]); setAdU(''); setAdBas(''); setAdSure(''); setAdArd(false); setAdZinc(false); setAdEdit(null); setKMsg(''); }
+  function adimDuzenle(i: number) { const st = stAdimlar[i]; setAdAd(st.ad || ''); setAdZ(st.zamanlar && st.zamanlar.length ? st.zamanlar : ['gün']); setAdG(st.gunler || []); setAdU(st.url || ''); setAdBas(st.baslaGun ? String(st.baslaGun) : ''); setAdSure(st.sureGun ? String(st.sureGun) : ''); setAdArd(!!st.ardisik); setAdZinc(!!st.zincirli); setAdEdit(i); setKMsg(''); }
   function adimEkle() {
     if (!adAd.trim()) return setKMsg('Adım adı gir');
-    const yeni = { ad: adAd.trim(), zamanlar: adZ, gunler: adG.length > 0 && adG.length < 7 ? adG : null, url: adU.trim() || null, faydalar: adEdit != null ? (stAdimlar[adEdit].faydalar || []) : [], ardisik: adArd, baslaGun: adArd ? 0 : (parseInt(adBas) > 0 ? parseInt(adBas) : 0), sureGun: parseInt(adSure) > 0 ? parseInt(adSure) : null };
+    const zinc = adZinc && (adEdit != null ? adEdit > 0 : stAdimlar.length > 0);
+    const yeni = { ad: adAd.trim(), zamanlar: adZ, gunler: adG.length > 0 && adG.length < 7 ? adG : null, url: adU.trim() || null, faydalar: adEdit != null ? (stAdimlar[adEdit].faydalar || []) : [], zincirli: zinc, ardisik: !zinc && adArd, baslaGun: (zinc || adArd) ? 0 : (parseInt(adBas) > 0 ? parseInt(adBas) : 0), sureGun: parseInt(adSure) > 0 ? parseInt(adSure) : null };
     setStAdimlar((a) => (adEdit != null ? a.map((x, j) => (j === adEdit ? yeni : x)) : [...a, yeni]));
     adimResetDraft();
   }
   // Adım zamanlama özeti: "↳ ardından · M gün" / "başla +Ng · M gün"
   function adimZamanOzet(st: any): string {
+    if (st.zincirli) return '🔗 önceki ile zincir';
     const b = st.ardisik ? '↳ önceki ardından' : (st.baslaGun ? 'başla +' + st.baslaGun + 'g' : '');
     const s = st.sureGun ? st.sureGun + ' gün' : '';
     return [b, s].filter(Boolean).join(' · ');
@@ -1284,18 +1304,21 @@ export default function Rite() {
               <div className="card" style={{ background: '#faf7f1', padding: 10, marginTop: 4 }}>
                 <label>{adEdit != null ? (adEdit + 1) + '. adımı düzenle' : 'Yeni adım'}</label>
                 <input value={adAd} onChange={(e) => setAdAd(e.target.value)} placeholder="ör. Aromaterapi kürü (tok karna)" />
-                <label className="fldlbl">Zaman dilimi (çok seçilebilir)</label>
-                <div>{TODS.map(([z, l]) => <span key={z} className={'chip' + (adZ.includes(z) ? ' on' : '')} onClick={() => slotToggle(adZ, setAdZ, z)}>{l}</span>)}</div>
-                <label className="fldlbl">Günler</label>
-                <div>
-                  <span className={'chip' + (adG.length === 0 ? ' on' : '')} onClick={() => setAdG([])}>Her gün</span>
-                  {GUNLER.map(([n, l]) => <span key={n} className={'chip' + (adG.includes(n) ? ' on' : '')} onClick={() => gunToggle(setAdG, n)}>{l}</span>)}
-                </div>
-                <label className="fldlbl" style={{ display: 'flex', alignItems: 'center', gap: 8 }}><input type="checkbox" style={{ width: 'auto' }} checked={adArd} onChange={(e) => setAdArd(e.target.checked)} disabled={stAdimlar.length === 0 || adEdit === 0} /> ⛓ Önceki adımın ardından başlasın (otomatik)</label>
-                <div className="grid" style={{ marginTop: 4 }}>
-                  {!adArd && <div><label>Başla (kaçıncı gün)</label><input type="number" min={0} value={adBas} onChange={(e) => setAdBas(e.target.value)} placeholder="0 = hemen" /></div>}
-                  <div><label>Süre (gün, ops.)</label><input type="number" min={1} value={adSure} onChange={(e) => setAdSure(e.target.value)} placeholder="boş = süregelen" /></div>
-                </div>
+                <label className="fldlbl" style={{ display: 'flex', alignItems: 'center', gap: 8 }}><input type="checkbox" style={{ width: 'auto' }} checked={adZinc} onChange={(e) => setAdZinc(e.target.checked)} disabled={adEdit != null ? adEdit === 0 : stAdimlar.length === 0} /> 🔗 Öncekiyle aynı gün, sırayla (zincir)</label>
+                {!adZinc ? (<>
+                  <label className="fldlbl">Zaman dilimi (çok seçilebilir)</label>
+                  <div>{TODS.map(([z, l]) => <span key={z} className={'chip' + (adZ.includes(z) ? ' on' : '')} onClick={() => slotToggle(adZ, setAdZ, z)}>{l}</span>)}</div>
+                  <label className="fldlbl">Günler</label>
+                  <div>
+                    <span className={'chip' + (adG.length === 0 ? ' on' : '')} onClick={() => setAdG([])}>Her gün</span>
+                    {GUNLER.map(([n, l]) => <span key={n} className={'chip' + (adG.includes(n) ? ' on' : '')} onClick={() => gunToggle(setAdG, n)}>{l}</span>)}
+                  </div>
+                  <label className="fldlbl" style={{ display: 'flex', alignItems: 'center', gap: 8 }}><input type="checkbox" style={{ width: 'auto' }} checked={adArd} onChange={(e) => setAdArd(e.target.checked)} disabled={stAdimlar.length === 0 || adEdit === 0} /> ⛓ Önceki adımın ardından başlasın (otomatik)</label>
+                  <div className="grid" style={{ marginTop: 4 }}>
+                    {!adArd && <div><label>Başla (kaçıncı gün)</label><input type="number" min={0} value={adBas} onChange={(e) => setAdBas(e.target.value)} placeholder="0 = hemen" /></div>}
+                    <div><label>Süre (gün, ops.)</label><input type="number" min={1} value={adSure} onChange={(e) => setAdSure(e.target.value)} placeholder="boş = süregelen" /></div>
+                  </div>
+                </>) : <p className="note" style={{ marginTop: 4 }}>🔗 Zincir üyesi: liderin gün dilimini, günlerini ve süresini kullanır; aynı gün sırayla yapılır.</p>}
                 <label className="fldlbl">Link (ops.)</label>
                 <input value={adU} onChange={(e) => setAdU(e.target.value)} placeholder="https://…" />
                 <div className="rowbtns" style={{ marginTop: 6 }}>
