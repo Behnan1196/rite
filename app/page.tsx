@@ -139,6 +139,8 @@ export default function Rite() {
   const [adZ, setAdZ] = useState<string[]>(['gün']);
   const [adG, setAdG] = useState<number[]>([]);
   const [adU, setAdU] = useState('');
+  const [adBas, setAdBas] = useState('');
+  const [adSure, setAdSure] = useState('');
 
   const today = iso(new Date());
   const day = selDate || today;
@@ -273,12 +275,13 @@ export default function Rite() {
     else await supabase.from('dog_ritual_logs').insert({ client_id: client.id, ritual_id: ritId, tarih: day, yapildi: true });
     loadData(client.id);
   }
-  async function ritEkle(ad: string, zaman = 'gün', kaynak = 'Kendi', tip = 'aliskanlik', alan: string | null = null, activityId: string | null = null, faydalar: string[] = [], url: string | null = null, gunler: number[] | null = null, sureG: number | null = null, programId: string | null = null, programAd: string | null = null, reload = true) {
+  async function ritEkle(ad: string, zaman = 'gün', kaynak = 'Kendi', tip = 'aliskanlik', alan: string | null = null, activityId: string | null = null, faydalar: string[] = [], url: string | null = null, gunler: number[] | null = null, sureG: number | null = null, programId: string | null = null, programAd: string | null = null, reload = true, basGun = 0) {
     if (!client || !ad.trim()) return;
     const g = gunler && gunler.length > 0 && gunler.length < 7 ? gunler : null;
+    const bas = parseD(today); bas.setDate(bas.getDate() + (basGun || 0)); const basStr = iso(bas);
     let bitis: string | null = null;
-    if (sureG && sureG > 0) { const e = parseD(today); e.setDate(e.getDate() + sureG - 1); bitis = iso(e); }
-    await supabase.from('dog_rituals').insert({ client_id: client.id, ad: ad.trim(), zaman, kaynak, tip, alan, activity_id: activityId, faydalar, url, gunler: g, program: programId, program_ad: programAd, aktif: true, mezun: false, baslangic: today, bitis, blok_sira: Date.now() });
+    if (sureG && sureG > 0) { const e = parseD(basStr); e.setDate(e.getDate() + sureG - 1); bitis = iso(e); }
+    await supabase.from('dog_rituals').insert({ client_id: client.id, ad: ad.trim(), zaman, kaynak, tip, alan, activity_id: activityId, faydalar, url, gunler: g, program: programId, program_ad: programAd, aktif: true, mezun: false, baslangic: basStr, bitis, blok_sira: Date.now() });
     setYeniRit('');
     if (reload) loadData(client.id);
   }
@@ -298,14 +301,16 @@ export default function Rite() {
     for (const st of (prog.adimlar || [])) {
       const alan0 = st.faydalar?.length ? faydaMap[st.faydalar[0]]?.alan || null : null;
       const slots = st.zamanlar && st.zamanlar.length ? st.zamanlar : ['gün'];
-      for (const s of slots) await ritEkle(st.ad, s, 'Program', 'aliskanlik', alan0, null, st.faydalar || [], st.url || null, st.gunler || null, prog.sure_gun || null, pid, prog.ad, false);
+      const sureG = st.sureGun && st.sureGun > 0 ? st.sureGun : (prog.sure_gun || null);
+      const basGun = st.baslaGun || 0;
+      for (const s of slots) await ritEkle(st.ad, s, 'Program', 'aliskanlik', alan0, null, st.faydalar || [], st.url || null, st.gunler || null, sureG, pid, prog.ad, false, basGun);
     }
     loadData(client.id);
   }
   function kToggleFayda(kod: string) { setKFaydalar((a) => (a.includes(kod) ? a.filter((x) => x !== kod) : [...a, kod])); }
   function kVidEkle() { if (!kVin.baslik.trim()) return; setKVids((a) => [...a, { baslik: kVin.baslik.trim(), url: kVin.url.trim() }]); setKVin({ baslik: '', url: '' }); }
   const kVidSil = (i: number) => setKVids((a) => a.filter((_, j) => j !== i));
-  function studioReset() { setKAd(''); setKAcik(''); setKFaydalar([]); setKVids([]); setKVin({ baslik: '', url: '' }); setKZamanlar(['gün']); setKGunler([]); setKSure(''); setKEditId(null); setKMsg(''); setStMode('aktivite'); setStAdimlar([]); setAdAd(''); setAdZ(['gün']); setAdG([]); setAdU(''); }
+  function studioReset() { setKAd(''); setKAcik(''); setKFaydalar([]); setKVids([]); setKVin({ baslik: '', url: '' }); setKZamanlar(['gün']); setKGunler([]); setKSure(''); setKEditId(null); setKMsg(''); setStMode('aktivite'); setStAdimlar([]); setAdAd(''); setAdZ(['gün']); setAdG([]); setAdU(''); setAdBas(''); setAdSure(''); }
   function openStudioNew() { studioReset(); setStudioOpen(true); }
   function openStudioEdit(a: any) {
     studioReset();
@@ -318,8 +323,14 @@ export default function Rite() {
   const gunToggle = (set: (f: (c: number[]) => number[]) => void, n: number) => set((c) => c.includes(n) ? c.filter((x) => x !== n) : [...c, n]);
   function adimEkle() {
     if (!adAd.trim()) return setKMsg('Adım adı gir');
-    setStAdimlar((a) => [...a, { ad: adAd.trim(), zamanlar: adZ, gunler: adG.length > 0 && adG.length < 7 ? adG : null, url: adU.trim() || null, faydalar: [] }]);
-    setAdAd(''); setAdZ(['gün']); setAdG([]); setAdU(''); setKMsg('');
+    setStAdimlar((a) => [...a, { ad: adAd.trim(), zamanlar: adZ, gunler: adG.length > 0 && adG.length < 7 ? adG : null, url: adU.trim() || null, faydalar: [], baslaGun: parseInt(adBas) > 0 ? parseInt(adBas) : 0, sureGun: parseInt(adSure) > 0 ? parseInt(adSure) : null }]);
+    setAdAd(''); setAdZ(['gün']); setAdG([]); setAdU(''); setAdBas(''); setAdSure(''); setKMsg('');
+  }
+  // Adım zamanlama özeti: "başla +Ng · M gün" / "her zaman"
+  function adimZamanOzet(st: any): string {
+    const b = st.baslaGun ? 'başla +' + st.baslaGun + 'g' : '';
+    const s = st.sureGun ? st.sureGun + ' gün' : '';
+    return [b, s].filter(Boolean).join(' · ');
   }
   const adimSil = (i: number) => setStAdimlar((a) => a.filter((_, j) => j !== i));
   // Studio TEK çıkış: kişisel şablona kaydet (create/update). Ajandaya ekleme/başlatma ve paylaşma şablondan yapılır.
@@ -1101,7 +1112,7 @@ export default function Rite() {
             {isProg && (
               <Acc title="Adımlar" summary={(o.adimlar || []).length + ' adım' + (o.sure_gun ? ' · ' + o.sure_gun + ' gün' : '')} defaultOpen>
                 {(o.adimlar || []).map((st: any, i: number) => (
-                  <div key={i} className="kv"><div className="k">{i + 1}</div><div className="v"><b>{st.ad}</b> <span className="note" style={{ margin: 0 }}>{(st.zamanlar || ['gün']).map((z: string) => TODS.find((t) => t[0] === z)?.[1]).join('+')} · {gunlerLabel(st.gunler)}{st.url ? ' · 🔗' : ''}</span></div></div>
+                  <div key={i} className="kv"><div className="k">{i + 1}</div><div className="v"><b>{st.ad}</b> <span className="note" style={{ margin: 0 }}>{(st.zamanlar || ['gün']).map((z: string) => TODS.find((t) => t[0] === z)?.[1]).join('+')} · {gunlerLabel(st.gunler)}{adimZamanOzet(st) ? ' · ' + adimZamanOzet(st) : ''}{st.url ? ' · 🔗' : ''}</span></div></div>
                 ))}
               </Acc>
             )}
@@ -1171,7 +1182,7 @@ export default function Rite() {
               <label className="fldlbl">Adımlar {stAdimlar.length > 0 ? '(' + stAdimlar.length + ')' : ''}</label>
               {stAdimlar.map((st: any, i: number) => (
                 <div key={i} className="warnbox" style={{ background: '#eef1f7', borderColor: '#d8dfea', color: '#3a4256', margin: '4px 0' }}>
-                  <b>{st.ad}</b> <span className="note" style={{ margin: 0 }}>{(st.zamanlar || ['gün']).map((z: string) => TODS.find((t) => t[0] === z)?.[1]).join('+')} · {gunlerLabel(st.gunler)}{st.url ? ' · 🔗' : ''}</span>
+                  <b>{i + 1}. {st.ad}</b> <span className="note" style={{ margin: 0 }}>{(st.zamanlar || ['gün']).map((z: string) => TODS.find((t) => t[0] === z)?.[1]).join('+')} · {gunlerLabel(st.gunler)}{adimZamanOzet(st) ? ' · ' + adimZamanOzet(st) : ''}{st.url ? ' · 🔗' : ''}</span>
                   <button className="rmx" style={{ float: 'right' }} onClick={() => adimSil(i)}>✕</button>
                 </div>
               ))}
@@ -1185,13 +1196,18 @@ export default function Rite() {
                   <span className={'chip' + (adG.length === 0 ? ' on' : '')} onClick={() => setAdG([])}>Her gün</span>
                   {GUNLER.map(([n, l]) => <span key={n} className={'chip' + (adG.includes(n) ? ' on' : '')} onClick={() => gunToggle(setAdG, n)}>{l}</span>)}
                 </div>
+                <div className="grid" style={{ marginTop: 4 }}>
+                  <div><label>Başla (kaçıncı gün)</label><input type="number" min={0} value={adBas} onChange={(e) => setAdBas(e.target.value)} placeholder="0 = hemen" /></div>
+                  <div><label>Süre (gün, ops.)</label><input type="number" min={1} value={adSure} onChange={(e) => setAdSure(e.target.value)} placeholder="boş = süregelen" /></div>
+                </div>
                 <label className="fldlbl">Link (ops.)</label>
                 <input value={adU} onChange={(e) => setAdU(e.target.value)} placeholder="https://…" />
                 <div style={{ marginTop: 6 }}><button className="btn ghost sm" onClick={adimEkle}>+ Adım ekle</button></div>
+                <p className="note" style={{ marginTop: 6 }}>Ardışık kurmak için: 1. adım 0&apos;dan başlar 21 gün; 2. adım &quot;Başla&quot; 21 (ya da 10 gün sonra için 10) girilir.</p>
               </div>
             </>)}
 
-            <label className="fldlbl">Süre (boş = süregelen)</label>
+            <label className="fldlbl">{stMode === 'program' ? 'Program varsayılan süresi (adımda süre yoksa bu kullanılır)' : 'Süre (boş = süregelen)'}</label>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}><input type="number" min={1} value={kSure} onChange={(e) => setKSure(e.target.value)} placeholder="ör. 21" style={{ width: 90 }} /> gün</div>
             <div className="rowbtns" style={{ marginTop: 12 }}>
               <button className="btn" onClick={studioKaydet}>{kEditId ? 'Kaydet' : 'Kişisel şablona kaydet'}</button>
