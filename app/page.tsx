@@ -52,10 +52,21 @@ function kisaTarih(d?: string | null): string {
   const p = d.split('-');
   return p.length === 3 ? p[2] + '.' + p[1] : d;
 }
+// Adım pencerelerini çöz: ardisik=true ise önceki adımın bitişinden başlar.
+function programSpans(adimlar: any[], sure?: number | null) {
+  let cursor = 0;
+  return (adimlar || []).map((st: any, i: number) => {
+    const d = st.sureGun && st.sureGun > 0 ? st.sureGun : (sure || 0);
+    const o = (st.ardisik && i > 0) ? cursor : (st.baslaGun || 0);
+    const end = o + (d || 0);
+    cursor = end;
+    return { o, d, end };
+  });
+}
 // Program zaman çizelgesi (mini-Gantt): her adım ofset+süreye göre çubuk.
 function ProgramTimeline({ adimlar, sure }: { adimlar: any[]; sure?: number | null }) {
   if (!adimlar || adimlar.length === 0) return null;
-  const spans = adimlar.map((st) => { const o = st.baslaGun || 0; const d = st.sureGun && st.sureGun > 0 ? st.sureGun : (sure || 0); return { o, d, end: o + (d || 0) }; });
+  const spans = programSpans(adimlar, sure);
   const total = Math.max(1, sure || 0, ...spans.map((s) => s.end), ...spans.map((s) => s.o + 1));
   return (
     <div className="tl">
@@ -163,6 +174,7 @@ export default function Rite() {
   const [adU, setAdU] = useState('');
   const [adBas, setAdBas] = useState('');
   const [adSure, setAdSure] = useState('');
+  const [adArd, setAdArd] = useState(false);
 
   const today = iso(new Date());
   const day = selDate || today;
@@ -320,12 +332,12 @@ export default function Rite() {
   async function programBaslat(prog: any) {
     if (!client) return;
     const pid = 'P' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-    for (const st of (prog.adimlar || [])) {
+    const spans = programSpans(prog.adimlar || [], prog.sure_gun || null);
+    for (let i = 0; i < (prog.adimlar || []).length; i++) {
+      const st = prog.adimlar[i];
       const alan0 = st.faydalar?.length ? faydaMap[st.faydalar[0]]?.alan || null : null;
       const slots = st.zamanlar && st.zamanlar.length ? st.zamanlar : ['gün'];
-      const sureG = st.sureGun && st.sureGun > 0 ? st.sureGun : (prog.sure_gun || null);
-      const basGun = st.baslaGun || 0;
-      for (const s of slots) await ritEkle(st.ad, s, 'Program', 'aliskanlik', alan0, null, st.faydalar || [], st.url || null, st.gunler || null, sureG, pid, prog.ad, false, basGun);
+      for (const s of slots) await ritEkle(st.ad, s, 'Program', 'aliskanlik', alan0, null, st.faydalar || [], st.url || null, st.gunler || null, spans[i].d || null, pid, prog.ad, false, spans[i].o);
     }
     loadData(client.id);
   }
@@ -345,12 +357,12 @@ export default function Rite() {
   const gunToggle = (set: (f: (c: number[]) => number[]) => void, n: number) => set((c) => c.includes(n) ? c.filter((x) => x !== n) : [...c, n]);
   function adimEkle() {
     if (!adAd.trim()) return setKMsg('Adım adı gir');
-    setStAdimlar((a) => [...a, { ad: adAd.trim(), zamanlar: adZ, gunler: adG.length > 0 && adG.length < 7 ? adG : null, url: adU.trim() || null, faydalar: [], baslaGun: parseInt(adBas) > 0 ? parseInt(adBas) : 0, sureGun: parseInt(adSure) > 0 ? parseInt(adSure) : null }]);
-    setAdAd(''); setAdZ(['gün']); setAdG([]); setAdU(''); setAdBas(''); setAdSure(''); setKMsg('');
+    setStAdimlar((a) => [...a, { ad: adAd.trim(), zamanlar: adZ, gunler: adG.length > 0 && adG.length < 7 ? adG : null, url: adU.trim() || null, faydalar: [], ardisik: adArd, baslaGun: adArd ? 0 : (parseInt(adBas) > 0 ? parseInt(adBas) : 0), sureGun: parseInt(adSure) > 0 ? parseInt(adSure) : null }]);
+    setAdAd(''); setAdZ(['gün']); setAdG([]); setAdU(''); setAdBas(''); setAdSure(''); setAdArd(false); setKMsg('');
   }
-  // Adım zamanlama özeti: "başla +Ng · M gün" / "her zaman"
+  // Adım zamanlama özeti: "↳ ardından · M gün" / "başla +Ng · M gün"
   function adimZamanOzet(st: any): string {
-    const b = st.baslaGun ? 'başla +' + st.baslaGun + 'g' : '';
+    const b = st.ardisik ? '↳ önceki ardından' : (st.baslaGun ? 'başla +' + st.baslaGun + 'g' : '');
     const s = st.sureGun ? st.sureGun + ' gün' : '';
     return [b, s].filter(Boolean).join(' · ');
   }
@@ -511,6 +523,21 @@ export default function Rite() {
     await supabase.from('dog_rituals').update({ mezun: true, aktif: false, bitis: today }).eq('id', id);
     loadData(client.id);
   }
+  // Programın tüm (tarihli) adımlarının bitişini topluca ±gün kaydır.
+  async function programSureDegis(pid: string, delta: number) {
+    if (!client) return;
+    for (const r of rituals.filter((x) => x.program === pid && x.bitis)) {
+      const e = parseD(r.bitis); e.setDate(e.getDate() + delta);
+      await supabase.from('dog_rituals').update({ bitis: iso(e) }).eq('id', r.id);
+    }
+    loadData(client.id);
+  }
+  async function programKaldir(pid: string, ad: string) {
+    if (!client) return;
+    if (!confirm('"' + ad + '" programının tüm ritüelleri ajandadan kaldırılsın mı?')) return;
+    await supabase.from('dog_rituals').delete().eq('client_id', client.id).eq('program', pid);
+    loadData(client.id);
+  }
   async function yenidenBasla(id: string) {
     if (!client) return;
     await supabase.from('dog_rituals').update({ mezun: false, aktif: true, baslangic: today, bitis: null }).eq('id', id);
@@ -626,6 +653,14 @@ export default function Rite() {
   const activeOn = (r: any, d: string) => (!r.baslangic || r.baslangic <= d) && (!r.bitis || d <= r.bitis) && (!r.gunler || r.gunler.length === 0 || r.gunler.includes(wday(d)));
   const habits = rituals.filter((r) => !r.mezun && activeOn(r, day));
   const mezunlar = rituals.filter((r) => r.mezun);
+  // Çalışan programlar: program kimliğine göre grupla (ilerleme + süre kontrolü için).
+  const programGruplari = Object.values(rituals.filter((r) => r.program && !r.mezun).reduce((acc: any, r: any) => {
+    const g = acc[r.program] || (acc[r.program] = { pid: r.program, ad: r.program_ad || 'Program', bas: r.baslangic || today, bit: r.bitis || null, n: 0 });
+    g.n++;
+    if (r.baslangic && r.baslangic < g.bas) g.bas = r.baslangic;
+    if (r.bitis && (!g.bit || r.bitis > g.bit)) g.bit = r.bitis;
+    return acc;
+  }, {} as any)) as any[];
   const faydaMap: Record<string, any> = {};
   faydaList.forEach((f) => { faydaMap[f.kod] = f; });
   const ritAreas = (rt: any): string[] => {
@@ -697,6 +732,27 @@ export default function Rite() {
             <div className="vswitch">
               {(['gun', 'hafta'] as const).map((v) => <div key={v} className={'vseg' + (ajView === v ? ' on' : '')} onClick={() => setAjView(v)}>{v === 'gun' ? 'Gün' : 'Hafta'}</div>)}
             </div>
+
+            {programGruplari.length > 0 && <div style={{ marginBottom: 4 }}>{programGruplari.map((g) => {
+              const gunNo = Math.max(1, Math.round((parseD(today).getTime() - parseD(g.bas).getTime()) / 86400000) + 1);
+              const toplam = g.bit ? Math.round((parseD(g.bit).getTime() - parseD(g.bas).getTime()) / 86400000) + 1 : null;
+              const pct = toplam ? Math.min(100, Math.round(gunNo / toplam * 100)) : 0;
+              const bitti = toplam ? gunNo > toplam : false;
+              return (
+                <div key={g.pid} className="card" style={{ padding: '8px 12px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+                    <b>🧩 {g.ad}</b>
+                    <span className="note" style={{ margin: 0, whiteSpace: 'nowrap' }}>{toplam ? (bitti ? '✓ tamamlandı' : 'gün ' + Math.min(gunNo, toplam) + '/' + toplam) : 'gün ' + gunNo}</span>
+                  </div>
+                  {toplam && <div className="track" style={{ marginTop: 4 }}><div className="fill" style={{ width: pct + '%' }} /></div>}
+                  <div className="rowbtns" style={{ marginTop: 6 }}>
+                    <button className="btn ghost sm" onClick={() => programSureDegis(g.pid, 7)}>+7 gün</button>
+                    <button className="btn ghost sm" onClick={() => programSureDegis(g.pid, -7)}>−7 gün</button>
+                    <button className="btn ghost sm" style={{ color: 'var(--red)', borderColor: '#e6c4bd' }} onClick={() => programKaldir(g.pid, g.ad)}>Kaldır</button>
+                  </div>
+                </div>
+              );
+            })}</div>}
 
             {ajView === 'gun' && (linkMode ? (
               <div className="card">
@@ -1230,14 +1286,15 @@ export default function Rite() {
                   <span className={'chip' + (adG.length === 0 ? ' on' : '')} onClick={() => setAdG([])}>Her gün</span>
                   {GUNLER.map(([n, l]) => <span key={n} className={'chip' + (adG.includes(n) ? ' on' : '')} onClick={() => gunToggle(setAdG, n)}>{l}</span>)}
                 </div>
+                <label className="fldlbl" style={{ display: 'flex', alignItems: 'center', gap: 8 }}><input type="checkbox" style={{ width: 'auto' }} checked={adArd} onChange={(e) => setAdArd(e.target.checked)} disabled={stAdimlar.length === 0} /> ⛓ Önceki adımın ardından başlasın (otomatik)</label>
                 <div className="grid" style={{ marginTop: 4 }}>
-                  <div><label>Başla (kaçıncı gün)</label><input type="number" min={0} value={adBas} onChange={(e) => setAdBas(e.target.value)} placeholder="0 = hemen" /></div>
+                  {!adArd && <div><label>Başla (kaçıncı gün)</label><input type="number" min={0} value={adBas} onChange={(e) => setAdBas(e.target.value)} placeholder="0 = hemen" /></div>}
                   <div><label>Süre (gün, ops.)</label><input type="number" min={1} value={adSure} onChange={(e) => setAdSure(e.target.value)} placeholder="boş = süregelen" /></div>
                 </div>
                 <label className="fldlbl">Link (ops.)</label>
                 <input value={adU} onChange={(e) => setAdU(e.target.value)} placeholder="https://…" />
                 <div style={{ marginTop: 6 }}><button className="btn ghost sm" onClick={adimEkle}>+ Adım ekle</button></div>
-                <p className="note" style={{ marginTop: 6 }}>Ardışık kurmak için: 1. adım 0&apos;dan başlar 21 gün; 2. adım &quot;Başla&quot; 21 (ya da 10 gün sonra için 10) girilir.</p>
+                <p className="note" style={{ marginTop: 6 }}>Ardışık kurgu: 1. adım 21 gün; 2. adıma <b>⛓ ardından</b> işaretle (ya da elle &quot;Başla&quot; 21). Adım süresini uzatınca sonrakiler otomatik kayar.</p>
               </div>
             </>)}
 
