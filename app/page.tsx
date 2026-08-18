@@ -175,6 +175,7 @@ export default function Rite() {
   const [adBas, setAdBas] = useState('');
   const [adSure, setAdSure] = useState('');
   const [adArd, setAdArd] = useState(false);
+  const [adEdit, setAdEdit] = useState<number | null>(null);
 
   const today = iso(new Date());
   const day = selDate || today;
@@ -344,7 +345,7 @@ export default function Rite() {
   function kToggleFayda(kod: string) { setKFaydalar((a) => (a.includes(kod) ? a.filter((x) => x !== kod) : [...a, kod])); }
   function kVidEkle() { if (!kVin.baslik.trim()) return; setKVids((a) => [...a, { baslik: kVin.baslik.trim(), url: kVin.url.trim() }]); setKVin({ baslik: '', url: '' }); }
   const kVidSil = (i: number) => setKVids((a) => a.filter((_, j) => j !== i));
-  function studioReset() { setKAd(''); setKAcik(''); setKFaydalar([]); setKVids([]); setKVin({ baslik: '', url: '' }); setKZamanlar(['gün']); setKGunler([]); setKSure(''); setKEditId(null); setKMsg(''); setStMode('aktivite'); setStAdimlar([]); setAdAd(''); setAdZ(['gün']); setAdG([]); setAdU(''); setAdBas(''); setAdSure(''); }
+  function studioReset() { setKAd(''); setKAcik(''); setKFaydalar([]); setKVids([]); setKVin({ baslik: '', url: '' }); setKZamanlar(['gün']); setKGunler([]); setKSure(''); setKEditId(null); setKMsg(''); setStMode('aktivite'); setStAdimlar([]); setAdAd(''); setAdZ(['gün']); setAdG([]); setAdU(''); setAdBas(''); setAdSure(''); setAdArd(false); setAdEdit(null); }
   function openStudioNew() { studioReset(); setStudioOpen(true); }
   function openStudioEdit(a: any) {
     studioReset();
@@ -355,10 +356,13 @@ export default function Rite() {
   }
   const slotToggle = (arr: string[], set: (f: (c: string[]) => string[]) => void, z: string) => set((c) => c.includes(z) ? (c.length > 1 ? c.filter((x) => x !== z) : c) : [...c, z]);
   const gunToggle = (set: (f: (c: number[]) => number[]) => void, n: number) => set((c) => c.includes(n) ? c.filter((x) => x !== n) : [...c, n]);
+  function adimResetDraft() { setAdAd(''); setAdZ(['gün']); setAdG([]); setAdU(''); setAdBas(''); setAdSure(''); setAdArd(false); setAdEdit(null); setKMsg(''); }
+  function adimDuzenle(i: number) { const st = stAdimlar[i]; setAdAd(st.ad || ''); setAdZ(st.zamanlar && st.zamanlar.length ? st.zamanlar : ['gün']); setAdG(st.gunler || []); setAdU(st.url || ''); setAdBas(st.baslaGun ? String(st.baslaGun) : ''); setAdSure(st.sureGun ? String(st.sureGun) : ''); setAdArd(!!st.ardisik); setAdEdit(i); setKMsg(''); }
   function adimEkle() {
     if (!adAd.trim()) return setKMsg('Adım adı gir');
-    setStAdimlar((a) => [...a, { ad: adAd.trim(), zamanlar: adZ, gunler: adG.length > 0 && adG.length < 7 ? adG : null, url: adU.trim() || null, faydalar: [], ardisik: adArd, baslaGun: adArd ? 0 : (parseInt(adBas) > 0 ? parseInt(adBas) : 0), sureGun: parseInt(adSure) > 0 ? parseInt(adSure) : null }]);
-    setAdAd(''); setAdZ(['gün']); setAdG([]); setAdU(''); setAdBas(''); setAdSure(''); setAdArd(false); setKMsg('');
+    const yeni = { ad: adAd.trim(), zamanlar: adZ, gunler: adG.length > 0 && adG.length < 7 ? adG : null, url: adU.trim() || null, faydalar: adEdit != null ? (stAdimlar[adEdit].faydalar || []) : [], ardisik: adArd, baslaGun: adArd ? 0 : (parseInt(adBas) > 0 ? parseInt(adBas) : 0), sureGun: parseInt(adSure) > 0 ? parseInt(adSure) : null };
+    setStAdimlar((a) => (adEdit != null ? a.map((x, j) => (j === adEdit ? yeni : x)) : [...a, yeni]));
+    adimResetDraft();
   }
   // Adım zamanlama özeti: "↳ ardından · M gün" / "başla +Ng · M gün"
   function adimZamanOzet(st: any): string {
@@ -1266,18 +1270,19 @@ export default function Rite() {
             </>) : (<>
               <label className="fldlbl">Adımlar {stAdimlar.length > 0 ? '(' + stAdimlar.length + ')' : ''}</label>
               {stAdimlar.map((st: any, i: number) => (
-                <div key={i} className="warnbox" style={{ background: '#eef1f7', borderColor: '#d8dfea', color: '#3a4256', margin: '4px 0' }}>
+                <div key={i} className="warnbox" style={{ background: adEdit === i ? '#dfe7f5' : '#eef1f7', borderColor: '#d8dfea', color: '#3a4256', margin: '4px 0' }}>
                   <span style={{ float: 'right', display: 'inline-flex', gap: 4 }}>
+                    <button className="rmx" onClick={() => adimDuzenle(i)}>✎</button>
                     <button className="rmx" onClick={() => adimMove(i, -1)}>↑</button>
                     <button className="rmx" onClick={() => adimMove(i, 1)}>↓</button>
-                    <button className="rmx" onClick={() => adimSil(i)}>✕</button>
+                    <button className="rmx" onClick={() => { adimSil(i); if (adEdit === i) adimResetDraft(); }}>✕</button>
                   </span>
                   <b>{i + 1}. {st.ad}</b> <span className="note" style={{ margin: 0 }}>{(st.zamanlar || ['gün']).map((z: string) => TODS.find((t) => t[0] === z)?.[1]).join('+')} · {gunlerLabel(st.gunler)}{adimZamanOzet(st) ? ' · ' + adimZamanOzet(st) : ''}{st.url ? ' · 🔗' : ''}</span>
                 </div>
               ))}
               {stAdimlar.length > 0 && <div style={{ marginTop: 6 }}><ProgramTimeline adimlar={stAdimlar} sure={parseInt(kSure) || null} /></div>}
               <div className="card" style={{ background: '#faf7f1', padding: 10, marginTop: 4 }}>
-                <label>Adım adı</label>
+                <label>{adEdit != null ? (adEdit + 1) + '. adımı düzenle' : 'Yeni adım'}</label>
                 <input value={adAd} onChange={(e) => setAdAd(e.target.value)} placeholder="ör. Aromaterapi kürü (tok karna)" />
                 <label className="fldlbl">Zaman dilimi (çok seçilebilir)</label>
                 <div>{TODS.map(([z, l]) => <span key={z} className={'chip' + (adZ.includes(z) ? ' on' : '')} onClick={() => slotToggle(adZ, setAdZ, z)}>{l}</span>)}</div>
@@ -1286,14 +1291,17 @@ export default function Rite() {
                   <span className={'chip' + (adG.length === 0 ? ' on' : '')} onClick={() => setAdG([])}>Her gün</span>
                   {GUNLER.map(([n, l]) => <span key={n} className={'chip' + (adG.includes(n) ? ' on' : '')} onClick={() => gunToggle(setAdG, n)}>{l}</span>)}
                 </div>
-                <label className="fldlbl" style={{ display: 'flex', alignItems: 'center', gap: 8 }}><input type="checkbox" style={{ width: 'auto' }} checked={adArd} onChange={(e) => setAdArd(e.target.checked)} disabled={stAdimlar.length === 0} /> ⛓ Önceki adımın ardından başlasın (otomatik)</label>
+                <label className="fldlbl" style={{ display: 'flex', alignItems: 'center', gap: 8 }}><input type="checkbox" style={{ width: 'auto' }} checked={adArd} onChange={(e) => setAdArd(e.target.checked)} disabled={stAdimlar.length === 0 || adEdit === 0} /> ⛓ Önceki adımın ardından başlasın (otomatik)</label>
                 <div className="grid" style={{ marginTop: 4 }}>
                   {!adArd && <div><label>Başla (kaçıncı gün)</label><input type="number" min={0} value={adBas} onChange={(e) => setAdBas(e.target.value)} placeholder="0 = hemen" /></div>}
                   <div><label>Süre (gün, ops.)</label><input type="number" min={1} value={adSure} onChange={(e) => setAdSure(e.target.value)} placeholder="boş = süregelen" /></div>
                 </div>
                 <label className="fldlbl">Link (ops.)</label>
                 <input value={adU} onChange={(e) => setAdU(e.target.value)} placeholder="https://…" />
-                <div style={{ marginTop: 6 }}><button className="btn ghost sm" onClick={adimEkle}>+ Adım ekle</button></div>
+                <div className="rowbtns" style={{ marginTop: 6 }}>
+                  <button className="btn ghost sm" onClick={adimEkle}>{adEdit != null ? '✓ Adımı güncelle' : '+ Adım ekle'}</button>
+                  {adEdit != null && <button className="btn ghost sm" onClick={adimResetDraft}>Vazgeç</button>}
+                </div>
                 <p className="note" style={{ marginTop: 6 }}>Ardışık kurgu: 1. adım 21 gün; 2. adıma <b>⛓ ardından</b> işaretle (ya da elle &quot;Başla&quot; 21). Adım süresini uzatınca sonrakiler otomatik kayar.</p>
               </div>
             </>)}
