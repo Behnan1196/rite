@@ -120,7 +120,7 @@ export default function Rite() {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { delay: 180, tolerance: 6 } }));
   const [faydaList, setFaydaList] = useState<any[]>([]);
   const [alanList, setAlanList] = useState<string[]>([]);
-  const [kZaman, setKZaman] = useState('gün');
+  const [kZamanlar, setKZamanlar] = useState<string[]>(['gün']);
   const [kGunler, setKGunler] = useState<number[]>([]);
   const [kSure, setKSure] = useState('');
   const [kEditId, setKEditId] = useState<string | null>(null);
@@ -132,6 +132,13 @@ export default function Rite() {
   const [kVin, setKVin] = useState({ baslik: '', url: '' });
   const [kMsg, setKMsg] = useState('');
   const [kShareTo, setKShareTo] = useState('');
+  // Studio program modu (Faz B): çok adımlı, adım-bazlı slot/gün.
+  const [stMode, setStMode] = useState<'aktivite' | 'program'>('aktivite');
+  const [stAdimlar, setStAdimlar] = useState<any[]>([]);
+  const [adAd, setAdAd] = useState('');
+  const [adZ, setAdZ] = useState<string[]>(['gün']);
+  const [adG, setAdG] = useState<number[]>([]);
+  const [adU, setAdU] = useState('');
 
   const today = iso(new Date());
   const day = selDate || today;
@@ -266,29 +273,69 @@ export default function Rite() {
     else await supabase.from('dog_ritual_logs').insert({ client_id: client.id, ritual_id: ritId, tarih: day, yapildi: true });
     loadData(client.id);
   }
-  async function ritEkle(ad: string, zaman = 'gün', kaynak = 'Kendi', tip = 'aliskanlik', alan: string | null = null, activityId: string | null = null, faydalar: string[] = [], url: string | null = null, gunler: number[] | null = null, sureG: number | null = null) {
+  async function ritEkle(ad: string, zaman = 'gün', kaynak = 'Kendi', tip = 'aliskanlik', alan: string | null = null, activityId: string | null = null, faydalar: string[] = [], url: string | null = null, gunler: number[] | null = null, sureG: number | null = null, programId: string | null = null, programAd: string | null = null, reload = true) {
     if (!client || !ad.trim()) return;
     const g = gunler && gunler.length > 0 && gunler.length < 7 ? gunler : null;
     let bitis: string | null = null;
     if (sureG && sureG > 0) { const e = parseD(today); e.setDate(e.getDate() + sureG - 1); bitis = iso(e); }
-    await supabase.from('dog_rituals').insert({ client_id: client.id, ad: ad.trim(), zaman, kaynak, tip, alan, activity_id: activityId, faydalar, url, gunler: g, aktif: true, mezun: false, baslangic: today, bitis, blok_sira: Date.now() });
+    await supabase.from('dog_rituals').insert({ client_id: client.id, ad: ad.trim(), zaman, kaynak, tip, alan, activity_id: activityId, faydalar, url, gunler: g, program: programId, program_ad: programAd, aktif: true, mezun: false, baslangic: today, bitis, blok_sira: Date.now() });
     setYeniRit('');
+    if (reload) loadData(client.id);
+  }
+  // Çok-slotlu aktiviteyi ajandaya ekle: her slot için bir ritüel.
+  async function aktiviteEkleSlotlar(o: any, override?: string) {
+    if (!client) return;
+    const alan0 = o.grup && o.grup !== 'Kişisel' ? o.grup : (o.faydalar?.length ? faydaMap[o.faydalar[0]]?.alan || null : null);
+    const url0 = (o.videolar && o.videolar[0]?.url) || null;
+    const slots = override ? [override] : (o.zamanlar && o.zamanlar.length ? o.zamanlar : [o.zaman || 'gün']);
+    for (const s of slots) await ritEkle(o.ad, s, o.kaynak_etiket || (o.client_id ? 'Kendi' : 'Rite'), 'aliskanlik', alan0, o.id || null, o.faydalar || [], url0, o.gunler || null, o.sure_gun || null, null, null, false);
+    loadData(client.id);
+  }
+  // Programı ajandaya başlat: her adım × her slot için bir ritüel, ortak program kimliğiyle.
+  async function programBaslat(prog: any) {
+    if (!client) return;
+    const pid = 'P' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    for (const st of (prog.adimlar || [])) {
+      const alan0 = st.faydalar?.length ? faydaMap[st.faydalar[0]]?.alan || null : null;
+      const slots = st.zamanlar && st.zamanlar.length ? st.zamanlar : ['gün'];
+      for (const s of slots) await ritEkle(st.ad, s, 'Program', 'aliskanlik', alan0, null, st.faydalar || [], st.url || null, st.gunler || null, prog.sure_gun || null, pid, prog.ad, false);
+    }
     loadData(client.id);
   }
   function kToggleFayda(kod: string) { setKFaydalar((a) => (a.includes(kod) ? a.filter((x) => x !== kod) : [...a, kod])); }
   function kVidEkle() { if (!kVin.baslik.trim()) return; setKVids((a) => [...a, { baslik: kVin.baslik.trim(), url: kVin.url.trim() }]); setKVin({ baslik: '', url: '' }); }
   const kVidSil = (i: number) => setKVids((a) => a.filter((_, j) => j !== i));
-  function studioReset() { setKAd(''); setKAcik(''); setKFaydalar([]); setKVids([]); setKVin({ baslik: '', url: '' }); setKZaman('gün'); setKGunler([]); setKSure(''); setKEditId(null); setKMsg(''); }
+  function studioReset() { setKAd(''); setKAcik(''); setKFaydalar([]); setKVids([]); setKVin({ baslik: '', url: '' }); setKZamanlar(['gün']); setKGunler([]); setKSure(''); setKEditId(null); setKMsg(''); setStMode('aktivite'); setStAdimlar([]); setAdAd(''); setAdZ(['gün']); setAdG([]); setAdU(''); }
   function openStudioNew() { studioReset(); setStudioOpen(true); }
-  function openStudioEdit(a: any) { setKAd(a.ad || ''); setKAcik(a.aciklama || ''); setKFaydalar(a.faydalar || []); setKVids(a.videolar || []); setKVin({ baslik: '', url: '' }); setKZaman(a.zaman || 'gün'); setKGunler(a.gunler || []); setKSure(a.sure_gun ? String(a.sure_gun) : ''); setKEditId(a.id); setKMsg(''); setStudioOpen(true); }
-  // Studio TEK çıkış: kişisel şablona kaydet (create/update). Paylaşma/ajandaya ekleme şablondan yapılır.
+  function openStudioEdit(a: any) {
+    studioReset();
+    setKAd(a.ad || ''); setKSure(a.sure_gun ? String(a.sure_gun) : ''); setKEditId(a.id);
+    if (a.tur === 'program') { setStMode('program'); setStAdimlar(a.adimlar || []); }
+    else { setStMode('aktivite'); setKAcik(a.aciklama || ''); setKFaydalar(a.faydalar || []); setKVids(a.videolar || []); setKZamanlar(a.zamanlar && a.zamanlar.length ? a.zamanlar : [a.zaman || 'gün']); setKGunler(a.gunler || []); }
+    setStudioOpen(true);
+  }
+  const slotToggle = (arr: string[], set: (f: (c: string[]) => string[]) => void, z: string) => set((c) => c.includes(z) ? (c.length > 1 ? c.filter((x) => x !== z) : c) : [...c, z]);
+  const gunToggle = (set: (f: (c: number[]) => number[]) => void, n: number) => set((c) => c.includes(n) ? c.filter((x) => x !== n) : [...c, n]);
+  function adimEkle() {
+    if (!adAd.trim()) return setKMsg('Adım adı gir');
+    setStAdimlar((a) => [...a, { ad: adAd.trim(), zamanlar: adZ, gunler: adG.length > 0 && adG.length < 7 ? adG : null, url: adU.trim() || null, faydalar: [] }]);
+    setAdAd(''); setAdZ(['gün']); setAdG([]); setAdU(''); setKMsg('');
+  }
+  const adimSil = (i: number) => setStAdimlar((a) => a.filter((_, j) => j !== i));
+  // Studio TEK çıkış: kişisel şablona kaydet (create/update). Ajandaya ekleme/başlatma ve paylaşma şablondan yapılır.
   async function studioKaydet() {
     if (!client) return;
-    if (!kAd.trim()) return setKMsg('Aktivite adı gir');
-    const alan0 = kFaydalar.length ? (faydaList.find((f) => f.kod === kFaydalar[0])?.alan || null) : null;
-    const g = kGunler.length > 0 && kGunler.length < 7 ? kGunler : null;
+    if (!kAd.trim()) return setKMsg(stMode === 'program' ? 'Program adı gir' : 'Aktivite adı gir');
     const s = parseInt(kSure) > 0 ? parseInt(kSure) : null;
-    const row: any = { client_id: client.id, ad: kAd.trim(), grup: alan0 || 'Kişisel', faydalar: kFaydalar, aciklama: kAcik || null, videolar: kVids, zaman: kZaman, gunler: g, sure_gun: s, kaynak_etiket: 'Kendi', aktif: true };
+    let row: any;
+    if (stMode === 'program') {
+      if (stAdimlar.length === 0) return setKMsg('En az bir adım ekle');
+      row = { client_id: client.id, tur: 'program', ad: kAd.trim(), grup: 'Program', adimlar: stAdimlar, sure_gun: s, faydalar: [], kaynak_etiket: 'Kendi', aktif: true };
+    } else {
+      const alan0 = kFaydalar.length ? (faydaList.find((f) => f.kod === kFaydalar[0])?.alan || null) : null;
+      const g = kGunler.length > 0 && kGunler.length < 7 ? kGunler : null;
+      row = { client_id: client.id, tur: 'aktivite', ad: kAd.trim(), grup: alan0 || 'Kişisel', faydalar: kFaydalar, aciklama: kAcik || null, videolar: kVids, zaman: kZamanlar[0] || 'gün', zamanlar: kZamanlar, gunler: g, sure_gun: s, kaynak_etiket: 'Kendi', aktif: true };
+    }
     const r = kEditId ? await supabase.from('dog_activities').update(row).eq('id', kEditId) : await supabase.from('dog_activities').insert(row);
     if (r.error) return setKMsg('Hata: ' + r.error.message);
     studioReset(); loadActivities(); setStudioOpen(false); setActGroup('__kisisel');
@@ -298,7 +345,7 @@ export default function Rite() {
     if (!kod) return setKMsg('Alıcının paylaşım kodunu gir');
     const rc = await supabase.from('dog_clients').select('id').eq('share_code', kod).limit(1);
     if (rc.error || !rc.data || !rc.data.length) return setKMsg('Kod bulunamadı: ' + kod);
-    const ins = await supabase.from('dog_inbox').insert({ client_id: rc.data[0].id, tur: 'aktivite', baslik: act.ad, payload: { ad: act.ad, faydalar: act.faydalar || [], aciklama: act.aciklama || null, videolar: act.videolar || [], zaman: act.zaman || 'gün', gunler: act.gunler || null, sure_gun: act.sure_gun || null }, from_code: client?.share_code || null, durum: 'yeni' });
+    const ins = await supabase.from('dog_inbox').insert({ client_id: rc.data[0].id, tur: 'aktivite', baslik: act.ad, payload: { tur: act.tur || 'aktivite', ad: act.ad, faydalar: act.faydalar || [], aciklama: act.aciklama || null, videolar: act.videolar || [], zaman: act.zaman || 'gün', zamanlar: act.zamanlar || null, gunler: act.gunler || null, sure_gun: act.sure_gun || null, adimlar: act.adimlar || null }, from_code: client?.share_code || null, durum: 'yeni' });
     if (ins.error) return setKMsg('Hata: ' + ins.error.message);
     setKShareTo(''); setKMsg('Gönderildi → ' + kod);
   }
@@ -473,17 +520,27 @@ export default function Rite() {
   async function inboxAktiviteEkle(item: any) {
     if (!client) return;
     const p = item.payload || {};
-    const alan0 = (p.faydalar && p.faydalar.length) ? (faydaList.find((f) => f.kod === p.faydalar[0])?.alan || null) : null;
-    await supabase.from('dog_activities').insert({ client_id: client.id, ad: p.ad, grup: alan0, faydalar: p.faydalar || [], aciklama: p.aciklama || null, videolar: p.videolar || null, zaman: p.zaman || 'gün', gunler: p.gunler || null, sure_gun: p.sure_gun || null, kaynak_etiket: 'Paylaşılan', aktif: true });
+    if (p.tur === 'program') {
+      await supabase.from('dog_activities').insert({ client_id: client.id, tur: 'program', ad: p.ad, grup: 'Program', adimlar: p.adimlar || [], sure_gun: p.sure_gun || null, faydalar: [], kaynak_etiket: 'Paylaşılan', aktif: true });
+    } else {
+      const alan0 = (p.faydalar && p.faydalar.length) ? (faydaList.find((f) => f.kod === p.faydalar[0])?.alan || null) : null;
+      await supabase.from('dog_activities').insert({ client_id: client.id, tur: 'aktivite', ad: p.ad, grup: alan0 || 'Kişisel', faydalar: p.faydalar || [], aciklama: p.aciklama || null, videolar: p.videolar || null, zaman: p.zaman || 'gün', zamanlar: p.zamanlar || null, gunler: p.gunler || null, sure_gun: p.sure_gun || null, kaynak_etiket: 'Paylaşılan', aktif: true });
+    }
     await supabase.from('dog_inbox').update({ durum: 'alindi' }).eq('id', item.id);
     loadActivities(); loadInbox(client.id);
   }
-  // Paylaşılan aktiviteyi doğrudan ajandaya al (gönderenin varsayılan zamanlamasıyla).
+  // Paylaşılanı doğrudan ajandaya al (gönderenin varsayılan zamanlaması / program adımlarıyla).
   async function inboxAktiviteAjanda(item: any) {
     if (!client) return;
     const p = item.payload || {};
-    const alan0 = (p.faydalar && p.faydalar.length) ? (faydaList.find((f) => f.kod === p.faydalar[0])?.alan || null) : null;
-    await ritEkle(p.ad || item.baslik, p.zaman || 'gün', 'Paylaşılan', 'aliskanlik', alan0, null, p.faydalar || [], (p.videolar && p.videolar[0]?.url) || null, p.gunler || null, p.sure_gun || null);
+    if (p.tur === 'program') {
+      await programBaslat({ ad: p.ad, adimlar: p.adimlar || [], sure_gun: p.sure_gun || null });
+    } else {
+      const alan0 = (p.faydalar && p.faydalar.length) ? (faydaList.find((f) => f.kod === p.faydalar[0])?.alan || null) : null;
+      const slots = p.zamanlar && p.zamanlar.length ? p.zamanlar : [p.zaman || 'gün'];
+      for (const s of slots) await ritEkle(p.ad || item.baslik, s, 'Paylaşılan', 'aliskanlik', alan0, null, p.faydalar || [], (p.videolar && p.videolar[0]?.url) || null, p.gunler || null, p.sure_gun || null, null, null, false);
+      loadData(client.id);
+    }
     await supabase.from('dog_inbox').update({ durum: 'alindi' }).eq('id', item.id);
     loadInbox(client.id); setScreen('ajanda');
   }
@@ -643,7 +700,7 @@ export default function Rite() {
                     <div key={z} style={{ background: SLOTBG[z], borderRadius: 12, padding: '2px 8px 6px', margin: '10px 0' }}>
                       <div className="slothead">
                         <div className="tod" style={{ margin: '6px 4px 2px' }}>{lbl}</div>
-                        <button className="slotadd" onClick={() => { setAddSlot(z); setKZaman(z); setScreen('havuz'); }} aria-label="ekle">+</button>
+                        <button className="slotadd" onClick={() => { setAddSlot(z); setScreen('havuz'); }} aria-label="ekle">+</button>
                       </div>
                       {items.length === 0 ? <div className="note" style={{ padding: '2px 4px 6px' }}>Boş — sağdaki + ile ekle.</div> : (
                       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => onDragEndSlot(items, e)}>
@@ -737,7 +794,7 @@ export default function Rite() {
               <div className="card">
                 {personalActs.length === 0 ? <div className="note">Henüz kişisel aktivite yok. <button className="linkbtn" onClick={openStudioNew}>＋ Tasarla</button> ile oluştur.</div> : personalActs.map((a) => (
                   <div key={a.id} className="actcard" onClick={() => openDetay(a, 'aktivite')}>
-                    <div style={{ flex: 1 }}><div className="n">{a.ad}</div><div className="o">{Array.from(new Set((a.faydalar || []).map((k: string) => faydaMap[k]?.alan).filter(Boolean))).join(' · ')}</div></div>
+                    <div style={{ flex: 1 }}><div className="n">{a.tur === 'program' ? '🧩 ' : ''}{a.ad}</div><div className="o">{a.tur === 'program' ? (a.adimlar || []).length + ' adım' + (a.sure_gun ? ' · ' + a.sure_gun + ' gün' : '') : Array.from(new Set((a.faydalar || []).map((k: string) => faydaMap[k]?.alan).filter(Boolean))).join(' · ')}</div></div>
                     <span className="go">›</span>
                   </div>
                 ))}
@@ -967,6 +1024,7 @@ export default function Rite() {
         const fydNames = ((isRit ? o.faydalar : (act?.faydalar || o.faydalar)) || []).map((k: string) => faydaMap[k]?.ad || k);
         const hasBilgi = act && (act.ozet || act.aciklama || act.nasil || (act.videolar || []).length || (act.alternatifler || []).length || act.dikkat || act.kaynak);
         const personal = act && act.client_id;
+        const isProg = !isRit && o.tur === 'program';
         const schedSummary = [gunlerLabel(o.gunler), o.bitis ? 'bitiş ' + kisaTarih(o.bitis) : 'süregelen', TODS.find((t) => t[0] === (o.zaman || 'gün'))?.[1], o.hatirlatma_saat ? '🔔 ' + o.hatirlatma_saat : ''].filter(Boolean).join(' · ');
         return (
         <div className="modal" onClick={() => setDetay(null)}>
@@ -1036,8 +1094,16 @@ export default function Rite() {
                 {fydNames.length > 0 && <div className="kv"><div className="k">Faydalar</div><div className="v">{fydNames.join(' · ')}</div></div>}
               </Acc>
             )}
-            {!hasBilgi && fydNames.length > 0 && (
+            {!hasBilgi && !isProg && fydNames.length > 0 && (
               <Acc title="Faydalar" summary={fydNames.slice(0, 3).join(' · ')}><div className="v">{fydNames.join(' · ')}</div></Acc>
+            )}
+
+            {isProg && (
+              <Acc title="Adımlar" summary={(o.adimlar || []).length + ' adım' + (o.sure_gun ? ' · ' + o.sure_gun + ' gün' : '')} defaultOpen>
+                {(o.adimlar || []).map((st: any, i: number) => (
+                  <div key={i} className="kv"><div className="k">{i + 1}</div><div className="v"><b>{st.ad}</b> <span className="note" style={{ margin: 0 }}>{(st.zamanlar || ['gün']).map((z: string) => TODS.find((t) => t[0] === z)?.[1]).join('+')} · {gunlerLabel(st.gunler)}{st.url ? ' · 🔗' : ''}</span></div></div>
+                ))}
+              </Acc>
             )}
 
             {!isRit && personal && (
@@ -1051,7 +1117,8 @@ export default function Rite() {
             )}
 
             <div className="rowbtns" style={{ marginTop: 14 }}>
-              {!isRit && <button className="btn" onClick={() => { ritEkle(o.ad, addSlot || o.zaman || 'gün', o.kaynak_etiket || (o.client_id ? 'Kendi' : 'Rite'), 'aliskanlik', o.grup || (o.faydalar?.length ? faydaMap[o.faydalar[0]]?.alan : null) || null, o.id || null, o.faydalar || [], (o.videolar && o.videolar[0]?.url) || null, o.gunler || null, o.sure_gun || null); setDetay(null); setAddSlot(null); setScreen('ajanda'); }}>Ajandama ekle{addSlot ? ' (' + (TODS.find((t) => t[0] === addSlot)?.[1]) + ')' : ''}</button>}
+              {isProg && <button className="btn" onClick={() => { programBaslat(o); setDetay(null); setScreen('ajanda'); }}>Ajandama başlat{o.sure_gun ? ' (' + o.sure_gun + ' gün)' : ''}</button>}
+              {!isRit && !isProg && <button className="btn" onClick={() => { aktiviteEkleSlotlar(o, addSlot || undefined); setDetay(null); setAddSlot(null); setScreen('ajanda'); }}>Ajandama ekle{addSlot ? ' (' + (TODS.find((t) => t[0] === addSlot)?.[1]) + ')' : ''}</button>}
               {personal && <button className="btn ghost sm" onClick={() => { setDetay(null); openStudioEdit(act); }}>✎ Studio&apos;da düzenle</button>}
               {!isRit && personal && <button className="btn ghost sm" style={{ color: 'var(--red)', borderColor: '#e6c4bd' }} onClick={() => silAktivite(o)}>Sil</button>}
               {isRit && <button className="btn sm ghost" onClick={() => { const id = o.id; setDetay(null); ritSil(id); }}>Ajandadan kaldır</button>}
@@ -1066,34 +1133,64 @@ export default function Rite() {
         <div className="modal" onClick={() => { studioReset(); setStudioOpen(false); }}>
           <div className="sheet" onClick={(e) => e.stopPropagation()}>
             <button className="x" onClick={() => { studioReset(); setStudioOpen(false); }}>×</button>
-            <h2>{kEditId ? 'Aktiviteyi düzenle' : 'Aktivite tasarla'} — Studio</h2>
-            <p className="note" style={{ marginTop: 0 }}>Kaydedince <b>Kişisel şablonuna</b> düşer; ajandana ekler veya paylaşırsın.</p>
-            <label>Aktivite adı</label>
-            <input value={kAd} onChange={(e) => setKAd(e.target.value)} placeholder="ör. Badem'le sabah parkı" />
-            <Acc title="Faydalar" summary={kFaydalar.length ? kFaydalar.length + ' seçili · ' + Array.from(new Set(kFaydalar.map((k) => faydaMap[k]?.alan).filter(Boolean))).join(' · ') : 'ops. — seç'}>
-              <div>{faydaList.map((f) => { const idx = kFaydalar.indexOf(f.kod); return (
-                <span key={f.kod} className={'chip' + (idx >= 0 ? ' on' : '')} onClick={() => kToggleFayda(f.kod)}>{idx >= 0 ? (idx + 1) + '. ' : ''}{f.ad}</span>
-              ); })}</div>
-              {kFaydalar.length > 0 && <div className="note" style={{ marginTop: 6 }}>Kapsanan alanlar: <b>{Array.from(new Set(kFaydalar.map((k) => faydaMap[k]?.alan).filter(Boolean))).join(' · ')}</b></div>}
-            </Acc>
-            <label className="fldlbl">Açıklama / nasıl (ops.)</label>
-            <textarea value={kAcik} onChange={(e) => setKAcik(e.target.value)} placeholder="Nasıl yapılır, ipuçları…" />
-            <label className="fldlbl">Videolar (ops.)</label>
-            {kVids.map((v: any, i: number) => (
-              <div key={i} className="warnbox" style={{ background: '#f4efe6', borderColor: '#e7e0d2', color: '#5c554a', margin: '4px 0' }}><b>{v.baslik}</b> <span className="note" style={{ margin: 0 }}>{v.url}</span><button className="rmx" style={{ float: 'right' }} onClick={() => kVidSil(i)}>✕</button></div>
-            ))}
-            <div className="grid" style={{ marginTop: 4 }}>
-              <div><label>Video başlık</label><input value={kVin.baslik} onChange={(e) => setKVin((s) => ({ ...s, baslik: e.target.value }))} /></div>
-              <div><label>URL</label><input value={kVin.url} onChange={(e) => setKVin((s) => ({ ...s, url: e.target.value }))} placeholder="https://youtube.com/…" /></div>
-            </div>
-            <div style={{ marginTop: 6 }}><button className="btn ghost sm" onClick={kVidEkle}>+ Video ekle</button></div>
-            <label className="fldlbl">Varsayılan zaman dilimi</label>
-            <div>{TODS.map(([z, l]) => <span key={z} className={'chip' + (kZaman === z ? ' on' : '')} onClick={() => setKZaman(z)}>{l}</span>)}</div>
-            <label className="fldlbl">Varsayılan günler</label>
-            <div>
-              <span className={'chip' + (kGunler.length === 0 ? ' on' : '')} onClick={() => setKGunler([])}>Her gün</span>
-              {GUNLER.map(([n, l]) => <span key={n} className={'chip' + (kGunler.includes(n) ? ' on' : '')} onClick={() => setKGunler((cur) => cur.includes(n) ? cur.filter((x) => x !== n) : [...cur, n])}>{l}</span>)}
-            </div>
+            <h2>{kEditId ? 'Düzenle' : 'Tasarla'} — Studio</h2>
+            {!kEditId && <div className="tabs" style={{ marginBottom: 6 }}>
+              <div className={'tab' + (stMode === 'aktivite' ? ' on' : '')} onClick={() => setStMode('aktivite')}>Tek aktivite</div>
+              <div className={'tab' + (stMode === 'program' ? ' on' : '')} onClick={() => setStMode('program')}>Program (çok adımlı)</div>
+            </div>}
+            <label>{stMode === 'program' ? 'Program adı' : 'Aktivite adı'}</label>
+            <input value={kAd} onChange={(e) => setKAd(e.target.value)} placeholder={stMode === 'program' ? 'ör. 21 Günlük Başlangıç' : "ör. Badem'le sabah parkı"} />
+
+            {stMode === 'aktivite' ? (<>
+              <Acc title="Faydalar" summary={kFaydalar.length ? kFaydalar.length + ' seçili · ' + Array.from(new Set(kFaydalar.map((k) => faydaMap[k]?.alan).filter(Boolean))).join(' · ') : 'ops. — seç'}>
+                <div>{faydaList.map((f) => { const idx = kFaydalar.indexOf(f.kod); return (
+                  <span key={f.kod} className={'chip' + (idx >= 0 ? ' on' : '')} onClick={() => kToggleFayda(f.kod)}>{idx >= 0 ? (idx + 1) + '. ' : ''}{f.ad}</span>
+                ); })}</div>
+                {kFaydalar.length > 0 && <div className="note" style={{ marginTop: 6 }}>Kapsanan alanlar: <b>{Array.from(new Set(kFaydalar.map((k) => faydaMap[k]?.alan).filter(Boolean))).join(' · ')}</b></div>}
+              </Acc>
+              <label className="fldlbl">Açıklama / nasıl (ops.)</label>
+              <textarea value={kAcik} onChange={(e) => setKAcik(e.target.value)} placeholder="Nasıl yapılır, ipuçları…" />
+              <Acc title="Videolar" summary={kVids.length ? kVids.length + ' video' : 'ops.'}>
+                {kVids.map((v: any, i: number) => (
+                  <div key={i} className="warnbox" style={{ background: '#f4efe6', borderColor: '#e7e0d2', color: '#5c554a', margin: '4px 0' }}><b>{v.baslik}</b> <span className="note" style={{ margin: 0 }}>{v.url}</span><button className="rmx" style={{ float: 'right' }} onClick={() => kVidSil(i)}>✕</button></div>
+                ))}
+                <div className="grid" style={{ marginTop: 4 }}>
+                  <div><label>Video başlık</label><input value={kVin.baslik} onChange={(e) => setKVin((s) => ({ ...s, baslik: e.target.value }))} /></div>
+                  <div><label>URL</label><input value={kVin.url} onChange={(e) => setKVin((s) => ({ ...s, url: e.target.value }))} placeholder="https://youtube.com/…" /></div>
+                </div>
+                <div style={{ marginTop: 6 }}><button className="btn ghost sm" onClick={kVidEkle}>+ Video ekle</button></div>
+              </Acc>
+              <label className="fldlbl">Zaman dilimi (birden çok seçebilirsin — ör. sabah + akşam)</label>
+              <div>{TODS.map(([z, l]) => <span key={z} className={'chip' + (kZamanlar.includes(z) ? ' on' : '')} onClick={() => slotToggle(kZamanlar, setKZamanlar, z)}>{l}</span>)}</div>
+              <label className="fldlbl">Varsayılan günler</label>
+              <div>
+                <span className={'chip' + (kGunler.length === 0 ? ' on' : '')} onClick={() => setKGunler([])}>Her gün</span>
+                {GUNLER.map(([n, l]) => <span key={n} className={'chip' + (kGunler.includes(n) ? ' on' : '')} onClick={() => gunToggle(setKGunler, n)}>{l}</span>)}
+              </div>
+            </>) : (<>
+              <label className="fldlbl">Adımlar {stAdimlar.length > 0 ? '(' + stAdimlar.length + ')' : ''}</label>
+              {stAdimlar.map((st: any, i: number) => (
+                <div key={i} className="warnbox" style={{ background: '#eef1f7', borderColor: '#d8dfea', color: '#3a4256', margin: '4px 0' }}>
+                  <b>{st.ad}</b> <span className="note" style={{ margin: 0 }}>{(st.zamanlar || ['gün']).map((z: string) => TODS.find((t) => t[0] === z)?.[1]).join('+')} · {gunlerLabel(st.gunler)}{st.url ? ' · 🔗' : ''}</span>
+                  <button className="rmx" style={{ float: 'right' }} onClick={() => adimSil(i)}>✕</button>
+                </div>
+              ))}
+              <div className="card" style={{ background: '#faf7f1', padding: 10, marginTop: 4 }}>
+                <label>Adım adı</label>
+                <input value={adAd} onChange={(e) => setAdAd(e.target.value)} placeholder="ör. Aromaterapi kürü (tok karna)" />
+                <label className="fldlbl">Zaman dilimi (çok seçilebilir)</label>
+                <div>{TODS.map(([z, l]) => <span key={z} className={'chip' + (adZ.includes(z) ? ' on' : '')} onClick={() => slotToggle(adZ, setAdZ, z)}>{l}</span>)}</div>
+                <label className="fldlbl">Günler</label>
+                <div>
+                  <span className={'chip' + (adG.length === 0 ? ' on' : '')} onClick={() => setAdG([])}>Her gün</span>
+                  {GUNLER.map(([n, l]) => <span key={n} className={'chip' + (adG.includes(n) ? ' on' : '')} onClick={() => gunToggle(setAdG, n)}>{l}</span>)}
+                </div>
+                <label className="fldlbl">Link (ops.)</label>
+                <input value={adU} onChange={(e) => setAdU(e.target.value)} placeholder="https://…" />
+                <div style={{ marginTop: 6 }}><button className="btn ghost sm" onClick={adimEkle}>+ Adım ekle</button></div>
+              </div>
+            </>)}
+
             <label className="fldlbl">Süre (boş = süregelen)</label>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}><input type="number" min={1} value={kSure} onChange={(e) => setKSure(e.target.value)} placeholder="ör. 21" style={{ width: 90 }} /> gün</div>
             <div className="rowbtns" style={{ marginTop: 12 }}>
