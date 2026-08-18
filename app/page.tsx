@@ -120,13 +120,10 @@ export default function Rite() {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { delay: 180, tolerance: 6 } }));
   const [faydaList, setFaydaList] = useState<any[]>([]);
   const [alanList, setAlanList] = useState<string[]>([]);
-  const [stAd, setStAd] = useState('');
-  const [stFaydalar, setStFaydalar] = useState<string[]>([]);
-  const [stZaman, setStZaman] = useState('gün');
-  const [stSaat, setStSaat] = useState('');
-  const [stAjanda, setStAjanda] = useState(true);
-  const [stMsg, setStMsg] = useState('');
-  const [kAct, setKAct] = useState<any>(null);
+  const [kZaman, setKZaman] = useState('gün');
+  const [kGunler, setKGunler] = useState<number[]>([]);
+  const [kSure, setKSure] = useState('');
+  const [kEditId, setKEditId] = useState<string | null>(null);
   const [kAd, setKAd] = useState('');
   const [kAcik, setKAcik] = useState('');
   const [kFaydalar, setKFaydalar] = useState<string[]>([]);
@@ -268,60 +265,47 @@ export default function Rite() {
     else await supabase.from('dog_ritual_logs').insert({ client_id: client.id, ritual_id: ritId, tarih: day, yapildi: true });
     loadData(client.id);
   }
-  async function ritEkle(ad: string, zaman = 'gün', kaynak = 'Kendi', tip = 'aliskanlik', alan: string | null = null, activityId: string | null = null, faydalar: string[] = [], url: string | null = null) {
+  async function ritEkle(ad: string, zaman = 'gün', kaynak = 'Kendi', tip = 'aliskanlik', alan: string | null = null, activityId: string | null = null, faydalar: string[] = [], url: string | null = null, gunler: number[] | null = null, sureG: number | null = null) {
     if (!client || !ad.trim()) return;
-    await supabase.from('dog_rituals').insert({ client_id: client.id, ad: ad.trim(), zaman, kaynak, tip, alan, activity_id: activityId, faydalar, url, aktif: true, mezun: false, baslangic: today, blok_sira: Date.now() });
+    const g = gunler && gunler.length > 0 && gunler.length < 7 ? gunler : null;
+    let bitis: string | null = null;
+    if (sureG && sureG > 0) { const e = parseD(today); e.setDate(e.getDate() + sureG - 1); bitis = iso(e); }
+    await supabase.from('dog_rituals').insert({ client_id: client.id, ad: ad.trim(), zaman, kaynak, tip, alan, activity_id: activityId, faydalar, url, gunler: g, aktif: true, mezun: false, baslangic: today, bitis, blok_sira: Date.now() });
     setYeniRit('');
     loadData(client.id);
   }
-  function toggleFayda(kod: string) { setStFaydalar((a) => (a.includes(kod) ? a.filter((x) => x !== kod) : [...a, kod])); }
-  async function studioKaydet() {
-    if (!client) return;
-    if (!stAd.trim()) return setStMsg('Aktivite adı gir');
-    const alan0 = stFaydalar.length ? (faydaList.find((f) => f.kod === stFaydalar[0])?.alan || null) : null;
-    const act = await supabase.from('dog_activities').insert({ client_id: client.id, ad: stAd.trim(), grup: alan0, faydalar: stFaydalar, zaman: stZaman, kaynak_etiket: 'Kendi', aktif: true }).select().single();
-    if (act.error) return setStMsg('Hata: ' + act.error.message);
-    if (stAjanda) {
-      const rr = await supabase.from('dog_rituals').insert({ client_id: client.id, ad: stAd.trim(), zaman: stZaman, kaynak: 'Kendi', tip: 'aliskanlik', alan: alan0, faydalar: stFaydalar, activity_id: act.data.id, hatirlatma_saat: stSaat || null, aktif: true, mezun: false, baslangic: today, blok_sira: Date.now() });
-      if (rr.error) return setStMsg('Aktivite kaydedildi; ajanda hatası: ' + rr.error.message);
-    }
-    setStAd(''); setStFaydalar([]); setStZaman('gün'); setStSaat(''); setStMsg(''); setAddSlot(null);
-    loadActivities(); loadData(client.id);
-    setActGroup('__kisisel'); if (stAjanda) setScreen('ajanda');
-  }
-  function openKAct(a: any) { setKAct(a); setKAd(a.ad || ''); setKAcik(a.aciklama || ''); setKFaydalar(a.faydalar || []); setKVids(a.videolar || []); setKVin({ baslik: '', url: '' }); setKMsg(''); }
   function kToggleFayda(kod: string) { setKFaydalar((a) => (a.includes(kod) ? a.filter((x) => x !== kod) : [...a, kod])); }
   function kVidEkle() { if (!kVin.baslik.trim()) return; setKVids((a) => [...a, { baslik: kVin.baslik.trim(), url: kVin.url.trim() }]); setKVin({ baslik: '', url: '' }); }
   const kVidSil = (i: number) => setKVids((a) => a.filter((_, j) => j !== i));
-  async function kSave() {
-    if (!kAct) return;
+  function studioReset() { setKAd(''); setKAcik(''); setKFaydalar([]); setKVids([]); setKVin({ baslik: '', url: '' }); setKZaman('gün'); setKGunler([]); setKSure(''); setKEditId(null); setKMsg(''); }
+  function openStudioNew() { studioReset(); setScreen('havuz'); setActGroup('__own'); }
+  function openStudioEdit(a: any) { setKAd(a.ad || ''); setKAcik(a.aciklama || ''); setKFaydalar(a.faydalar || []); setKVids(a.videolar || []); setKVin({ baslik: '', url: '' }); setKZaman(a.zaman || 'gün'); setKGunler(a.gunler || []); setKSure(a.sure_gun ? String(a.sure_gun) : ''); setKEditId(a.id); setKMsg(''); setScreen('havuz'); setActGroup('__own'); }
+  // Studio TEK çıkış: kişisel şablona kaydet (create/update). Paylaşma/ajandaya ekleme şablondan yapılır.
+  async function studioKaydet() {
+    if (!client) return;
+    if (!kAd.trim()) return setKMsg('Aktivite adı gir');
     const alan0 = kFaydalar.length ? (faydaList.find((f) => f.kod === kFaydalar[0])?.alan || null) : null;
-    const r = await supabase.from('dog_activities').update({ ad: kAd.trim(), aciklama: kAcik || null, faydalar: kFaydalar, videolar: kVids, grup: alan0 }).eq('id', kAct.id);
+    const g = kGunler.length > 0 && kGunler.length < 7 ? kGunler : null;
+    const s = parseInt(kSure) > 0 ? parseInt(kSure) : null;
+    const row: any = { client_id: client.id, ad: kAd.trim(), grup: alan0, faydalar: kFaydalar, aciklama: kAcik || null, videolar: kVids, zaman: kZaman, gunler: g, sure_gun: s, kaynak_etiket: 'Kendi', aktif: true };
+    const r = kEditId ? await supabase.from('dog_activities').update(row).eq('id', kEditId) : await supabase.from('dog_activities').insert(row);
     if (r.error) return setKMsg('Hata: ' + r.error.message);
-    setKMsg('Kaydedildi'); setKAct((p: any) => ({ ...p, ad: kAd.trim(), aciklama: kAcik, faydalar: kFaydalar, videolar: kVids, grup: alan0 })); loadActivities();
+    studioReset(); loadActivities(); setActGroup('__kisisel');
   }
-  async function kEkleAjanda() {
-    if (!kAct || !client) return;
-    const alan0 = kFaydalar.length ? (faydaList.find((f) => f.kod === kFaydalar[0])?.alan || null) : null;
-    await ritEkle(kAd.trim() || kAct.ad, addSlot || kAct.zaman || 'gün', 'Kendi', 'aliskanlik', alan0, kAct.id, kFaydalar, (kVids && kVids[0]?.url) || null);
-    setKAct(null); setAddSlot(null); setScreen('ajanda');
-  }
-  async function kSil() {
-    if (!kAct) return;
-    if (!confirm('Bu kişisel aktivite havuzdan silinsin mi? (Ajandadaki ritüeller kalır)')) return;
-    const r = await supabase.from('dog_activities').delete().eq('id', kAct.id);
-    if (r.error) return setKMsg('Hata: ' + r.error.message);
-    setKAct(null); loadActivities();
-  }
-  async function kPaylas() {
-    if (!kAct) return;
+  async function paylasAktivite(act: any) {
     const kod = kShareTo.trim().toUpperCase();
     if (!kod) return setKMsg('Alıcının paylaşım kodunu gir');
     const rc = await supabase.from('dog_clients').select('id').eq('share_code', kod).limit(1);
     if (rc.error || !rc.data || !rc.data.length) return setKMsg('Kod bulunamadı: ' + kod);
-    const ins = await supabase.from('dog_inbox').insert({ client_id: rc.data[0].id, tur: 'aktivite', baslik: kAd.trim() || kAct.ad, payload: { ad: kAd.trim() || kAct.ad, faydalar: kFaydalar, aciklama: kAcik || null, videolar: kVids }, from_code: client?.share_code || null, durum: 'yeni' });
+    const ins = await supabase.from('dog_inbox').insert({ client_id: rc.data[0].id, tur: 'aktivite', baslik: act.ad, payload: { ad: act.ad, faydalar: act.faydalar || [], aciklama: act.aciklama || null, videolar: act.videolar || [], zaman: act.zaman || 'gün', gunler: act.gunler || null, sure_gun: act.sure_gun || null }, from_code: client?.share_code || null, durum: 'yeni' });
     if (ins.error) return setKMsg('Hata: ' + ins.error.message);
     setKShareTo(''); setKMsg('Gönderildi → ' + kod);
+  }
+  async function silAktivite(act: any) {
+    if (!confirm('Bu kişisel aktivite havuzdan silinsin mi? (Ajandadaki ritüeller kalır)')) return;
+    const r = await supabase.from('dog_activities').delete().eq('id', act.id);
+    if (r.error) return alert('Hata: ' + r.error.message);
+    setDetay(null); loadActivities();
   }
   function sureGun(rt: any): number { if (!rt.bitis) return 0; const b = parseD(rt.baslangic || today); const e = parseD(rt.bitis); return Math.round((e.getTime() - b.getTime()) / 86400000) + 1; }
   const patchDetay = (patch: any) => setDetay((d: any) => (d ? { ...d, obj: { ...d.obj, ...patch } } : d));
@@ -489,9 +473,18 @@ export default function Rite() {
     if (!client) return;
     const p = item.payload || {};
     const alan0 = (p.faydalar && p.faydalar.length) ? (faydaList.find((f) => f.kod === p.faydalar[0])?.alan || null) : null;
-    await supabase.from('dog_activities').insert({ client_id: client.id, ad: p.ad, grup: alan0, faydalar: p.faydalar || [], aciklama: p.aciklama || null, videolar: p.videolar || null, kaynak_etiket: 'Paylaşılan', aktif: true });
+    await supabase.from('dog_activities').insert({ client_id: client.id, ad: p.ad, grup: alan0, faydalar: p.faydalar || [], aciklama: p.aciklama || null, videolar: p.videolar || null, zaman: p.zaman || 'gün', gunler: p.gunler || null, sure_gun: p.sure_gun || null, kaynak_etiket: 'Paylaşılan', aktif: true });
     await supabase.from('dog_inbox').update({ durum: 'alindi' }).eq('id', item.id);
     loadActivities(); loadInbox(client.id);
+  }
+  // Paylaşılan aktiviteyi doğrudan ajandaya al (gönderenin varsayılan zamanlamasıyla).
+  async function inboxAktiviteAjanda(item: any) {
+    if (!client) return;
+    const p = item.payload || {};
+    const alan0 = (p.faydalar && p.faydalar.length) ? (faydaList.find((f) => f.kod === p.faydalar[0])?.alan || null) : null;
+    await ritEkle(p.ad || item.baslik, p.zaman || 'gün', 'Paylaşılan', 'aliskanlik', alan0, null, p.faydalar || [], (p.videolar && p.videolar[0]?.url) || null, p.gunler || null, p.sure_gun || null);
+    await supabase.from('dog_inbox').update({ durum: 'alindi' }).eq('id', item.id);
+    loadInbox(client.id); setScreen('ajanda');
   }
 
   async function enableNotifs() {
@@ -729,36 +722,56 @@ export default function Rite() {
         {/* ---------- HAVUZ ---------- */}
         {screen === 'havuz' && (
           <div>
-            <h2>Aktivite Havuzu</h2>
-            <p className="sub">Anlamlı gruplar; her aktivitenin detay + kaynak sayfası var. Beğendiğini ritüellerine ekle.</p>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+              <h2 style={{ margin: 0 }}>Aktivite Havuzu</h2>
+              <button className="btn sm" onClick={openStudioNew}>＋ Tasarla</button>
+            </div>
+            <p className="sub">Kendi aktiviteni <b>＋ Tasarla</b> ile oluştur ya da hazır gruplardan seç. Her işin başı Studio.</p>
             {addSlot && <div className="banner">➕ <div><b>{TODS.find((t) => t[0] === addSlot)?.[1]}</b>&apos;a ekleniyor — bir aktivite seç.</div><button className="bb" onClick={() => setAddSlot(null)}>İptal</button></div>}
             <div className="tabs">
               <div className={'tab' + (actGroup === '__kisisel' ? ' on' : '')} onClick={() => setActGroup('__kisisel')}>Kişisel</div>
               {actGroups.map((g) => <div key={g} className={'tab' + (actGroup === g ? ' on' : '')} onClick={() => setActGroup(g)}>{g}</div>)}
-              <div className={'tab' + (actGroup === '__own' ? ' on' : '')} onClick={() => setActGroup('__own')}>＋ Tasarla</div>
             </div>
             {actGroup === '__own' ? (
               <div className="card">
-                <h3>Aktivite tasarla — Rite Studio</h3>
+                <h3>{kEditId ? 'Aktiviteyi düzenle' : 'Aktivite tasarla'} — Rite Studio</h3>
+                <p className="note" style={{ marginTop: 0 }}>Kendin için ya da başkası için tasarla. Kaydedince <b>Kişisel şablonuna</b> düşer; oradan ajandana ekler veya paylaşırsın.</p>
                 <label>Aktivite adı</label>
-                <input value={stAd} onChange={(e) => setStAd(e.target.value)} placeholder="ör. Badem'le sabah parkı" />
+                <input value={kAd} onChange={(e) => setKAd(e.target.value)} placeholder="ör. Badem'le sabah parkı" />
                 <label className="fldlbl">Kapsadığı faydalar (sırayla seç = öncelik)</label>
-                <div>{faydaList.map((f) => { const idx = stFaydalar.indexOf(f.kod); return (
-                  <span key={f.kod} className={'chip' + (idx >= 0 ? ' on' : '')} onClick={() => toggleFayda(f.kod)}>{idx >= 0 ? (idx + 1) + '. ' : ''}{f.ad}</span>
+                <div>{faydaList.map((f) => { const idx = kFaydalar.indexOf(f.kod); return (
+                  <span key={f.kod} className={'chip' + (idx >= 0 ? ' on' : '')} onClick={() => kToggleFayda(f.kod)}>{idx >= 0 ? (idx + 1) + '. ' : ''}{f.ad}</span>
                 ); })}</div>
-                {stFaydalar.length > 0 && <div className="note" style={{ marginTop: 6 }}>Kapsanan alanlar: <b>{Array.from(new Set(stFaydalar.map((k) => faydaMap[k]?.alan).filter(Boolean))).join(' · ')}</b></div>}
-                <div className="grid" style={{ marginTop: 8 }}>
-                  <div><label>Zaman dilimi</label><select value={stZaman} onChange={(e) => setStZaman(e.target.value)}><option value="sabah">Sabah</option><option value="gün">Gün</option><option value="akşam">Akşam</option></select></div>
-                  <div><label>Hatırlatma (ops.)</label><input type="time" value={stSaat} onChange={(e) => setStSaat(e.target.value)} /></div>
+                {kFaydalar.length > 0 && <div className="note" style={{ marginTop: 6 }}>Kapsanan alanlar: <b>{Array.from(new Set(kFaydalar.map((k) => faydaMap[k]?.alan).filter(Boolean))).join(' · ')}</b></div>}
+                <label className="fldlbl">Açıklama / nasıl (ops.)</label>
+                <textarea value={kAcik} onChange={(e) => setKAcik(e.target.value)} placeholder="Nasıl yapılır, ipuçları…" />
+                <label className="fldlbl">Videolar (ops.)</label>
+                {kVids.map((v: any, i: number) => (
+                  <div key={i} className="warnbox" style={{ background: '#f4efe6', borderColor: '#e7e0d2', color: '#5c554a', margin: '4px 0' }}><b>{v.baslik}</b> <span className="note" style={{ margin: 0 }}>{v.url}</span><button className="rmx" style={{ float: 'right' }} onClick={() => kVidSil(i)}>✕</button></div>
+                ))}
+                <div className="grid" style={{ marginTop: 4 }}>
+                  <div><label>Video başlık</label><input value={kVin.baslik} onChange={(e) => setKVin((s) => ({ ...s, baslik: e.target.value }))} /></div>
+                  <div><label>URL</label><input value={kVin.url} onChange={(e) => setKVin((s) => ({ ...s, url: e.target.value }))} placeholder="https://youtube.com/…" /></div>
                 </div>
-                <label className="fldlbl" style={{ display: 'flex', alignItems: 'center', gap: 8 }}><input type="checkbox" style={{ width: 'auto' }} checked={stAjanda} onChange={(e) => setStAjanda(e.target.checked)} /> Bugünden ajandama da ekle</label>
-                <div style={{ marginTop: 10 }}><button className="btn" onClick={studioKaydet}>Kaydet (havuza)</button></div>
-                <div className="msg">{stMsg}</div>
-                <p className="note" style={{ marginTop: 8 }}>Aktiviten havuzdaki <b>Kişisel</b>&apos;e kalıcı düşer; kartından sonradan açıklama/video ekleyip zenginleştirebilirsin.</p>
+                <div style={{ marginTop: 6 }}><button className="btn ghost sm" onClick={kVidEkle}>+ Video ekle</button></div>
+                <label className="fldlbl">Varsayılan zaman dilimi</label>
+                <div>{TODS.map(([z, l]) => <span key={z} className={'chip' + (kZaman === z ? ' on' : '')} onClick={() => setKZaman(z)}>{l}</span>)}</div>
+                <label className="fldlbl">Varsayılan günler</label>
+                <div>
+                  <span className={'chip' + (kGunler.length === 0 ? ' on' : '')} onClick={() => setKGunler([])}>Her gün</span>
+                  {GUNLER.map(([n, l]) => <span key={n} className={'chip' + (kGunler.includes(n) ? ' on' : '')} onClick={() => setKGunler((cur) => cur.includes(n) ? cur.filter((x) => x !== n) : [...cur, n])}>{l}</span>)}
+                </div>
+                <label className="fldlbl">Süre (boş = süregelen)</label>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}><input type="number" min={1} value={kSure} onChange={(e) => setKSure(e.target.value)} placeholder="ör. 21" style={{ width: 90 }} /> gün</div>
+                <div className="rowbtns" style={{ marginTop: 12 }}>
+                  <button className="btn" onClick={studioKaydet}>{kEditId ? 'Kaydet' : 'Kişisel şablona kaydet'}</button>
+                  {kEditId && <button className="btn ghost sm" onClick={() => { studioReset(); setActGroup('__kisisel'); }}>Vazgeç</button>}
+                </div>
+                <div className="msg">{kMsg}</div>
               </div>
             ) : actGroup === '__kisisel' ? (
               <div className="card">
-                {personalActs.length === 0 ? <div className="note">Henüz kişisel aktivite yok. <button className="linkbtn" onClick={() => setActGroup('__own')}>＋ Tasarla</button> ile oluştur.</div> : personalActs.map((a) => (
+                {personalActs.length === 0 ? <div className="note">Henüz kişisel aktivite yok. <button className="linkbtn" onClick={openStudioNew}>＋ Tasarla</button> ile oluştur.</div> : personalActs.map((a) => (
                   <div key={a.id} className="actcard" onClick={() => openDetay(a, 'aktivite')}>
                     <div style={{ flex: 1 }}><div className="n">{a.ad}</div><div className="o">{Array.from(new Set((a.faydalar || []).map((k: string) => faydaMap[k]?.alan).filter(Boolean))).join(' · ')}</div></div>
                     <span className="go">›</span>
@@ -916,8 +929,11 @@ export default function Rite() {
                     {v.payload?.aciklama && <div className="note" style={{ marginTop: 4 }}>{v.payload.aciklama}</div>}
                     <div className="rowbtns">
                       {v.durum === 'alindi'
-                        ? <span className="note" style={{ margin: 0, color: 'var(--green)', fontWeight: 700 }}>✓ Havuzuna eklendi</span>
-                        : <button className="btn ghost sm" onClick={() => inboxAktiviteEkle(v)}>Havuzuma ekle</button>}
+                        ? <span className="note" style={{ margin: 0, color: 'var(--green)', fontWeight: 700 }}>✓ Alındı</span>
+                        : <>
+                            <button className="btn ghost sm" onClick={() => inboxAktiviteAjanda(v)}>Ajandama ekle</button>
+                            <button className="btn ghost sm" onClick={() => inboxAktiviteEkle(v)}>Havuzuma ekle</button>
+                          </>}
                       <button className="btn ghost sm" style={{ color: 'var(--red)', borderColor: '#e6c4bd' }} onClick={() => inboxSil(v.id)}>Sil</button>
                     </div>
                   </>
@@ -1060,9 +1076,20 @@ export default function Rite() {
               <Acc title="Faydalar" summary={fydNames.slice(0, 3).join(' · ')}><div className="v">{fydNames.join(' · ')}</div></Acc>
             )}
 
+            {!isRit && personal && (
+              <div className="kv"><div className="k">Gönder</div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input value={kShareTo} onChange={(e) => setKShareTo(e.target.value)} placeholder="RT-XXXXX" autoCapitalize="characters" />
+                  <button className="btn sm" style={{ whiteSpace: 'nowrap' }} onClick={() => paylasAktivite(o)}>Gönder</button>
+                </div>
+                {kMsg && <div className="msg">{kMsg}</div>}
+              </div>
+            )}
+
             <div className="rowbtns" style={{ marginTop: 14 }}>
-              {!isRit && <button className="btn" onClick={() => { ritEkle(o.ad, addSlot || o.zaman || 'gün', o.kaynak_etiket || (o.client_id ? 'Kendi' : 'Rite'), 'aliskanlik', o.grup || (o.faydalar?.length ? faydaMap[o.faydalar[0]]?.alan : null) || null, o.id || null, o.faydalar || [], (o.videolar && o.videolar[0]?.url) || null); setDetay(null); setAddSlot(null); setScreen('ajanda'); }}>Ajandama ekle{addSlot ? ' (' + (TODS.find((t) => t[0] === addSlot)?.[1]) + ')' : ''}</button>}
-              {personal && <button className="btn ghost sm" onClick={() => { const a = act; setDetay(null); openKAct(a); }}>✎ Studio&apos;da düzenle</button>}
+              {!isRit && <button className="btn" onClick={() => { ritEkle(o.ad, addSlot || o.zaman || 'gün', o.kaynak_etiket || (o.client_id ? 'Kendi' : 'Rite'), 'aliskanlik', o.grup || (o.faydalar?.length ? faydaMap[o.faydalar[0]]?.alan : null) || null, o.id || null, o.faydalar || [], (o.videolar && o.videolar[0]?.url) || null, o.gunler || null, o.sure_gun || null); setDetay(null); setAddSlot(null); setScreen('ajanda'); }}>Ajandama ekle{addSlot ? ' (' + (TODS.find((t) => t[0] === addSlot)?.[1]) + ')' : ''}</button>}
+              {personal && <button className="btn ghost sm" onClick={() => openStudioEdit(act)}>✎ Studio&apos;da düzenle</button>}
+              {!isRit && personal && <button className="btn ghost sm" style={{ color: 'var(--red)', borderColor: '#e6c4bd' }} onClick={() => silAktivite(o)}>Sil</button>}
               {isRit && <button className="btn sm ghost" onClick={() => { const id = o.id; setDetay(null); ritSil(id); }}>Ajandadan kaldır</button>}
               {isRit && !o.mezun && !o.bitis && <button className="btn sm ghost" onClick={() => { const id = o.id; setDetay(null); emekli(id); }}>Emekli et</button>}
             </div>
@@ -1071,43 +1098,6 @@ export default function Rite() {
         );
       })()}
 
-      {kAct && (
-        <div className="modal" onClick={() => setKAct(null)}>
-          <div className="sheet" onClick={(e) => e.stopPropagation()}>
-            <button className="x" onClick={() => setKAct(null)}>×</button>
-            <h2>Kişisel aktivite</h2>
-            <label>Ad</label>
-            <input value={kAd} onChange={(e) => setKAd(e.target.value)} />
-            <label className="fldlbl">Faydalar (sırayla = öncelik)</label>
-            <div>{faydaList.map((f) => { const idx = kFaydalar.indexOf(f.kod); return (
-              <span key={f.kod} className={'chip' + (idx >= 0 ? ' on' : '')} onClick={() => kToggleFayda(f.kod)}>{idx >= 0 ? (idx + 1) + '. ' : ''}{f.ad}</span>
-            ); })}</div>
-            {kFaydalar.length > 0 && <div className="note" style={{ marginTop: 6 }}>Kapsanan alanlar: <b>{Array.from(new Set(kFaydalar.map((k) => faydaMap[k]?.alan).filter(Boolean))).join(' · ')}</b></div>}
-            <label className="fldlbl">Açıklama / nasıl (kendi notların)</label>
-            <textarea value={kAcik} onChange={(e) => setKAcik(e.target.value)} />
-            <label className="fldlbl">Videolar</label>
-            {kVids.map((v: any, i: number) => (
-              <div key={i} className="warnbox" style={{ background: '#f4efe6', borderColor: '#e7e0d2', color: '#5c554a', margin: '4px 0' }}><b>{v.baslik}</b> <span className="note" style={{ margin: 0 }}>{v.url}</span><button className="rmx" style={{ float: 'right' }} onClick={() => kVidSil(i)}>✕</button></div>
-            ))}
-            <div className="grid" style={{ marginTop: 4 }}>
-              <div><label>Video başlık</label><input value={kVin.baslik} onChange={(e) => setKVin((s) => ({ ...s, baslik: e.target.value }))} /></div>
-              <div><label>URL</label><input value={kVin.url} onChange={(e) => setKVin((s) => ({ ...s, url: e.target.value }))} placeholder="https://youtube.com/…" /></div>
-            </div>
-            <div style={{ marginTop: 6 }}><button className="btn ghost sm" onClick={kVidEkle}>+ Video ekle</button></div>
-            <label className="fldlbl">Başka kullanıcıya gönder (paylaşım kodu)</label>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <input value={kShareTo} onChange={(e) => setKShareTo(e.target.value)} placeholder="RT-XXXXX" autoCapitalize="characters" />
-              <button className="btn sm" style={{ whiteSpace: 'nowrap' }} onClick={kPaylas}>Gönder</button>
-            </div>
-            <div className="rowbtns" style={{ marginTop: 14 }}>
-              <button className="btn" onClick={kSave}>Kaydet</button>
-              <button className="btn ghost sm" onClick={kEkleAjanda}>Ajandama ekle</button>
-              <button className="btn ghost sm" style={{ color: 'var(--red)', borderColor: '#e6c4bd' }} onClick={kSil}>Sil</button>
-            </div>
-            <div className="msg">{kMsg}</div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
