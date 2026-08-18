@@ -52,6 +52,28 @@ function kisaTarih(d?: string | null): string {
   const p = d.split('-');
   return p.length === 3 ? p[2] + '.' + p[1] : d;
 }
+// Program zaman çizelgesi (mini-Gantt): her adım ofset+süreye göre çubuk.
+function ProgramTimeline({ adimlar, sure }: { adimlar: any[]; sure?: number | null }) {
+  if (!adimlar || adimlar.length === 0) return null;
+  const spans = adimlar.map((st) => { const o = st.baslaGun || 0; const d = st.sureGun && st.sureGun > 0 ? st.sureGun : (sure || 0); return { o, d, end: o + (d || 0) }; });
+  const total = Math.max(1, sure || 0, ...spans.map((s) => s.end), ...spans.map((s) => s.o + 1));
+  return (
+    <div className="tl">
+      {adimlar.map((st, i) => {
+        const s = spans[i];
+        const left = (s.o / total) * 100;
+        const w = s.d ? Math.max(4, (s.d / total) * 100) : (100 - left);
+        return (
+          <div key={i} className="tlrow">
+            <div className="tllbl">{i + 1}. {st.ad}</div>
+            <div className="tltrack"><div className={'tlbar' + (s.d ? '' : ' open')} style={{ left: left + '%', width: w + '%' }} title={'gün ' + s.o + (s.d ? '–' + s.end : '+')}></div></div>
+          </div>
+        );
+      })}
+      <div className="tlaxis"><span>gün 0</span><span>{total}. gün</span></div>
+    </div>
+  );
+}
 // Açılır-kapanır bölüm: kapalıyken özet, açıkken içerik.
 function Acc({ title, summary, defaultOpen, children }: { title: string; summary?: string; defaultOpen?: boolean; children: ReactNode }) {
   const [open, setOpen] = useState(!!defaultOpen);
@@ -333,6 +355,7 @@ export default function Rite() {
     return [b, s].filter(Boolean).join(' · ');
   }
   const adimSil = (i: number) => setStAdimlar((a) => a.filter((_, j) => j !== i));
+  const adimMove = (i: number, dir: number) => setStAdimlar((a) => { const j = i + dir; if (j < 0 || j >= a.length) return a; const b = [...a]; [b[i], b[j]] = [b[j], b[i]]; return b; });
   // Studio TEK çıkış: kişisel şablona kaydet (create/update). Ajandaya ekleme/başlatma ve paylaşma şablondan yapılır.
   async function studioKaydet() {
     if (!client) return;
@@ -1109,8 +1132,14 @@ export default function Rite() {
               <Acc title="Faydalar" summary={fydNames.slice(0, 3).join(' · ')}><div className="v">{fydNames.join(' · ')}</div></Acc>
             )}
 
+            {isProg && (o.adimlar || []).length > 0 && (
+              <Acc title="Zaman çizelgesi" summary={(o.adimlar || []).length + ' adım'} defaultOpen>
+                <ProgramTimeline adimlar={o.adimlar || []} sure={o.sure_gun || null} />
+              </Acc>
+            )}
+
             {isProg && (
-              <Acc title="Adımlar" summary={(o.adimlar || []).length + ' adım' + (o.sure_gun ? ' · ' + o.sure_gun + ' gün' : '')} defaultOpen>
+              <Acc title="Adımlar" summary={(o.adimlar || []).length + ' adım' + (o.sure_gun ? ' · ' + o.sure_gun + ' gün' : '')}>
                 {(o.adimlar || []).map((st: any, i: number) => (
                   <div key={i} className="kv"><div className="k">{i + 1}</div><div className="v"><b>{st.ad}</b> <span className="note" style={{ margin: 0 }}>{(st.zamanlar || ['gün']).map((z: string) => TODS.find((t) => t[0] === z)?.[1]).join('+')} · {gunlerLabel(st.gunler)}{adimZamanOzet(st) ? ' · ' + adimZamanOzet(st) : ''}{st.url ? ' · 🔗' : ''}</span></div></div>
                 ))}
@@ -1182,10 +1211,15 @@ export default function Rite() {
               <label className="fldlbl">Adımlar {stAdimlar.length > 0 ? '(' + stAdimlar.length + ')' : ''}</label>
               {stAdimlar.map((st: any, i: number) => (
                 <div key={i} className="warnbox" style={{ background: '#eef1f7', borderColor: '#d8dfea', color: '#3a4256', margin: '4px 0' }}>
+                  <span style={{ float: 'right', display: 'inline-flex', gap: 4 }}>
+                    <button className="rmx" onClick={() => adimMove(i, -1)}>↑</button>
+                    <button className="rmx" onClick={() => adimMove(i, 1)}>↓</button>
+                    <button className="rmx" onClick={() => adimSil(i)}>✕</button>
+                  </span>
                   <b>{i + 1}. {st.ad}</b> <span className="note" style={{ margin: 0 }}>{(st.zamanlar || ['gün']).map((z: string) => TODS.find((t) => t[0] === z)?.[1]).join('+')} · {gunlerLabel(st.gunler)}{adimZamanOzet(st) ? ' · ' + adimZamanOzet(st) : ''}{st.url ? ' · 🔗' : ''}</span>
-                  <button className="rmx" style={{ float: 'right' }} onClick={() => adimSil(i)}>✕</button>
                 </div>
               ))}
+              {stAdimlar.length > 0 && <div style={{ marginTop: 6 }}><ProgramTimeline adimlar={stAdimlar} sure={parseInt(kSure) || null} /></div>}
               <div className="card" style={{ background: '#faf7f1', padding: 10, marginTop: 4 }}>
                 <label>Adım adı</label>
                 <input value={adAd} onChange={(e) => setAdAd(e.target.value)} placeholder="ör. Aromaterapi kürü (tok karna)" />
