@@ -52,6 +52,19 @@ function kisaTarih(d?: string | null): string {
   const p = d.split('-');
   return p.length === 3 ? p[2] + '.' + p[1] : d;
 }
+// Açılır-kapanır bölüm: kapalıyken özet, açıkken içerik.
+function Acc({ title, summary, defaultOpen, children }: { title: string; summary?: string; defaultOpen?: boolean; children: ReactNode }) {
+  const [open, setOpen] = useState(!!defaultOpen);
+  return (
+    <div className="acc">
+      <div className="acchd" onClick={() => setOpen((o) => !o)}>
+        <div className="acct"><b>{title}</b>{!open && summary ? <span className="accsum"> {summary}</span> : null}</div>
+        <span className="accchev">{open ? '▾' : '▸'}</span>
+      </div>
+      {open && <div className="accbody">{children}</div>}
+    </div>
+  );
+}
 const WD = ['Pz', 'Pt', 'Sa', 'Ça', 'Pe', 'Cu', 'Ct'];
 const WDFULL = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
 const MONTHS = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
@@ -80,7 +93,6 @@ export default function Rite() {
   const [selDate, setSelDate] = useState('');
   const [activities, setActivities] = useState<any[]>([]);
   const [actGroup, setActGroup] = useState('');
-  const [actModal, setActModal] = useState<any>(null);
   const [rituals, setRituals] = useState<any[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
   const [ep, setEp] = useState<any>(null);
@@ -99,7 +111,8 @@ export default function Rite() {
   const [linkMode, setLinkMode] = useState(false);
   const [linkName, setLinkName] = useState('');
   const [linkIds, setLinkIds] = useState<string[]>([]);
-  const [ritModal, setRitModal] = useState<any>(null);
+  const [detay, setDetay] = useState<any>(null);
+  const [detayAct, setDetayAct] = useState<any>(null);
   const [remInput, setRemInput] = useState('');
   const [urlInput, setUrlInput] = useState('');
   const [adInput, setAdInput] = useState('');
@@ -311,21 +324,32 @@ export default function Rite() {
     setKShareTo(''); setKMsg('Gönderildi → ' + kod);
   }
   function sureGun(rt: any): number { if (!rt.bitis) return 0; const b = parseD(rt.baslangic || today); const e = parseD(rt.bitis); return Math.round((e.getTime() - b.getTime()) / 86400000) + 1; }
-  function openRit(rt: any) { setRitModal(rt); setRemInput(rt.hatirlatma_saat || ''); setUrlInput(rt.url || ''); setAdInput(rt.ad || ''); const n = sureGun(rt); setSureInput(n > 0 ? String(n) : '21'); }
+  const patchDetay = (patch: any) => setDetay((d: any) => (d ? { ...d, obj: { ...d.obj, ...patch } } : d));
+  // Tek detay kartı: hem ritüel (Ajanda) hem aktivite (Havuz) buradan açılır.
+  async function openDetay(obj: any, tur: string) {
+    setDetay({ obj, tur });
+    if (tur === 'ritual') {
+      setAdInput(obj.ad || ''); setRemInput(obj.hatirlatma_saat || ''); setUrlInput(obj.url || '');
+      const n = sureGun(obj); setSureInput(n > 0 ? String(n) : '21');
+      if (obj.activity_id) { const a = await supabase.from('dog_activities').select('*').eq('id', obj.activity_id).single(); setDetayAct(a.data || null); }
+      else setDetayAct(null);
+    } else { setDetayAct(obj); }
+  }
+  function openRit(rt: any) { openDetay(rt, 'ritual'); }
   async function setRitUrl(id: string, url: string) {
     if (!client) return;
     const u = url.trim() || null;
     await supabase.from('dog_rituals').update({ url: u }).eq('id', id);
-    setRitModal((p: any) => (p ? { ...p, url: u } : p));
+    patchDetay({ url: u });
     loadData(client.id);
   }
   async function setRitAd(id: string, ad: string) {
     if (!client || !ad.trim()) return;
     await supabase.from('dog_rituals').update({ ad: ad.trim() }).eq('id', id);
-    setRitModal((p: any) => (p ? { ...p, ad: ad.trim() } : p));
+    patchDetay({ ad: ad.trim() });
     loadData(client.id);
   }
-  // sureGunSay: null = süregelen (bitiş kaldır); >0 = başlangıçtan itibaren N gün
+  // gun: null = süregelen (bitiş kaldır); >0 = başlangıçtan itibaren N gün
   async function setRitSure(id: string, gun: number | null) {
     if (!client) return;
     const rt = rituals.find((r) => r.id === id);
@@ -333,14 +357,14 @@ export default function Rite() {
     if (!gun) patch = { bitis: null };
     else { const bas = (rt && rt.baslangic && rt.baslangic >= today) ? rt.baslangic : today; const e = parseD(bas); e.setDate(e.getDate() + gun - 1); patch = { baslangic: bas, bitis: iso(e) }; }
     await supabase.from('dog_rituals').update(patch).eq('id', id);
-    setRitModal((p: any) => (p ? { ...p, ...patch } : p));
+    patchDetay(patch);
     loadData(client.id);
   }
   async function setRitGunler(id: string, g: number[]) {
     if (!client) return;
     const arr = g.length === 0 || g.length === 7 ? null : g;
     await supabase.from('dog_rituals').update({ gunler: arr }).eq('id', id);
-    setRitModal((p: any) => (p ? { ...p, gunler: arr } : p));
+    patchDetay({ gunler: arr });
     loadData(client.id);
   }
   async function setRitZaman(id: string, z: string) {
@@ -348,26 +372,15 @@ export default function Rite() {
     const rt = rituals.find((r) => r.id === id);
     if (rt?.rutin) await supabase.from('dog_rituals').update({ zaman: z }).eq('rutin', rt.rutin); // zincirse tüm üyeler
     else await supabase.from('dog_rituals').update({ zaman: z }).eq('id', id);
-    setRitModal((p: any) => (p ? { ...p, zaman: z } : p));
-    loadData(client.id);
-  }
-  async function setRitTip(id: string, t: string) {
-    if (!client) return;
-    await supabase.from('dog_rituals').update({ tip: t }).eq('id', id);
-    setRitModal((p: any) => (p ? { ...p, tip: t } : p));
+    patchDetay({ zaman: z });
     loadData(client.id);
   }
   async function setRitReminder(id: string, saat: string) {
     if (!client) return;
     // Saati değiştirince "bugün gönderildi" işaretini sıfırla → yeni saat aynı gün de tetiklenir
     await supabase.from('dog_rituals').update({ hatirlatma_saat: saat || null, son_bildirim: null }).eq('id', id);
-    setRitModal((p: any) => (p ? { ...p, hatirlatma_saat: saat || null, son_bildirim: null } : p));
+    patchDetay({ hatirlatma_saat: saat || null, son_bildirim: null });
     loadData(client.id);
-  }
-  async function openKB(rt: any) {
-    if (!rt.activity_id) return;
-    const a = await supabase.from('dog_activities').select('*').eq('id', rt.activity_id).single();
-    if (a.data) { setRitModal(null); setActModal(a.data); }
   }
   async function ritSil(id: string) {
     if (!client) return;
@@ -746,7 +759,7 @@ export default function Rite() {
             ) : actGroup === '__kisisel' ? (
               <div className="card">
                 {personalActs.length === 0 ? <div className="note">Henüz kişisel aktivite yok. <button className="linkbtn" onClick={() => setActGroup('__own')}>＋ Tasarla</button> ile oluştur.</div> : personalActs.map((a) => (
-                  <div key={a.id} className="actcard" onClick={() => openKAct(a)}>
+                  <div key={a.id} className="actcard" onClick={() => openDetay(a, 'aktivite')}>
                     <div style={{ flex: 1 }}><div className="n">{a.ad}</div><div className="o">{Array.from(new Set((a.faydalar || []).map((k: string) => faydaMap[k]?.alan).filter(Boolean))).join(' · ')}</div></div>
                     <span className="go">›</span>
                   </div>
@@ -755,7 +768,7 @@ export default function Rite() {
             ) : (
               <div className="card">
                 {curatedActs.filter((a) => a.grup === actGroup).map((a) => (
-                  <div key={a.id} className="actcard" onClick={() => setActModal(a)}>
+                  <div key={a.id} className="actcard" onClick={() => openDetay(a, 'aktivite')}>
                     <div style={{ flex: 1 }}><div className="n">{a.ad}</div><div className="o">{a.ozet || ''}</div></div>
                     <span className="go">›</span>
                   </div>
@@ -966,90 +979,97 @@ export default function Rite() {
         ))}
       </div>
 
-      {actModal && (
-        <div className="modal" onClick={() => setActModal(null)}>
+      {detay && (() => {
+        const isRit = detay.tur === 'ritual';
+        const o = detay.obj;
+        const act = detayAct;
+        const areas = ritAreas(o);
+        const fydNames = ((isRit ? o.faydalar : (act?.faydalar || o.faydalar)) || []).map((k: string) => faydaMap[k]?.ad || k);
+        const hasBilgi = act && (act.ozet || act.aciklama || act.nasil || (act.videolar || []).length || (act.alternatifler || []).length || act.dikkat || act.kaynak);
+        const personal = act && act.client_id;
+        const schedSummary = [gunlerLabel(o.gunler), o.bitis ? 'bitiş ' + kisaTarih(o.bitis) : 'süregelen', TODS.find((t) => t[0] === (o.zaman || 'gün'))?.[1], o.hatirlatma_saat ? '🔔 ' + o.hatirlatma_saat : ''].filter(Boolean).join(' · ');
+        return (
+        <div className="modal" onClick={() => setDetay(null)}>
           <div className="sheet" onClick={(e) => e.stopPropagation()}>
-            <button className="x" onClick={() => setActModal(null)}>×</button>
-            <h2>{actModal.ad}</h2>
-            <div className="m">{actModal.grup}{actModal.kanit_duzeyi && <span className="evi">kanıt: {actModal.kanit_duzeyi}</span>}</div>
-            {actModal.ozet && <p style={{ fontSize: 13, marginTop: 8, color: '#3a362e', lineHeight: 1.5 }}>{actModal.ozet}</p>}
-            {actModal.aciklama && <div className="kv"><div className="k">Nedir / neden</div><div className="v">{actModal.aciklama}</div></div>}
-            {actModal.nasil && <div className="kv"><div className="k">Nasıl yapılır</div><div className="v">{actModal.nasil}</div></div>}
-            {(actModal.videolar || []).length > 0 && <div className="kv"><div className="k">Videolar</div>{actModal.videolar.map((v: any, i: number) => <a key={i} className="vidlink" href={v.url} target="_blank" rel="noreferrer">▶ {v.baslik}</a>)}</div>}
-            {(actModal.alternatifler || []).length > 0 && <div className="kv"><div className="k">Alternatifler</div><div className="v">{actModal.alternatifler.join(' · ')}</div></div>}
-            {actModal.dikkat && <div className="kv"><div className="k">Dikkat edilecekler</div><div className="dikkat">⚠ {actModal.dikkat}</div></div>}
-            {actModal.kaynak && <div className="kv"><div className="k">Kaynak</div><div className="v">{actModal.kaynak}</div></div>}
-            <div style={{ marginTop: 16 }}><button className="btn" onClick={() => { ritEkle(actModal.ad, addSlot || actModal.zaman || 'gün', actModal.kaynak_etiket || 'Rite', 'aliskanlik', actModal.grup || (actModal.faydalar?.length ? faydaMap[actModal.faydalar[0]]?.alan : null) || null, actModal.id || null, actModal.faydalar || [], (actModal.videolar && actModal.videolar[0]?.url) || null); setActModal(null); setAddSlot(null); setScreen('ajanda'); }}>Ritüellerime ekle{addSlot ? ' (' + (TODS.find((t) => t[0] === addSlot)?.[1]) + ')' : ''}</button></div>
-          </div>
-        </div>
-      )}
-
-      {ritModal && (
-        <div className="modal" onClick={() => setRitModal(null)}>
-          <div className="sheet" onClick={(e) => e.stopPropagation()}>
-            <button className="x" onClick={() => setRitModal(null)}>×</button>
-            <div className="daterow" style={{ marginTop: 2, marginBottom: 4 }}>
-              <input value={adInput} onChange={(e) => setAdInput(e.target.value)} style={{ flex: 1, fontWeight: 700, fontSize: 16 }} />
-              <button className="btn ghost sm" disabled={!adInput.trim() || adInput.trim() === (ritModal.ad || '')} onClick={() => setRitAd(ritModal.id, adInput)}>Kaydet</button>
-            </div>
-            <div className="m">{ritModal.kaynak || ''}</div>
-            {ritAreas(ritModal).length > 0 && <div className="kv"><div className="k">Yaşam alanları</div><div>{ritAreas(ritModal).map((a) => <span key={a} className="tagp p-alan">{a}</span>)}</div></div>}
-            {(ritModal.faydalar || []).length > 0 && <div className="kv"><div className="k">Faydalar</div><div className="v">{ritModal.faydalar.map((k: string) => faydaMap[k]?.ad || k).join(' · ')}</div></div>}
-
-            <div className="kv"><div className="k">Bağlantı</div>
-              <div className="daterow">
-                <input value={urlInput} onChange={(e) => setUrlInput(e.target.value)} placeholder="https://youtube.com/…" style={{ flex: 1 }} />
-                <button className="btn ghost sm" onClick={() => setRitUrl(ritModal.id, urlInput)}>Kaydet</button>
-                {ritModal.url && <a className="btn ghost sm" href={ritModal.url} target="_blank" rel="noreferrer">▶ Aç</a>}
+            <button className="x" onClick={() => setDetay(null)}>×</button>
+            {isRit ? (
+              <div className="daterow" style={{ marginTop: 2, marginBottom: 4 }}>
+                <input value={adInput} onChange={(e) => setAdInput(e.target.value)} style={{ flex: 1, fontWeight: 700, fontSize: 16 }} />
+                <button className="btn ghost sm" disabled={!adInput.trim() || adInput.trim() === (o.ad || '')} onClick={() => setRitAd(o.id, adInput)}>Kaydet</button>
               </div>
-            </div>
+            ) : <h2>{o.ad}</h2>}
+            <div className="m">{(isRit ? o.kaynak : o.grup) || ''}{act?.kanit_duzeyi && <span className="evi">kanıt: {act.kanit_duzeyi}</span>}</div>
+            {areas.length > 0 && <div style={{ margin: '6px 0' }}>{areas.map((a) => <span key={a} className="tagp p-alan">{a}</span>)}</div>}
 
-            <div className="kv"><div className="k">Süre</div>
-              <div>
-                <span className={'chip' + (!ritModal.bitis ? ' on' : '')} onClick={() => setRitSure(ritModal.id, null)}>Süregelen</span>
-                <span className={'chip' + (ritModal.bitis ? ' on' : '')} onClick={() => setRitSure(ritModal.id, parseInt(sureInput) || 21)}>Tarihli</span>
-                {ritModal.bitis && <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', marginLeft: 8 }}>
-                  <input type="number" min={1} value={sureInput} onChange={(e) => setSureInput(e.target.value)} style={{ width: 60 }} /> gün
-                  <button className="btn sm" onClick={() => setRitSure(ritModal.id, parseInt(sureInput) || 21)}>Uygula</button>
-                </span>}
-              </div>
-              {ritModal.bitis && <div className="note">Başlangıç {kisaTarih(ritModal.baslangic)} · bitiş {kisaTarih(ritModal.bitis)}</div>}
-            </div>
+            {isRit && (
+              <Acc title="Zamanlama" summary={schedSummary} defaultOpen>
+                <div className="kv"><div className="k">Süre</div>
+                  <div>
+                    <span className={'chip' + (!o.bitis ? ' on' : '')} onClick={() => setRitSure(o.id, null)}>Süregelen</span>
+                    <span className={'chip' + (o.bitis ? ' on' : '')} onClick={() => setRitSure(o.id, parseInt(sureInput) || 21)}>Tarihli</span>
+                    {o.bitis && <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', marginLeft: 8 }}>
+                      <input type="number" min={1} value={sureInput} onChange={(e) => setSureInput(e.target.value)} style={{ width: 60 }} /> gün
+                      <button className="btn sm" onClick={() => setRitSure(o.id, parseInt(sureInput) || 21)}>Uygula</button>
+                    </span>}
+                  </div>
+                  {o.bitis && <div className="note">Başlangıç {kisaTarih(o.baslangic)} · bitiş {kisaTarih(o.bitis)}</div>}
+                </div>
+                <div className="kv"><div className="k">Günler</div>
+                  <div>
+                    <span className={'chip' + ((!o.gunler || o.gunler.length === 0) ? ' on' : '')} onClick={() => setRitGunler(o.id, [])}>Her gün</span>
+                    {GUNLER.map(([n, l]) => {
+                      const sel = !!(o.gunler && o.gunler.includes(n));
+                      return <span key={n} className={'chip' + (sel ? ' on' : '')} onClick={() => { const cur: number[] = o.gunler ? [...o.gunler] : []; const nx = cur.includes(n) ? cur.filter((x) => x !== n) : [...cur, n]; setRitGunler(o.id, nx); }}>{l}</span>;
+                    })}
+                  </div>
+                </div>
+                <div className="kv"><div className="k">Zaman dilimi</div>
+                  <div>{TODS.map(([z, l]) => <span key={z} className={'chip' + ((o.zaman || 'gün') === z ? ' on' : '')} onClick={() => setRitZaman(o.id, z)}>{l}</span>)}</div>
+                </div>
+                <div className="kv"><div className="k">Günlük hatırlatma</div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <input type="time" style={{ width: 'auto' }} value={remInput} onChange={(e) => setRemInput(e.target.value)} />
+                    <button className="btn sm" disabled={remInput === (o.hatirlatma_saat || '')} onClick={() => setRitReminder(o.id, remInput)}>Kaydet</button>
+                    {o.hatirlatma_saat && <button className="btn sm ghost" onClick={() => { setRemInput(''); setRitReminder(o.id, ''); }}>Kapat</button>}
+                  </div>
+                  <div className="note">Uygulama kapalıyken de bildirim gelir (push açıksa). Saat: Türkiye saati.</div>
+                </div>
+                <div className="kv"><div className="k">Bağlantı</div>
+                  <div className="daterow">
+                    <input value={urlInput} onChange={(e) => setUrlInput(e.target.value)} placeholder="https://youtube.com/…" style={{ flex: 1 }} />
+                    <button className="btn ghost sm" onClick={() => setRitUrl(o.id, urlInput)}>Kaydet</button>
+                    {o.url && <a className="btn ghost sm" href={o.url} target="_blank" rel="noreferrer">▶ Aç</a>}
+                  </div>
+                </div>
+              </Acc>
+            )}
 
-            <div className="kv"><div className="k">Günler</div>
-              <div>
-                <span className={'chip' + ((!ritModal.gunler || ritModal.gunler.length === 0) ? ' on' : '')} onClick={() => setRitGunler(ritModal.id, [])}>Her gün</span>
-                {GUNLER.map(([n, l]) => {
-                  const sel = !!(ritModal.gunler && ritModal.gunler.includes(n));
-                  return <span key={n} className={'chip' + (sel ? ' on' : '')} onClick={() => { const cur: number[] = ritModal.gunler ? [...ritModal.gunler] : []; const nx = cur.includes(n) ? cur.filter((x) => x !== n) : [...cur, n]; setRitGunler(ritModal.id, nx); }}>{l}</span>;
-                })}
-              </div>
-            </div>
-
-            <div className="kv"><div className="k">Zaman dilimi</div>
-              <div>{TODS.map(([z, l]) => <span key={z} className={'chip' + ((ritModal.zaman || 'gün') === z ? ' on' : '')} onClick={() => setRitZaman(ritModal.id, z)}>{l}</span>)}</div>
-            </div>
-
-            <div className="kv"><div className="k">Günlük hatırlatma</div>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <input type="time" style={{ width: 'auto' }} value={remInput} onChange={(e) => setRemInput(e.target.value)} />
-                <button className="btn sm" disabled={remInput === (ritModal.hatirlatma_saat || '')} onClick={() => setRitReminder(ritModal.id, remInput)}>Kaydet</button>
-                {ritModal.hatirlatma_saat && <button className="btn sm ghost" onClick={() => { setRemInput(''); setRitReminder(ritModal.id, ''); }}>Kapat</button>}
-              </div>
-              <div className="note">Uygulama kapalıyken de bildirim gelir (push açıksa). Saat: Türkiye saati.</div>
-            </div>
-
-            {ritModal.activity_id && (
-              <div style={{ marginTop: 14 }}><button className="btn ghost" onClick={() => openKB(ritModal)}>📖 Bilgi kartını aç (nasıl yapılır · kaynak · video)</button></div>
+            {hasBilgi && (
+              <Acc title="Bilgi" summary="nedir · nasıl · video · kaynak">
+                {act.ozet && <p style={{ fontSize: 13, marginTop: 2, color: '#3a362e', lineHeight: 1.5 }}>{act.ozet}</p>}
+                {act.aciklama && <div className="kv"><div className="k">Nedir / neden</div><div className="v">{act.aciklama}</div></div>}
+                {act.nasil && <div className="kv"><div className="k">Nasıl yapılır</div><div className="v">{act.nasil}</div></div>}
+                {(act.videolar || []).length > 0 && <div className="kv"><div className="k">Videolar</div>{act.videolar.map((v: any, i: number) => <a key={i} className="vidlink" href={v.url} target="_blank" rel="noreferrer">▶ {v.baslik}</a>)}</div>}
+                {(act.alternatifler || []).length > 0 && <div className="kv"><div className="k">Alternatifler</div><div className="v">{act.alternatifler.join(' · ')}</div></div>}
+                {act.dikkat && <div className="kv"><div className="k">Dikkat edilecekler</div><div className="dikkat">⚠ {act.dikkat}</div></div>}
+                {act.kaynak && <div className="kv"><div className="k">Kaynak</div><div className="v">{act.kaynak}</div></div>}
+                {fydNames.length > 0 && <div className="kv"><div className="k">Faydalar</div><div className="v">{fydNames.join(' · ')}</div></div>}
+              </Acc>
+            )}
+            {!hasBilgi && fydNames.length > 0 && (
+              <Acc title="Faydalar" summary={fydNames.slice(0, 3).join(' · ')}><div className="v">{fydNames.join(' · ')}</div></Acc>
             )}
 
             <div className="rowbtns" style={{ marginTop: 14 }}>
-              <button className="btn sm ghost" onClick={() => { const id = ritModal.id; setRitModal(null); ritSil(id); }}>Kaldır</button>
-              {!ritModal.mezun && !ritModal.bitis && <button className="btn sm ghost" onClick={() => { const id = ritModal.id; setRitModal(null); emekli(id); }}>Emekli et</button>}
+              {!isRit && <button className="btn" onClick={() => { ritEkle(o.ad, addSlot || o.zaman || 'gün', o.kaynak_etiket || (o.client_id ? 'Kendi' : 'Rite'), 'aliskanlik', o.grup || (o.faydalar?.length ? faydaMap[o.faydalar[0]]?.alan : null) || null, o.id || null, o.faydalar || [], (o.videolar && o.videolar[0]?.url) || null); setDetay(null); setAddSlot(null); setScreen('ajanda'); }}>Ajandama ekle{addSlot ? ' (' + (TODS.find((t) => t[0] === addSlot)?.[1]) + ')' : ''}</button>}
+              {personal && <button className="btn ghost sm" onClick={() => { const a = act; setDetay(null); openKAct(a); }}>✎ Studio&apos;da düzenle</button>}
+              {isRit && <button className="btn sm ghost" onClick={() => { const id = o.id; setDetay(null); ritSil(id); }}>Ajandadan kaldır</button>}
+              {isRit && !o.mezun && !o.bitis && <button className="btn sm ghost" onClick={() => { const id = o.id; setDetay(null); emekli(id); }}>Emekli et</button>}
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {kAct && (
         <div className="modal" onClick={() => setKAct(null)}>

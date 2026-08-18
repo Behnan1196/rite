@@ -49,6 +49,12 @@ input{width:100%;font-size:15px;padding:11px 12px;border:1px solid var(--line);b
 .slotadd:active{background:var(--green2);}
 .playbtn{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;background:#fdecea;color:var(--red);text-decoration:none;font-size:13px;margin-right:4px;flex:0 0 auto;}
 .playbtn:active{background:#f9dbd6;}
+.acc{border:1px solid var(--line);border-radius:10px;margin:8px 0;overflow:hidden;}
+.acchd{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;cursor:pointer;background:#faf7f1;}
+.acct{font-size:13px;color:#2f2b24;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.accsum{color:#8a8477;font-weight:400;}
+.accchev{color:#8a8477;flex:0 0 auto;}
+.accbody{padding:6px 12px 12px;}
 .typechip{font-size:9px;font-weight:800;border-radius:20px;padding:2px 7px;margin-left:6px;}
 .t-hab{background:#e7efe1;color:#3f6b2f;}.t-rem{background:#f3e7dd;color:#9a6a3a;}.t-not{background:#efe8da;color:#7a715e;}
 .tagp{font-size:9px;font-weight:800;border-radius:20px;padding:2px 7px;margin-left:5px;}
