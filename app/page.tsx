@@ -367,7 +367,7 @@ export default function Rite() {
   }
 
   async function loadData(clientId: string) {
-    const r = await supabase.from('dog_rituals').select('id,ad,zaman,kategori,tip,kaynak,mezun,aktif,alan,rutin,sira,baslangic,bitis,activity_id,hatirlatma_saat,blok_sira,faydalar,url,gunler,kart_tipi,kart_config').eq('client_id', clientId).order('zaman');
+    const r = await supabase.from('dog_rituals').select('id,ad,zaman,kategori,tip,kaynak,mezun,aktif,alan,rutin,sira,baslangic,bitis,activity_id,hatirlatma_saat,blok_sira,faydalar,url,gunler,kart_tipi,kart_config,aliskanlik').eq('client_id', clientId).order('zaman');
     setRituals(r.data || []);
     const lg = await supabase.from('dog_ritual_logs').select('id,ritual_id,tarih,yapildi').eq('client_id', clientId);
     setLogs(lg.data || []);
@@ -435,7 +435,7 @@ export default function Rite() {
     const bas = parseD(today); bas.setDate(bas.getDate() + (basGun || 0)); const basStr = iso(bas);
     let bitis: string | null = null;
     if (sureG && sureG > 0) { const e = parseD(basStr); e.setDate(e.getDate() + sureG - 1); bitis = iso(e); }
-    await supabase.from('dog_rituals').insert({ client_id: client.id, ad: ad.trim(), zaman, kaynak, tip, alan, activity_id: activityId, faydalar, url, gunler: g, program: programId, program_ad: programAd, rutin, sira, kart_tipi: kartTipi, kart_config: kartConfig, aktif: true, mezun: false, baslangic: basStr, bitis, blok_sira: Date.now() });
+    await supabase.from('dog_rituals').insert({ client_id: client.id, ad: ad.trim(), zaman, kaynak, tip, alan, activity_id: activityId, faydalar, url, gunler: g, program: programId, program_ad: programAd, rutin, sira, kart_tipi: kartTipi, kart_config: kartConfig, aliskanlik: !bitis, aktif: true, mezun: false, baslangic: basStr, bitis, blok_sira: Date.now() });
     setYeniRit('');
     if (reload) loadData(client.id);
   }
@@ -574,6 +574,12 @@ export default function Rite() {
     const arr = g.length === 0 || g.length === 7 ? null : g;
     await supabase.from('dog_rituals').update({ gunler: arr }).eq('id', id);
     patchDetay({ gunler: arr });
+    loadData(client.id);
+  }
+  async function setRitAliskanlik(id: string, val: boolean) {
+    if (!client) return;
+    await supabase.from('dog_rituals').update({ aliskanlik: val }).eq('id', id);
+    patchDetay({ aliskanlik: val });
     loadData(client.id);
   }
   async function setRitZaman(id: string, z: string) {
@@ -814,7 +820,8 @@ export default function Rite() {
   const last30 = lastDays(30);
   const weekArr = weekDays(day);
   const gelHabits = rituals;
-  const weekHabits = rituals.filter((r) => weekArr.some((d) => activeOn(r, d)));
+  const uyumHabits = rituals.filter((r) => r.aliskanlik && !r.mezun);
+  const weekHabits = rituals.filter((r) => r.aliskanlik && weekArr.some((d) => activeOn(r, d)));
   const beslenmePlan = plans.find((p) => p.vertical === 'beslenme');
   const ibBadge = inbox.filter((x) => x.durum === 'yeni').length;
   const curatedActs = activities.filter((a) => !a.client_id && a.tur !== 'program');
@@ -1138,12 +1145,12 @@ export default function Rite() {
                 return <div key={k} className="mrow"><span>{k}</span><b>{l.deger} {l.birim || ''}</b></div>;
               }); })()}
             </div>
-            <div className="card"><h3>Ritüel uyumu (bu hafta)</h3>
-              <div className="mrow" style={{ borderTop: 'none' }}><span>Tamamlanan</span><b>%{(() => { let act = 0, done = 0; days7.forEach((d) => gelHabits.forEach((r) => { if (activeOn(r, d)) { act++; if (logs.some((l) => l.ritual_id === r.id && l.tarih === d && l.yapildi)) done++; } })); return act ? Math.round((done / act) * 100) : 0; })()}</b></div>
+            <div className="card"><h3>Alışkanlık uyumu (bu hafta)</h3>
+              <div className="mrow" style={{ borderTop: 'none' }}><span>Tamamlanan</span><b>%{(() => { let act = 0, done = 0; days7.forEach((d) => uyumHabits.forEach((r) => { if (activeOn(r, d)) { act++; if (logs.some((l) => l.ritual_id === r.id && l.tarih === d && l.yapildi)) done++; } })); return act ? Math.round((done / act) * 100) : 0; })()}</b></div>
             </div>
-            <div className="card"><h3>Aylık uyum (aktif günlere göre)</h3>
+            <div className="card"><h3>Aylık alışkanlık uyumu (aktif günlere göre)</h3>
               {(() => {
-                const rows = gelHabits.map((rt) => {
+                const rows = uyumHabits.map((rt) => {
                   const act = last30.filter((d) => activeOn(rt, d));
                   if (!act.length) return null;
                   const n = act.filter((d) => logs.some((l) => l.ritual_id === rt.id && l.tarih === d && l.yapildi)).length;
@@ -1309,6 +1316,9 @@ export default function Rite() {
                 </div>
                 <div className="kv"><div className="k">Zaman dilimi</div>
                   <div>{TODS.map(([z, l]) => <span key={z} className={'chip' + ((o.zaman || 'gün') === z ? ' on' : '')} onClick={() => setRitZaman(o.id, z)}>{l}</span>)}</div>
+                </div>
+                <div className="kv"><div className="k">Takip</div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}><input type="checkbox" style={{ width: 'auto' }} checked={!!o.aliskanlik} onChange={(e) => setRitAliskanlik(o.id, e.target.checked)} /> Alışkanlık olarak haftalık takipte göster</label>
                 </div>
                 <div className="kv"><div className="k">Günlük hatırlatma</div>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
