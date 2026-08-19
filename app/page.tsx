@@ -42,7 +42,7 @@ const SLOTBG: Record<string, string> = { sabah: '#fbf6ec', 'gün': '#f2f5ee', 'a
 // Haftagünü: getDay değeri (0=Paz..6=Cmt), Pazartesi-önce görüntü sırası
 const GUNLER: [number, string][] = [[1, 'Pzt'], [2, 'Sal'], [3, 'Çar'], [4, 'Per'], [5, 'Cum'], [6, 'Cmt'], [0, 'Paz']];
 // Akıllı kart tipleri: kod · etiket · ikon
-const KARTLAR: [string, string, string][] = [['standart', 'Standart', '•'], ['video', 'Video', '🎬'], ['anket', 'Anket', '📋'], ['diyet', 'Diyet', '🍽'], ['nefes', 'Nefes', '🫁'], ['ruhhali', 'Ruh hali', '🙂']];
+const KARTLAR: [string, string, string][] = [['standart', 'Standart', '•'], ['video', 'Video', '🎬'], ['anket', 'Anket', '📋'], ['diyet', 'Diyet', '🍽'], ['nefes', 'Nefes', '🫁'], ['ruhhali', 'Ruh hali', '🙂'], ['workout', 'Egzersiz', '🏋️']];
 const MOOD = ['😞', '😕', '😐', '🙂', '😄'];
 // Nefes desenleri: faz = [etiket, saniye, çember-ölçek]
 const NEFES_DESEN: Record<string, { ad: string; fazlar: [string, number, number][] }> = {
@@ -211,6 +211,31 @@ function MoodKart({ soru, bugun, onKaydet }: { soru?: string; bugun: number | nu
         <button className="btn" disabled={sel == null} onClick={() => sel != null && onKaydet(sel)}>{bugun != null ? 'Güncelle' : 'Kaydet'}</button>
       </div>
       {bugun != null && <div className="note" style={{ marginTop: 4 }}>Bugün {MOOD[bugun - 1]} ({bugun}/5) kaydedildi.</div>}
+    </div>
+  );
+}
+// Egzersiz kartı: hareketler (set×tekrar·ağırlık·video); her set'e dokun, hepsi bitince "Bitir" ile yapıldı.
+function WorkoutKart({ cfg, done, onBitir }: { cfg: any; done: boolean; onBitir: () => void }) {
+  const hareketler: any[] = cfg?.hareketler || [];
+  const [dn, setDn] = useState<Record<string, boolean>>({});
+  const total = hareketler.reduce((a: number, h: any) => a + (Number(h.set) || 1), 0);
+  const yapilan = Object.values(dn).filter(Boolean).length;
+  const key = (ei: number, si: number) => ei + '-' + si;
+  return (
+    <div style={{ margin: '4px 0 8px' }}>
+      <div className="k" style={{ marginBottom: 6 }}>🏋️ Antrenman</div>
+      {hareketler.length === 0 ? <div className="note" style={{ marginTop: 0 }}>Hareket yok (taslak).</div> : hareketler.map((h: any, ei: number) => {
+        const sc = Number(h.set) || 1;
+        return (
+          <div key={ei} className="hareket">
+            <div className="hareketad">{h.ad}{h.video && <a href={h.video} target="_blank" rel="noreferrer" style={{ marginLeft: 6 }}>▶</a>}</div>
+            <div className="note" style={{ margin: '2px 0 0' }}>{sc}×{h.tekrar || '—'}{h.agirlik ? ' · ' + h.agirlik : ''}{h.dinlenme ? ' · dinlenme ' + h.dinlenme : ''}</div>
+            <div className="setdots">{Array.from({ length: sc }).map((_, si) => <span key={si} className={'setdot' + (dn[key(ei, si)] ? ' on' : '')} onClick={() => setDn((d) => ({ ...d, [key(ei, si)]: !d[key(ei, si)] }))}>{dn[key(ei, si)] ? '✓' : si + 1}</span>)}</div>
+          </div>
+        );
+      })}
+      {hareketler.length > 0 && <div className="note" style={{ marginTop: 6 }}>{yapilan}/{total} set</div>}
+      <div className="rowbtns" style={{ marginTop: 8 }}><button className="btn" disabled={done} onClick={onBitir}>{done ? '✓ Bitti' : 'Antrenmanı bitir'}</button></div>
     </div>
   );
 }
@@ -851,7 +876,7 @@ export default function Rite() {
     const cfg = rt.kart_config || {};
     const noDone = tip === 'anket' || tip === 'nefes' || tip === 'ruhhali' || (tip === 'video' && cfg.done === false);
     const vurl = tip === 'video' ? (cfg.url || rt.url) : rt.url;
-    const ipucu = tip === 'anket' ? ' · 📋 doldur' : tip === 'diyet' ? ' · 🍽 öğün' : tip === 'video' ? ' · 🎬 izle' : tip === 'nefes' ? ' · 🫁 nefes' : tip === 'ruhhali' ? ' · 🙂 check-in' : '';
+    const ipucu = tip === 'anket' ? ' · 📋 doldur' : tip === 'diyet' ? ' · 🍽 öğün' : tip === 'video' ? ' · 🎬 izle' : tip === 'nefes' ? ' · 🫁 nefes' : tip === 'ruhhali' ? ' · 🙂 check-in' : tip === 'workout' ? ' · 🏋️ egzersiz' : '';
     return (
       <div>
         <div className="rit">
@@ -1307,6 +1332,7 @@ export default function Rite() {
             {isRit && kTip === 'diyet' && <DiyetKart cfg={kCfg} />}
             {isRit && kTip === 'nefes' && <NefesKart cfg={kCfg} done={ritDone(o.id)} onFinish={() => { if (!ritDone(o.id)) toggleRit(o.id); }} />}
             {isRit && kTip === 'ruhhali' && <MoodKart soru={kCfg.soru} bugun={(() => { const arr = meas.filter((m) => m.anahtar === 'ruh_hali' && m.tarih === today); return arr.length ? Number(arr[arr.length - 1].deger) : null; })()} onKaydet={(d) => moodKaydet(o.id, d)} />}
+            {isRit && kTip === 'workout' && <WorkoutKart cfg={kCfg} done={ritDone(o.id)} onBitir={() => { if (!ritDone(o.id)) toggleRit(o.id); }} />}
 
             {isRit && (
               <Acc title="Zamanlama" summary={schedSummary} defaultOpen={kTip === 'standart'}>

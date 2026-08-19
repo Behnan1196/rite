@@ -58,6 +58,11 @@ input{width:100%;font-size:15px;padding:11px 12px;border:1px solid var(--line);b
 .nefcircle{width:172px;height:172px;border-radius:50%;background:var(--green);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;transform:scale(.5);transition:transform 4s ease-in-out;will-change:transform;}
 .nefphase{font-size:17px;font-weight:700;}
 .nefcount{font-size:30px;font-weight:800;line-height:1;margin-top:3px;font-variant-numeric:tabular-nums;}
+.hareket{background:#f4f6fb;border:1px solid #dde3ef;border-radius:10px;padding:8px 10px;margin:4px 0;}
+.hareketad{font-size:14px;font-weight:700;color:#33405e;}
+.setdots{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;}
+.setdot{width:30px;height:30px;border-radius:8px;border:1px solid #c7d0e4;background:#fff;color:#7a86a3;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;cursor:pointer;}
+.setdot.on{background:var(--green);color:#fff;border-color:var(--green);}
 .ogun{display:flex;gap:10px;align-items:flex-start;background:#f7f4ee;border:1px solid #e9e2d4;border-radius:10px;padding:8px 10px;margin:4px 0;}
 .ogunimg{width:56px;height:56px;object-fit:cover;border-radius:8px;flex:0 0 auto;}
 .ogunad{font-size:14px;font-weight:700;color:#3a362e;}
