@@ -421,6 +421,15 @@ export default function Rite() {
 
   const ritDone = (id: string) => logs.some((l) => l.ritual_id === id && l.tarih === day && l.yapildi);
   const ritTotal = (id: string) => logs.filter((l) => l.ritual_id === id && l.yapildi).length;
+  // Güncel seri: bugünden geriye, aktif günlerde ardışık "yapıldı" sayısı (bugün henüz yapılmadıysa ceza yok).
+  const ritStreak = (r: any) => {
+    const gunler: string[] = [];
+    for (let i = 0; i < 90; i++) { const dt = parseD(today); dt.setDate(dt.getDate() - i); const ds = iso(dt); if (activeOn(r, ds)) gunler.push(ds); }
+    const yap = (ds: string) => logs.some((l) => l.ritual_id === r.id && l.tarih === ds && l.yapildi);
+    let i = 0; if (gunler[0] === today && !yap(today)) i = 1;
+    let c = 0; for (; i < gunler.length; i++) { if (yap(gunler[i])) c++; else break; }
+    return c;
+  };
 
   async function toggleRit(ritId: string) {
     if (!client) return;
@@ -429,13 +438,13 @@ export default function Rite() {
     else await supabase.from('dog_ritual_logs').insert({ client_id: client.id, ritual_id: ritId, tarih: day, yapildi: true });
     loadData(client.id);
   }
-  async function ritEkle(ad: string, zaman = 'gün', kaynak = 'Kendi', tip = 'aliskanlik', alan: string | null = null, activityId: string | null = null, faydalar: string[] = [], url: string | null = null, gunler: number[] | null = null, sureG: number | null = null, programId: string | null = null, programAd: string | null = null, reload = true, basGun = 0, rutin: string | null = null, sira = 0, kartTipi: string | null = null, kartConfig: any = null) {
+  async function ritEkle(ad: string, zaman = 'gün', kaynak = 'Kendi', tip = 'aliskanlik', alan: string | null = null, activityId: string | null = null, faydalar: string[] = [], url: string | null = null, gunler: number[] | null = null, sureG: number | null = null, programId: string | null = null, programAd: string | null = null, reload = true, basGun = 0, rutin: string | null = null, sira = 0, kartTipi: string | null = null, kartConfig: any = null, aliskanlikP: boolean | null = null) {
     if (!client || !ad.trim()) return;
     const g = gunler && gunler.length > 0 && gunler.length < 7 ? gunler : null;
     const bas = parseD(today); bas.setDate(bas.getDate() + (basGun || 0)); const basStr = iso(bas);
     let bitis: string | null = null;
     if (sureG && sureG > 0) { const e = parseD(basStr); e.setDate(e.getDate() + sureG - 1); bitis = iso(e); }
-    await supabase.from('dog_rituals').insert({ client_id: client.id, ad: ad.trim(), zaman, kaynak, tip, alan, activity_id: activityId, faydalar, url, gunler: g, program: programId, program_ad: programAd, rutin, sira, kart_tipi: kartTipi, kart_config: kartConfig, aliskanlik: !bitis, aktif: true, mezun: false, baslangic: basStr, bitis, blok_sira: Date.now() });
+    await supabase.from('dog_rituals').insert({ client_id: client.id, ad: ad.trim(), zaman, kaynak, tip, alan, activity_id: activityId, faydalar, url, gunler: g, program: programId, program_ad: programAd, rutin, sira, kart_tipi: kartTipi, kart_config: kartConfig, aliskanlik: aliskanlikP === null ? !bitis : aliskanlikP, aktif: true, mezun: false, baslangic: basStr, bitis, blok_sira: Date.now() });
     setYeniRit('');
     if (reload) loadData(client.id);
   }
@@ -468,10 +477,10 @@ export default function Rite() {
         const alan0 = st.faydalar?.length ? faydaMap[st.faydalar[0]]?.alan || null : null;
         if (zincir) {
           // zincir üyesi: tek slot (lider), liderin penceresi/günleri, rutin+sıra
-          await ritEkle(st.ad, liderSlot, 'Program', 'aliskanlik', alan0, null, st.faydalar || [], st.url || null, lider.gunler || null, spans[grp[0]].d || null, pid, prog.ad, false, spans[grp[0]].o, rutinId, k, st.kartTipi || null, st.kartConfig || null);
+          await ritEkle(st.ad, liderSlot, 'Program', 'aliskanlik', alan0, null, st.faydalar || [], st.url || null, lider.gunler || null, spans[grp[0]].d || null, pid, prog.ad, false, spans[grp[0]].o, rutinId, k, st.kartTipi || null, st.kartConfig || null, typeof st.aliskanlik === 'boolean' ? st.aliskanlik : null);
         } else {
           const slots = st.zamanlar && st.zamanlar.length ? st.zamanlar : ['gün'];
-          for (const s of slots) await ritEkle(st.ad, s, 'Program', 'aliskanlik', alan0, null, st.faydalar || [], st.url || null, st.gunler || null, spans[idx].d || null, pid, prog.ad, false, spans[idx].o, null, 0, st.kartTipi || null, st.kartConfig || null);
+          for (const s of slots) await ritEkle(st.ad, s, 'Program', 'aliskanlik', alan0, null, st.faydalar || [], st.url || null, st.gunler || null, spans[idx].d || null, pid, prog.ad, false, spans[idx].o, null, 0, st.kartTipi || null, st.kartConfig || null, typeof st.aliskanlik === 'boolean' ? st.aliskanlik : null);
         }
       }
     }
@@ -746,7 +755,7 @@ export default function Rite() {
     } else {
       const alan0 = (p.faydalar && p.faydalar.length) ? (faydaList.find((f) => f.kod === p.faydalar[0])?.alan || null) : null;
       const slots = p.zamanlar && p.zamanlar.length ? p.zamanlar : [p.zaman || 'gün'];
-      for (const s of slots) await ritEkle(p.ad || item.baslik, s, 'Paylaşılan', 'aliskanlik', alan0, null, p.faydalar || [], (p.videolar && p.videolar[0]?.url) || null, p.gunler || null, p.sure_gun || null, null, null, false, 0, null, 0, p.kartTipi || null, p.kartConfig || null);
+      for (const s of slots) await ritEkle(p.ad || item.baslik, s, 'Paylaşılan', 'aliskanlik', alan0, null, p.faydalar || [], (p.videolar && p.videolar[0]?.url) || null, p.gunler || null, p.sure_gun || null, null, null, false, 0, null, 0, p.kartTipi || null, p.kartConfig || null, typeof p.aliskanlik === 'boolean' ? p.aliskanlik : null);
       loadData(client.id);
     }
     await supabase.from('dog_inbox').update({ durum: 'alindi' }).eq('id', item.id);
@@ -1139,10 +1148,17 @@ export default function Rite() {
               <div style={{ fontSize: 24, letterSpacing: 6 }}>{measByKey['ruh_hali'].slice(-7).map((m: any, i: number) => <span key={i} title={m.tarih}>{MOOD[Math.round(Number(m.deger)) - 1] || '·'}</span>)}</div>
               {(() => { const arr = measByKey['ruh_hali'].slice(-7).map((m: any) => Number(m.deger)); const ort = arr.reduce((a: number, b: number) => a + b, 0) / arr.length; return <div className="note" style={{ marginTop: 4 }}>Ortalama: {MOOD[Math.round(ort) - 1]} ({ort.toFixed(1)}/5)</div>; })()}
             </div>}
+            {uyumHabits.length > 0 && <div className="card"><h3>Alışkanlık serileri 🔥</h3>
+              {(() => { const rows = uyumHabits.map((r) => ({ r, s: ritStreak(r) })).sort((a, b) => b.s - a.s); return rows.map(({ r, s }) => (
+                <div key={r.id} className="mrow"><span>{r.ad}</span><b>{s > 0 ? '🔥 ' + s + ' gün' : '—'}</b></div>
+              )); })()}
+              <div className="soul">Seri = art arda yaptığın gün sayısı; bugünü kaçırmadıysan kırılmaz. Kısa seri de bir başlangıç.</div>
+            </div>}
             <div className="card"><h3>Ölçümler</h3>
               {(() => { const keys = Object.keys(measByKey).filter((k) => k !== 'ruh_hali'); return keys.length === 0 ? <div className="note">Koçun ölçüm girince görünür.</div> : keys.slice(0, 6).map((k) => {
                 const arr = measByKey[k]; const l = arr[arr.length - 1];
-                return <div key={k} className="mrow"><span>{k}</span><b>{l.deger} {l.birim || ''}</b></div>;
+                const son = arr.slice(-7).map((m: any) => Number(m.deger)); const mn = Math.min(...son), mx = Math.max(...son);
+                return <div key={k} className="mrow"><span>{k}<span className="msprk">{son.map((v: number, i: number) => <i key={i} style={{ height: (mx > mn ? ((v - mn) / (mx - mn)) * 100 : 50) + '%' }} />)}</span></span><b>{l.deger} {l.birim || ''}</b></div>;
               }); })()}
             </div>
             <div className="card"><h3>Alışkanlık uyumu (bu hafta)</h3>

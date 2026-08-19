@@ -49,6 +49,8 @@ input{width:100%;font-size:15px;padding:11px 12px;border:1px solid var(--line);b
 .slotadd:active{background:var(--green2);}
 .playbtn{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;background:#fdecea;color:var(--red);text-decoration:none;font-size:13px;margin-right:4px;flex:0 0 auto;}
 .playbtn:active{background:#f9dbd6;}
+.msprk{display:inline-flex;align-items:flex-end;gap:1px;height:14px;margin-left:8px;vertical-align:middle;}
+.msprk i{width:3px;background:var(--green);border-radius:1px;min-height:2px;opacity:.75;}
 .moodbtn{flex:1;font-size:26px;padding:8px 0;border:1px solid var(--line);border-radius:12px;background:#fff;cursor:pointer;opacity:.55;transition:transform .1s,opacity .1s;}
 .moodbtn.on{opacity:1;border-color:var(--green);background:var(--green2,#eaf5ee);transform:scale(1.08);}
 .nefstage{position:relative;height:200px;display:flex;align-items:center;justify-content:center;}
