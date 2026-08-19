@@ -237,6 +237,7 @@ export default function Rite() {
   const [dayNote, setDayNote] = useState('');
   const [inbox, setInbox] = useState<any[]>([]);
   const [ib, setIb] = useState({ t: '', u: '' });
+  const [yeniAcik, setYeniAcik] = useState(false);
   const [addSlot, setAddSlot] = useState<string | null>(null);
   const [msg, setMsg] = useState('');
   const [pushOn, setPushOn] = useState(false);
@@ -662,9 +663,11 @@ export default function Rite() {
     if (client) localStorage.setItem('rite_note_' + client.id + '_' + day, v);
   }
   async function inboxYakala() {
-    if (!client || !ib.t.trim()) return;
-    await supabase.from('dog_inbox').insert({ client_id: client.id, tur: 'not', baslik: ib.t.trim(), url: ib.u.trim() || null, durum: 'yeni' });
-    setIb({ t: '', u: '' });
+    const t = ib.t.trim();
+    if (!client || !t) return;
+    const isUrl = /^https?:\/\//i.test(t);
+    await supabase.from('dog_inbox').insert({ client_id: client.id, tur: 'not', baslik: t, url: isUrl ? t : null, durum: 'yeni' });
+    setIb({ t: '', u: '' }); setYeniAcik(false);
     loadInbox(client.id);
   }
   async function panodanEkle() {
@@ -1133,16 +1136,17 @@ export default function Rite() {
             <button className="x" onClick={() => setInboxOpen(false)}>×</button>
             <h2 style={{ marginTop: 2 }}>📥 Inbox</h2>
             <div className="note" style={{ marginTop: 0 }}>Aklına takılan her şeyin ilk durağı; sonra bir güne yerleştir. Paylaşım kodun: <b>{client.share_code || '…'}</b> <button className="btn ghost sm" style={{ marginLeft: 6 }} onClick={() => client && loadInbox(client.id)}>🔄</button></div>
-            <div className="card">
-              <label>Yakala</label>
-              <input value={ib.t} onChange={(e) => setIb((s) => ({ ...s, t: e.target.value }))} placeholder="Aklına ne takıldıysa yaz…" />
-              <input style={{ marginTop: 8 }} value={ib.u} onChange={(e) => setIb((s) => ({ ...s, u: e.target.value }))} placeholder="https:// (varsa link, ops.)" />
-              <div className="rowbtns">
-                <button className="btn" onClick={inboxYakala}>Yakala</button>
-                <button className="btn ghost sm" onClick={panodanEkle}>📋 Panodan</button>
+            {!yeniAcik ? (
+              <button className="btn" style={{ width: '100%', marginTop: 8 }} onClick={() => { setIb({ t: '', u: '' }); setYeniAcik(true); }}>＋ Ekle</button>
+            ) : (
+              <div className="card">
+                <textarea autoFocus value={ib.t} onChange={(e) => setIb((s) => ({ ...s, t: e.target.value }))} placeholder="Yaz ya da yapıştır… (fikir, not, link)" style={{ minHeight: 72 }} />
+                <div className="rowbtns" style={{ marginTop: 6 }}>
+                  <button className="btn" onClick={inboxYakala}>Kaydet</button>
+                  <button className="btn ghost sm" onClick={() => { setIb({ t: '', u: '' }); setYeniAcik(false); }}>İptal</button>
+                </div>
               </div>
-              <p className="note" style={{ marginTop: 6 }}>YouTube&apos;da <b>Linki Kopyala</b> → <b>Panodan</b> → <b>Yakala</b>. (iOS&apos;ta doğrudan &quot;Paylaş → Rite&quot; native uygulamada gelecek.)</p>
-            </div>
+            )}
             {inbox.length === 0 && <div className="note" style={{ textAlign: 'center', marginTop: 10 }}>Inbox boş.</div>}
             {inbox.map((v) => (
               <div key={v.id} className="card">
