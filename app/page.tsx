@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { DndContext, PointerSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
@@ -42,7 +42,13 @@ const SLOTBG: Record<string, string> = { sabah: '#fbf6ec', 'gün': '#f2f5ee', 'a
 // Haftagünü: getDay değeri (0=Paz..6=Cmt), Pazartesi-önce görüntü sırası
 const GUNLER: [number, string][] = [[1, 'Pzt'], [2, 'Sal'], [3, 'Çar'], [4, 'Per'], [5, 'Cum'], [6, 'Cmt'], [0, 'Paz']];
 // Akıllı kart tipleri: kod · etiket · ikon
-const KARTLAR: [string, string, string][] = [['standart', 'Standart', '•'], ['video', 'Video', '🎬'], ['anket', 'Anket', '📋'], ['diyet', 'Diyet', '🍽']];
+const KARTLAR: [string, string, string][] = [['standart', 'Standart', '•'], ['video', 'Video', '🎬'], ['anket', 'Anket', '📋'], ['diyet', 'Diyet', '🍽'], ['nefes', 'Nefes', '🫁']];
+// Nefes desenleri: faz = [etiket, saniye, çember-ölçek]
+const NEFES_DESEN: Record<string, { ad: string; fazlar: [string, number, number][] }> = {
+  kutu: { ad: 'Kutu 4·4·4·4', fazlar: [['Nefes al', 4, 1], ['Tut', 4, 1], ['Ver', 4, 0.5], ['Tut', 4, 0.5]] },
+  '478': { ad: '4·7·8', fazlar: [['Nefes al', 4, 1], ['Tut', 7, 1], ['Ver', 8, 0.5]] },
+  koheran: { ad: '5·5 dengeli', fazlar: [['Nefes al', 5, 1], ['Ver', 5, 0.5]] },
+};
 const kartIkon = (tip?: string | null) => (KARTLAR.find((k) => k[0] === tip)?.[2] || '');
 function gunlerLabel(g?: number[] | null): string {
   if (!g || g.length === 0) return 'her gün';
@@ -135,6 +141,59 @@ function DiyetKart({ cfg }: { cfg: any }) {
         </div>
       ))}
       {cfg?.makro && <div className="note" style={{ marginTop: 4 }}>Günlük makro hedefi: {cfg.makro}</div>}
+    </div>
+  );
+}
+// Rehberli nefes kartı: config.desen (kutu/478/koheran) + config.tekrar; çember fazlara göre büyür/küçülür, turlar bitince onFinish.
+function NefesKart({ cfg, done, onFinish }: { cfg: any; done: boolean; onFinish: () => void }) {
+  const desenKey = cfg?.desen && NEFES_DESEN[cfg.desen] ? cfg.desen : 'kutu';
+  const tekrar = cfg?.tekrar > 0 ? cfg.tekrar : 4;
+  const fazlar = NEFES_DESEN[desenKey].fazlar;
+  const [running, setRunning] = useState(false);
+  const [, setTick] = useState(0);
+  const st = useRef({ phi: 0, cyc: 0, remain: 0, bitti: false });
+  const iv = useRef<any>(null);
+  const rerender = () => setTick((t) => t + 1);
+  const stop = () => { if (iv.current) { clearInterval(iv.current); iv.current = null; } };
+  useEffect(() => () => stop(), []);
+  function enter() { st.current.remain = fazlar[st.current.phi][1]; rerender(); }
+  function tickFn() {
+    st.current.remain--;
+    if (st.current.remain > 0) { rerender(); return; }
+    st.current.phi++;
+    if (st.current.phi >= fazlar.length) {
+      st.current.phi = 0; st.current.cyc++;
+      if (st.current.cyc >= tekrar) { stop(); setRunning(false); st.current.bitti = true; rerender(); if (!done) onFinish(); return; }
+    }
+    enter();
+  }
+  function basla() {
+    if (running) return;
+    if (st.current.bitti) st.current = { phi: 0, cyc: 0, remain: 0, bitti: false };
+    setRunning(true); enter(); iv.current = setInterval(tickFn, 1000);
+  }
+  function durakla() { stop(); setRunning(false); rerender(); }
+  function sifirla() { stop(); st.current = { phi: 0, cyc: 0, remain: 0, bitti: false }; setRunning(false); rerender(); }
+  const faz = fazlar[st.current.phi];
+  const scale = (running || st.current.remain > 0) ? faz[2] : 0.5;
+  const label = st.current.bitti ? 'Bitti' : (running ? faz[0] : 'Hazır');
+  const count = st.current.bitti ? '✓' : (running ? st.current.remain : '—');
+  const dur = running ? faz[1] : 0.4;
+  return (
+    <div style={{ margin: '4px 0 8px' }}>
+      <div className="nefstage">
+        <div className="nefring" />
+        <div className="nefcircle" style={{ transform: 'scale(' + scale + ')', transitionDuration: dur + 's' }}>
+          <div className="nefphase">{label}</div>
+          <div className="nefcount">{count}</div>
+        </div>
+      </div>
+      <div className="note" style={{ textAlign: 'center', margin: '4px 0 0' }}>{NEFES_DESEN[desenKey].ad} · Tur {st.current.cyc}/{tekrar}</div>
+      <div className="rowbtns" style={{ justifyContent: 'center', marginTop: 8 }}>
+        <button className="btn" onClick={running ? durakla : basla}>{running ? 'Duraklat' : (st.current.bitti ? 'Tekrar' : 'Başla')}</button>
+        <button className="btn ghost sm" onClick={sifirla}>Sıfırla</button>
+      </div>
+      {st.current.bitti && <div className="note" style={{ textAlign: 'center', color: 'var(--green)', fontWeight: 700 }}>✓ Tamamlandı</div>}
     </div>
   );
 }
@@ -746,9 +805,9 @@ export default function Rite() {
     const total = ritTotal(rt.id);
     const tip = rt.kart_tipi || 'standart';
     const cfg = rt.kart_config || {};
-    const noDone = tip === 'anket' || (tip === 'video' && cfg.done === false);
+    const noDone = tip === 'anket' || tip === 'nefes' || (tip === 'video' && cfg.done === false);
     const vurl = tip === 'video' ? (cfg.url || rt.url) : rt.url;
-    const ipucu = tip === 'anket' ? ' · 📋 doldur' : tip === 'diyet' ? ' · 🍽 öğün' : tip === 'video' ? ' · 🎬 izle' : '';
+    const ipucu = tip === 'anket' ? ' · 📋 doldur' : tip === 'diyet' ? ' · 🍽 öğün' : tip === 'video' ? ' · 🎬 izle' : tip === 'nefes' ? ' · 🫁 nefes' : '';
     return (
       <div>
         <div className="rit">
@@ -1190,6 +1249,7 @@ export default function Rite() {
             {isRit && kTip === 'video' && <div className="kv"><div className="k">🎬 Video</div><div>{(kCfg.url || o.url) ? <a className="btn" href={kCfg.url || o.url} target="_blank" rel="noreferrer">▶ Videoyu aç</a> : <span className="note" style={{ marginTop: 0 }}>Video linki yok</span>}</div></div>}
             {isRit && kTip === 'anket' && <AnketKart cfg={kCfg} done={ritDone(o.id)} onGonder={() => { if (!ritDone(o.id)) toggleRit(o.id); }} />}
             {isRit && kTip === 'diyet' && <DiyetKart cfg={kCfg} />}
+            {isRit && kTip === 'nefes' && <NefesKart cfg={kCfg} done={ritDone(o.id)} onFinish={() => { if (!ritDone(o.id)) toggleRit(o.id); }} />}
 
             {isRit && (
               <Acc title="Zamanlama" summary={schedSummary} defaultOpen={kTip === 'standart'}>
