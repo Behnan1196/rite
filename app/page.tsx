@@ -691,7 +691,7 @@ export default function Rite() {
   const weekHabits = rituals.filter((r) => weekArr.some((d) => activeOn(r, d)));
   const beslenmePlan = plans.find((p) => p.vertical === 'beslenme');
   const ibBadge = inbox.filter((x) => x.durum === 'yeni').length;
-  const curatedActs = activities.filter((a) => !a.client_id);
+  const curatedActs = activities.filter((a) => !a.client_id && a.tur !== 'program');
   const personalActs = activities.filter((a) => a.client_id === client.id);
   const actGroups = curatedActs.map((a) => a.grup).filter((v, i, arr) => arr.indexOf(v) === i);
 
