@@ -121,6 +121,9 @@ input{width:100%;font-size:15px;padding:11px 12px;border:1px solid var(--line);b
 .modal{position:fixed;inset:0;background:rgba(24,21,16,.5);display:flex;align-items:flex-end;justify-content:center;z-index:50;}
 .sheet{position:relative;background:#fff;width:100%;max-width:460px;max-height:90vh;overflow-y:auto;border-radius:18px 18px 0 0;padding:16px 16px 30px;animation:up .2s ease;}
 @keyframes up{from{transform:translateY(20px);opacity:.6}to{transform:none;opacity:1}}
+.modal.top{align-items:flex-start;}
+.topsheet{border-radius:0 0 18px 18px;max-height:88vh;padding:16px 16px 24px;animation:down .2s ease;}
+@keyframes down{from{transform:translateY(-20px);opacity:.6}to{transform:none;opacity:1}}
 .sheet .x{position:absolute;top:14px;right:14px;z-index:2;background:#efe8da;border:none;border-radius:50%;width:30px;height:30px;font-size:16px;cursor:pointer;color:#6b6250;}
 .sheet h2{font-size:18px;margin-bottom:2px;padding-right:34px;}
 .evi{display:inline-block;font-size:10px;font-weight:800;background:#e7efe1;color:#3f6b2f;border-radius:20px;padding:2px 8px;margin-left:6px;}
