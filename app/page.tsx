@@ -239,6 +239,27 @@ function WorkoutKart({ cfg, done, onBitir }: { cfg: any; done: boolean; onBitir:
     </div>
   );
 }
+// Inbox notu kartı: başlık/foto/link + Bugüne/Yarına + belirli tarihe Randevu + Sil.
+function InboxNot({ v, minDate, onGun, onRandevu, onSil }: { v: any; minDate: string; onGun: (o: number) => void; onRandevu: (ds: string) => void; onSil: () => void }) {
+  const [ds, setDs] = useState('');
+  return (
+    <div className="card">
+      <div style={{ fontSize: 13, fontWeight: 700 }}>{v.url ? '🔗 ' : v.payload?.resim ? '📷 ' : '📌 '}{v.baslik}</div>
+      {v.payload?.resim && <img src={v.payload.resim} alt="" style={{ maxWidth: '100%', borderRadius: 8, marginTop: 6, display: 'block' }} />}
+      {v.url && <a href={v.url} target="_blank" rel="noreferrer" style={{ fontSize: 11 }}>{v.url}</a>}
+      <div className="rowbtns" style={{ marginTop: 6 }}>
+        <button className="btn ghost sm" onClick={() => onGun(0)}>→ Bugüne</button>
+        <button className="btn ghost sm" onClick={() => onGun(1)}>→ Yarına</button>
+        <button className="btn ghost sm" style={{ color: 'var(--red)', borderColor: '#e6c4bd' }} onClick={onSil}>Sil</button>
+      </div>
+      <div className="rowbtns" style={{ marginTop: 6, alignItems: 'center' }}>
+        <span style={{ fontSize: 13 }}>📅</span>
+        <input type="date" min={minDate} value={ds} onChange={(e) => setDs(e.target.value)} style={{ width: 'auto' }} />
+        <button className="btn sm" disabled={!ds} onClick={() => onRandevu(ds)}>Randevu</button>
+      </div>
+    </div>
+  );
+}
 const WD = ['Pz', 'Pt', 'Sa', 'Ça', 'Pe', 'Cu', 'Ct'];
 const WDFULL = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
 const MONTHS = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
@@ -280,6 +301,8 @@ export default function Rite() {
   const [inbox, setInbox] = useState<any[]>([]);
   const [ib, setIb] = useState({ t: '', u: '' });
   const [yeniAcik, setYeniAcik] = useState(false);
+  const [ibImg, setIbImg] = useState<string | null>(null);
+  const fotoRef = useRef<HTMLInputElement>(null);
   const [addSlot, setAddSlot] = useState<string | null>(null);
   const [msg, setMsg] = useState('');
   const [pushOn, setPushOn] = useState(false);
@@ -729,11 +752,33 @@ export default function Rite() {
   }
   async function inboxYakala() {
     const t = ib.t.trim();
-    if (!client || !t) return;
+    if (!client || (!t && !ibImg)) return;
     const isUrl = /^https?:\/\//i.test(t);
-    await supabase.from('dog_inbox').insert({ client_id: client.id, tur: 'not', baslik: t, url: isUrl ? t : null, durum: 'yeni' });
-    setIb({ t: '', u: '' }); setYeniAcik(false);
+    await supabase.from('dog_inbox').insert({ client_id: client.id, tur: 'not', baslik: t || '📷 Fotoğraf', url: isUrl ? t : null, payload: ibImg ? { resim: ibImg } : null, durum: 'yeni' });
+    setIb({ t: '', u: '' }); setIbImg(null); setYeniAcik(false);
     loadInbox(client.id);
+  }
+  // Kamera/galeri fotoğrafını küçültüp base64 olarak yakala.
+  function onFoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files && e.target.files[0]; if (!f) return;
+    const rd = new FileReader();
+    rd.onload = () => {
+      const img = new window.Image();
+      img.onload = () => {
+        const max = 900; let w = img.width, h = img.height; const sc = Math.min(1, max / Math.max(w, h)); w = Math.round(w * sc); h = Math.round(h * sc);
+        const c = document.createElement('canvas'); c.width = w; c.height = h; const ctx = c.getContext('2d'); if (ctx) ctx.drawImage(img, 0, 0, w, h);
+        setIbImg(c.toDataURL('image/jpeg', 0.55)); setYeniAcik(true);
+      };
+      img.src = rd.result as string;
+    };
+    rd.readAsDataURL(f); e.target.value = '';
+  }
+  // Inbox notunu belirli bir tarihe randevu olarak koy (tarihli tek-seferlik, alışkanlık değil).
+  async function inboxToRandevu(item: any, ds: string) {
+    if (!client || !ds) return;
+    await supabase.from('dog_rituals').insert({ client_id: client.id, ad: item.baslik || 'Randevu', zaman: 'gün', kaynak: 'Randevu', tip: 'aliskanlik', url: item.url || null, kart_config: item.payload?.resim ? { resim: item.payload.resim } : null, baslangic: ds, bitis: ds, aliskanlik: false, aktif: true, mezun: false, blok_sira: Date.now() });
+    await supabase.from('dog_inbox').delete().eq('id', item.id);
+    loadInbox(client.id); loadData(client.id);
   }
   async function panodanEkle() {
     try {
@@ -1213,21 +1258,26 @@ export default function Rite() {
             <button className="x" onClick={() => setInboxOpen(false)}>×</button>
             <h2 style={{ marginTop: 2 }}>📥 Inbox</h2>
             <div className="note" style={{ marginTop: 0 }}>Aklına takılan her şeyin ilk durağı; sonra bir güne yerleştir. Paylaşım kodun: <b>{client.share_code || '…'}</b> <button className="btn ghost sm" style={{ marginLeft: 6 }} onClick={() => client && loadInbox(client.id)}>🔄</button></div>
+            <input ref={fotoRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={onFoto} />
             {!yeniAcik ? (
-              <button className="btn" style={{ width: '100%', marginTop: 8 }} onClick={() => { setIb({ t: '', u: '' }); setYeniAcik(true); }}>＋ Ekle</button>
+              <button className="btn" style={{ width: '100%', marginTop: 8 }} onClick={() => { setIb({ t: '', u: '' }); setIbImg(null); setYeniAcik(true); }}>＋ Ekle</button>
             ) : (
               <div className="card">
-                <textarea autoFocus value={ib.t} onChange={(e) => setIb((s) => ({ ...s, t: e.target.value }))} placeholder="Yaz ya da yapıştır… (fikir, not, link)" style={{ minHeight: 72 }} />
+                <textarea autoFocus value={ib.t} onChange={(e) => setIb((s) => ({ ...s, t: e.target.value }))} placeholder="Yaz ya da yapıştır… (fikir, not, link, reçete no…)" style={{ minHeight: 64 }} />
+                {ibImg && <div style={{ position: 'relative', marginTop: 6 }}><img src={ibImg} alt="" style={{ maxWidth: '100%', borderRadius: 8, display: 'block' }} /><button className="rmx" style={{ position: 'absolute', top: 6, right: 6 }} onClick={() => setIbImg(null)}>✕</button></div>}
                 <div className="rowbtns" style={{ marginTop: 6 }}>
                   <button className="btn" onClick={inboxYakala}>Kaydet</button>
-                  <button className="btn ghost sm" onClick={() => { setIb({ t: '', u: '' }); setYeniAcik(false); }}>İptal</button>
+                  <button className="btn ghost sm" onClick={() => fotoRef.current?.click()}>📷 {ibImg ? 'Değiştir' : 'Tara/Fotoğraf'}</button>
+                  <button className="btn ghost sm" onClick={() => { setIb({ t: '', u: '' }); setIbImg(null); setYeniAcik(false); }}>İptal</button>
                 </div>
               </div>
             )}
             {inbox.length === 0 && <div className="note" style={{ textAlign: 'center', marginTop: 10 }}>Inbox boş.</div>}
-            {inbox.map((v) => (
+            {inbox.map((v) => v.tur !== 'aktivite' ? (
+              <InboxNot key={v.id} v={v} minDate={today} onGun={(o) => inboxToRitual(v, o)} onRandevu={(ds) => inboxToRandevu(v, ds)} onSil={() => inboxSil(v.id)} />
+            ) : (
               <div key={v.id} className="card">
-                {v.tur === 'aktivite' ? (
+                {(
                   <>
                     <div style={{ fontSize: 13, fontWeight: 700 }}>🎁 {v.baslik || v.payload?.ad}</div>
                     <div className="note" style={{ margin: '2px 0' }}>Aktivite paylaşımı{v.from_code ? ' · ' + v.from_code : ''}</div>
@@ -1240,16 +1290,6 @@ export default function Rite() {
                             <button className="btn ghost sm" onClick={() => inboxAktiviteAjanda(v)}>Ajandama ekle</button>
                             <button className="btn ghost sm" onClick={() => inboxAktiviteEkle(v)}>Havuzuma ekle</button>
                           </>}
-                      <button className="btn ghost sm" style={{ color: 'var(--red)', borderColor: '#e6c4bd' }} onClick={() => inboxSil(v.id)}>Sil</button>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div style={{ fontSize: 13, fontWeight: 700 }}>{v.url ? '🔗 ' : '📌 '}{v.baslik}</div>
-                    {v.url && <a href={v.url} target="_blank" rel="noreferrer" style={{ fontSize: 11 }}>{v.url}</a>}
-                    <div className="rowbtns">
-                      <button className="btn ghost sm" onClick={() => inboxToRitual(v, 0)}>→ Bugüne</button>
-                      <button className="btn ghost sm" onClick={() => inboxToRitual(v, 1)}>→ Yarına</button>
                       <button className="btn ghost sm" style={{ color: 'var(--red)', borderColor: '#e6c4bd' }} onClick={() => inboxSil(v.id)}>Sil</button>
                     </div>
                   </>
@@ -1327,6 +1367,7 @@ export default function Rite() {
             <div className="m">{(isRit ? o.kaynak : o.grup) || ''}{act?.kanit_duzeyi && <span className="evi">kanıt: {act.kanit_duzeyi}</span>}</div>
             {areas.length > 0 && <div style={{ margin: '6px 0' }}>{areas.map((a) => <span key={a} className="tagp p-alan">{a}</span>)}</div>}
 
+            {isRit && kTip === 'standart' && o.kart_config?.resim && <img src={o.kart_config.resim} alt="" style={{ maxWidth: '100%', borderRadius: 8, margin: '4px 0 8px', display: 'block' }} />}
             {isRit && kTip === 'video' && <div className="kv"><div className="k">🎬 Video</div><div>{(kCfg.url || o.url) ? <a className="btn" href={kCfg.url || o.url} target="_blank" rel="noreferrer">▶ Videoyu aç</a> : <span className="note" style={{ marginTop: 0 }}>Video linki yok</span>}</div></div>}
             {isRit && kTip === 'anket' && <AnketKart cfg={kCfg} done={ritDone(o.id)} onGonder={() => { if (!ritDone(o.id)) toggleRit(o.id); }} />}
             {isRit && kTip === 'diyet' && <DiyetKart cfg={kCfg} />}
