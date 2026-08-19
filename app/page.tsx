@@ -42,7 +42,8 @@ const SLOTBG: Record<string, string> = { sabah: '#fbf6ec', 'gün': '#f2f5ee', 'a
 // Haftagünü: getDay değeri (0=Paz..6=Cmt), Pazartesi-önce görüntü sırası
 const GUNLER: [number, string][] = [[1, 'Pzt'], [2, 'Sal'], [3, 'Çar'], [4, 'Per'], [5, 'Cum'], [6, 'Cmt'], [0, 'Paz']];
 // Akıllı kart tipleri: kod · etiket · ikon
-const KARTLAR: [string, string, string][] = [['standart', 'Standart', '•'], ['video', 'Video', '🎬'], ['anket', 'Anket', '📋'], ['diyet', 'Diyet', '🍽'], ['nefes', 'Nefes', '🫁']];
+const KARTLAR: [string, string, string][] = [['standart', 'Standart', '•'], ['video', 'Video', '🎬'], ['anket', 'Anket', '📋'], ['diyet', 'Diyet', '🍽'], ['nefes', 'Nefes', '🫁'], ['ruhhali', 'Ruh hali', '🙂']];
+const MOOD = ['😞', '😕', '😐', '🙂', '😄'];
 // Nefes desenleri: faz = [etiket, saniye, çember-ölçek]
 const NEFES_DESEN: Record<string, { ad: string; fazlar: [string, number, number][] }> = {
   kutu: { ad: 'Kutu 4·4·4·4', fazlar: [['Nefes al', 4, 1], ['Tut', 4, 1], ['Ver', 4, 0.5], ['Tut', 4, 0.5]] },
@@ -194,6 +195,22 @@ function NefesKart({ cfg, done, onFinish }: { cfg: any; done: boolean; onFinish:
         <button className="btn ghost sm" onClick={sifirla}>Sıfırla</button>
       </div>
       {st.current.bitti && <div className="note" style={{ textAlign: 'center', color: 'var(--green)', fontWeight: 700 }}>✓ Tamamlandı</div>}
+    </div>
+  );
+}
+// Ruh hali check-in kartı: 5'li emoji ölçek; kaydedince ölçüme (dog_measurements) yazılır.
+function MoodKart({ soru, bugun, onKaydet }: { soru?: string; bugun: number | null; onKaydet: (d: number) => void }) {
+  const [sel, setSel] = useState<number | null>(bugun);
+  return (
+    <div style={{ margin: '4px 0 8px' }}>
+      <div className="k" style={{ marginBottom: 8 }}>🙂 {soru || 'Bugün nasıl hissediyorsun?'}</div>
+      <div style={{ display: 'flex', gap: 6, justifyContent: 'space-between' }}>
+        {MOOD.map((em, i) => { const v = i + 1; return <button key={v} className={'moodbtn' + (sel === v ? ' on' : '')} onClick={() => setSel(v)}>{em}</button>; })}
+      </div>
+      <div className="rowbtns" style={{ marginTop: 10 }}>
+        <button className="btn" disabled={sel == null} onClick={() => sel != null && onKaydet(sel)}>{bugun != null ? 'Güncelle' : 'Kaydet'}</button>
+      </div>
+      {bugun != null && <div className="note" style={{ marginTop: 4 }}>Bugün {MOOD[bugun - 1]} ({bugun}/5) kaydedildi.</div>}
     </div>
   );
 }
@@ -646,6 +663,14 @@ export default function Rite() {
     }
     loadData(client.id);
   }
+  async function moodKaydet(ritId: string, deger: number) {
+    if (!client) return;
+    await supabase.from('dog_measurements').delete().eq('client_id', client.id).eq('anahtar', 'ruh_hali').eq('tarih', today);
+    await supabase.from('dog_measurements').insert({ client_id: client.id, anahtar: 'ruh_hali', deger, tarih: today });
+    const m = await supabase.from('dog_measurements').select('tarih,anahtar,deger,birim').eq('client_id', client.id).order('tarih', { ascending: true }).limit(80);
+    setMeas(m.data || []);
+    if (!ritDone(ritId)) toggleRit(ritId);
+  }
   async function programKaldir(pid: string, ad: string) {
     if (!client) return;
     if (!confirm('"' + ad + '" programının tüm ritüelleri ajandadan kaldırılsın mı?')) return;
@@ -808,9 +833,9 @@ export default function Rite() {
     const total = ritTotal(rt.id);
     const tip = rt.kart_tipi || 'standart';
     const cfg = rt.kart_config || {};
-    const noDone = tip === 'anket' || tip === 'nefes' || (tip === 'video' && cfg.done === false);
+    const noDone = tip === 'anket' || tip === 'nefes' || tip === 'ruhhali' || (tip === 'video' && cfg.done === false);
     const vurl = tip === 'video' ? (cfg.url || rt.url) : rt.url;
-    const ipucu = tip === 'anket' ? ' · 📋 doldur' : tip === 'diyet' ? ' · 🍽 öğün' : tip === 'video' ? ' · 🎬 izle' : tip === 'nefes' ? ' · 🫁 nefes' : '';
+    const ipucu = tip === 'anket' ? ' · 📋 doldur' : tip === 'diyet' ? ' · 🍽 öğün' : tip === 'video' ? ' · 🎬 izle' : tip === 'nefes' ? ' · 🫁 nefes' : tip === 'ruhhali' ? ' · 🙂 check-in' : '';
     return (
       <div>
         <div className="rit">
@@ -1103,11 +1128,15 @@ export default function Rite() {
                 return <i key={d} style={{ height: Math.max(4, h) + '%' }} />;
               })}</div>
             </div>
+            {measByKey['ruh_hali'] && <div className="card"><h3>Ruh hali (son 7 gün)</h3>
+              <div style={{ fontSize: 24, letterSpacing: 6 }}>{measByKey['ruh_hali'].slice(-7).map((m: any, i: number) => <span key={i} title={m.tarih}>{MOOD[Math.round(Number(m.deger)) - 1] || '·'}</span>)}</div>
+              {(() => { const arr = measByKey['ruh_hali'].slice(-7).map((m: any) => Number(m.deger)); const ort = arr.reduce((a: number, b: number) => a + b, 0) / arr.length; return <div className="note" style={{ marginTop: 4 }}>Ortalama: {MOOD[Math.round(ort) - 1]} ({ort.toFixed(1)}/5)</div>; })()}
+            </div>}
             <div className="card"><h3>Ölçümler</h3>
-              {Object.keys(measByKey).length === 0 ? <div className="note">Koçun ölçüm girince görünür.</div> : Object.keys(measByKey).slice(0, 6).map((k) => {
+              {(() => { const keys = Object.keys(measByKey).filter((k) => k !== 'ruh_hali'); return keys.length === 0 ? <div className="note">Koçun ölçüm girince görünür.</div> : keys.slice(0, 6).map((k) => {
                 const arr = measByKey[k]; const l = arr[arr.length - 1];
                 return <div key={k} className="mrow"><span>{k}</span><b>{l.deger} {l.birim || ''}</b></div>;
-              })}
+              }); })()}
             </div>
             <div className="card"><h3>Ritüel uyumu (bu hafta)</h3>
               <div className="mrow" style={{ borderTop: 'none' }}><span>Tamamlanan</span><b>%{(() => { let act = 0, done = 0; days7.forEach((d) => gelHabits.forEach((r) => { if (activeOn(r, d)) { act++; if (logs.some((l) => l.ritual_id === r.id && l.tarih === d && l.yapildi)) done++; } })); return act ? Math.round((done / act) * 100) : 0; })()}</b></div>
@@ -1254,6 +1283,7 @@ export default function Rite() {
             {isRit && kTip === 'anket' && <AnketKart cfg={kCfg} done={ritDone(o.id)} onGonder={() => { if (!ritDone(o.id)) toggleRit(o.id); }} />}
             {isRit && kTip === 'diyet' && <DiyetKart cfg={kCfg} />}
             {isRit && kTip === 'nefes' && <NefesKart cfg={kCfg} done={ritDone(o.id)} onFinish={() => { if (!ritDone(o.id)) toggleRit(o.id); }} />}
+            {isRit && kTip === 'ruhhali' && <MoodKart soru={kCfg.soru} bugun={(() => { const arr = meas.filter((m) => m.anahtar === 'ruh_hali' && m.tarih === today); return arr.length ? Number(arr[arr.length - 1].deger) : null; })()} onKaydet={(d) => moodKaydet(o.id, d)} />}
 
             {isRit && (
               <Acc title="Zamanlama" summary={schedSummary} defaultOpen={kTip === 'standart'}>
