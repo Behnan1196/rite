@@ -117,20 +117,24 @@ function AnketKart({ cfg, done, onGonder }: { cfg: any; done: boolean; onGonder:
     </div>
   );
 }
-// Diyet kartı (akıllı tabak taslağı): öğün + alternatifler.
+// Diyet kartı (akıllı tabak): öğün + alternatifler; kalori/makro/hazırlanış/resim (varsa).
 function DiyetKart({ cfg }: { cfg: any }) {
   const ogunler: any[] = cfg?.ogunler || [];
   return (
-    <div className="kv"><div className="k">🍽 Öğün</div>
-      <div style={{ width: '100%' }}>
-        {ogunler.length === 0 ? <div className="note" style={{ marginTop: 0 }}>Öğün yok (taslak).</div> : ogunler.map((og: any, i: number) => (
-          <div key={i} className="warnbox" style={{ background: '#f4efe6', borderColor: '#e7e0d2', color: '#5c554a', margin: '4px 0' }}>
-            <b>{og.ad}</b>
-            {(og.alternatifler || []).length > 0 && <div className="note" style={{ margin: '4px 0 0' }}>Alternatif: {(og.alternatifler || []).join(' · ')}</div>}
+    <div style={{ margin: '4px 0 8px' }}>
+      <div className="k" style={{ marginBottom: 4 }}>🍽 Öğünler</div>
+      {ogunler.length === 0 ? <div className="note" style={{ marginTop: 0 }}>Öğün yok (taslak).</div> : ogunler.map((og: any, i: number) => (
+        <div key={i} className="ogun">
+          {og.resim && <img src={og.resim} alt="" className="ogunimg" />}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="ogunad">{og.ad}</div>
+            {(og.kalori || og.makro) && <div className="note" style={{ margin: '2px 0 0' }}>{og.kalori ? og.kalori + ' kcal' : ''}{og.kalori && og.makro ? ' · ' : ''}{og.makro || ''}</div>}
+            {(og.alternatifler || []).length > 0 && <div className="note" style={{ margin: '2px 0 0' }}>Alternatif: {(og.alternatifler || []).join(' · ')}</div>}
+            {og.hazirlanis && <div className="note" style={{ margin: '2px 0 0' }}>Hazırlanış: {og.hazirlanis}</div>}
           </div>
-        ))}
-        {cfg?.makro && <div className="note">Makro hedefi: {cfg.makro}</div>}
-      </div>
+        </div>
+      ))}
+      {cfg?.makro && <div className="note" style={{ marginTop: 4 }}>Günlük makro hedefi: {cfg.makro}</div>}
     </div>
   );
 }
@@ -1188,7 +1192,7 @@ export default function Rite() {
             {isRit && kTip === 'diyet' && <DiyetKart cfg={kCfg} />}
 
             {isRit && (
-              <Acc title="Zamanlama" summary={schedSummary} defaultOpen>
+              <Acc title="Zamanlama" summary={schedSummary} defaultOpen={kTip === 'standart'}>
                 <div className="kv"><div className="k">Süre</div>
                   <div>
                     <span className={'chip' + (!o.bitis ? ' on' : '')} onClick={() => setRitSure(o.id, null)}>Süregelen</span>
@@ -1220,13 +1224,13 @@ export default function Rite() {
                   </div>
                   <div className="note">Uygulama kapalıyken de bildirim gelir (push açıksa). Saat: Türkiye saati.</div>
                 </div>
-                <div className="kv"><div className="k">Bağlantı</div>
+                {kTip === 'standart' && <div className="kv"><div className="k">Bağlantı</div>
                   <div className="daterow">
                     <input value={urlInput} onChange={(e) => setUrlInput(e.target.value)} placeholder="https://youtube.com/…" style={{ flex: 1 }} />
                     <button className="btn ghost sm" onClick={() => setRitUrl(o.id, urlInput)}>Kaydet</button>
                     {o.url && <a className="btn ghost sm" href={o.url} target="_blank" rel="noreferrer">▶ Aç</a>}
                   </div>
-                </div>
+                </div>}
               </Acc>
             )}
 

@@ -49,6 +49,9 @@ input{width:100%;font-size:15px;padding:11px 12px;border:1px solid var(--line);b
 .slotadd:active{background:var(--green2);}
 .playbtn{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;background:#fdecea;color:var(--red);text-decoration:none;font-size:13px;margin-right:4px;flex:0 0 auto;}
 .playbtn:active{background:#f9dbd6;}
+.ogun{display:flex;gap:10px;align-items:flex-start;background:#f7f4ee;border:1px solid #e9e2d4;border-radius:10px;padding:8px 10px;margin:4px 0;}
+.ogunimg{width:56px;height:56px;object-fit:cover;border-radius:8px;flex:0 0 auto;}
+.ogunad{font-size:14px;font-weight:700;color:#3a362e;}
 .acc{border:1px solid var(--line);border-radius:10px;margin:8px 0;overflow:hidden;}
 .acchd{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;cursor:pointer;background:#faf7f1;}
 .acct{font-size:13px;color:#2f2b24;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
