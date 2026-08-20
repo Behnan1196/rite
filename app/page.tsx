@@ -347,6 +347,7 @@ export default function Rite() {
   const [kMsg, setKMsg] = useState('');
   const [kShareTo, setKShareTo] = useState('');
   const [kisiler, setKisiler] = useState<any[]>([]);
+  const [profilAd, setProfilAd] = useState('');
   const [kiAd, setKiAd] = useState('');
   const [kiKod, setKiKod] = useState('');
   const [paylasSel, setPaylasSel] = useState('');
@@ -595,8 +596,14 @@ export default function Rite() {
     studioReset(); loadActivities(); setStudioOpen(false); setActGroup('__kisisel');
   }
   async function loadKisiler(cid: string) {
-    const r = await supabase.from('dog_clients').select('kisiler').eq('id', cid).single();
+    const r = await supabase.from('dog_clients').select('kisiler,profil_ad').eq('id', cid).single();
     setKisiler((r.data?.kisiler as any[]) || []);
+    setProfilAd((r.data?.profil_ad as string) || '');
+  }
+  async function profilKaydet() {
+    if (!client) return;
+    await supabase.from('dog_clients').update({ profil_ad: profilAd.trim() || null }).eq('id', client.id);
+    setKMsg('Profil adı kaydedildi');
   }
   async function kisilerKaydet(next: any[]) {
     if (!client) return;
@@ -620,9 +627,11 @@ export default function Rite() {
     if (!isRit && o.tur === 'program') payload = { tur: 'program', ad: o.ad, adimlar: o.adimlar || [], sure_gun: o.sure_gun || null };
     else if (!isRit) payload = { tur: 'aktivite', ad: o.ad, faydalar: o.faydalar || [], aciklama: o.aciklama || null, videolar: o.videolar || [], zaman: o.zaman || 'gün', zamanlar: o.zamanlar || null, gunler: o.gunler || null, sure_gun: o.sure_gun || null, kartTipi: o.kart_tipi || null, kartConfig: o.kart_config || null, aliskanlik: o.aliskanlik };
     else payload = { tur: 'aktivite', ad: o.ad, faydalar: o.faydalar || [], url: o.url || null, zaman: o.zaman || 'gün', zamanlar: [o.zaman || 'gün'], gunler: o.gunler || null, sure_gun: null, kartTipi: o.kart_tipi || null, kartConfig: o.kart_config || null, aliskanlik: o.aliskanlik };
+    const gonderen = profilAd.trim() || client?.ad || '';
+    payload.from_ad = gonderen || null;
     const ins = await supabase.from('dog_inbox').insert({ client_id: rc.data[0].id, tur: 'aktivite', baslik: o.ad, payload, from_code: client?.share_code || null, durum: 'yeni' });
     if (ins.error) return setKMsg('Hata: ' + ins.error.message);
-    try { await fetch('/api/push/send', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ clientId: rc.data[0].id, title: '📩 Yeni paylaşım', body: o.ad + ' · Rite Inbox\'ında', url: '/' }) }); } catch (_) { /* sessiz */ }
+    try { await fetch('/api/push/send', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ clientId: rc.data[0].id, title: gonderen ? '📩 ' + gonderen : '📩 Yeni paylaşım', body: (gonderen ? gonderen + ' paylaştı: ' : '') + o.ad, url: '/' }) }); } catch (_) { /* sessiz */ }
     setKShareTo(''); setPaylasSel(''); setKMsg('Paylaşıldı → ' + (kisiAd(k) || k));
   }
   async function silAktivite(act: any) {
@@ -1322,7 +1331,7 @@ export default function Rite() {
                 {(
                   <>
                     <div style={{ fontSize: 13, fontWeight: 700 }}>🎁 {v.baslik || v.payload?.ad}</div>
-                    <div className="note" style={{ margin: '2px 0' }}>Aktivite paylaşımı{v.from_code ? ' · ' + v.from_code : ''}</div>
+                    <div className="note" style={{ margin: '2px 0' }}>{v.payload?.from_ad ? 'Kimden: ' + v.payload.from_ad : 'Paylaşım'}{v.from_code ? ' · ' + v.from_code : ''}</div>
                     {(v.payload?.faydalar || []).length > 0 && <div>{Array.from(new Set((v.payload.faydalar || []).map((k: string) => faydaMap[k]?.alan).filter(Boolean))).map((a: any) => <span key={a} className="tagp p-alan">{a}</span>)}</div>}
                     {v.payload?.aciklama && <div className="note" style={{ marginTop: 4 }}>{v.payload.aciklama}</div>}
                     <div className="rowbtns">
@@ -1361,6 +1370,13 @@ export default function Rite() {
         {screen === 'bilgi' && (
           <div>
             <h2>Ayarlar</h2>
+            <div className="card"><h3>Profil</h3>
+              <label className="fldlbl" style={{ marginTop: 0 }}>Görünen adın (paylaşımlarında "kimden" olarak görünür)</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input value={profilAd} onChange={(e) => setProfilAd(e.target.value)} placeholder="ör. Behnan" />
+                <button className="btn sm" style={{ whiteSpace: 'nowrap' }} onClick={profilKaydet}>Kaydet</button>
+              </div>
+            </div>
             <div className="card"><h3>Paylaşım</h3>
               <div className="mrow" style={{ borderTop: 'none' }}><span>Paylaşım kodun</span><b style={{ letterSpacing: 1 }}>{client.share_code || '…'}</b></div>
               <div className="note" style={{ marginTop: 2 }}>Bu kodu verdiğin kişiler sana ritüel/aktivite yollayabilir; sen de aşağıda tanımladığın kişilere paylaşırsın.</div>
