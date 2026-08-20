@@ -346,6 +346,10 @@ export default function Rite() {
   const [kVin, setKVin] = useState({ baslik: '', url: '' });
   const [kMsg, setKMsg] = useState('');
   const [kShareTo, setKShareTo] = useState('');
+  const [kisiler, setKisiler] = useState<any[]>([]);
+  const [kiAd, setKiAd] = useState('');
+  const [kiKod, setKiKod] = useState('');
+  const [paylasSel, setPaylasSel] = useState('');
   // Studio program modu (Faz B): çok adımlı, adım-bazlı slot/gün.
   const [stMode, setStMode] = useState<'aktivite' | 'program'>('aktivite');
   const [stAdimlar, setStAdimlar] = useState<any[]>([]);
@@ -395,7 +399,7 @@ export default function Rite() {
     setSelDate(iso(new Date()));
     try {
       const s = localStorage.getItem(LS);
-      if (s) { const c = JSON.parse(s); setClient(c); loadData(c.id); loadInbox(c.id); ensureShareCode(c); reassignPush(c.id); }
+      if (s) { const c = JSON.parse(s); setClient(c); loadData(c.id); loadInbox(c.id); loadKisiler(c.id); ensureShareCode(c); reassignPush(c.id); }
     } catch (_) {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -589,14 +593,35 @@ export default function Rite() {
     if (r.error) return setKMsg('Hata: ' + r.error.message);
     studioReset(); loadActivities(); setStudioOpen(false); setActGroup('__kisisel');
   }
-  async function paylasAktivite(act: any) {
-    const kod = kShareTo.trim().toUpperCase();
-    if (!kod) return setKMsg('Alıcının paylaşım kodunu gir');
-    const rc = await supabase.from('dog_clients').select('id').eq('share_code', kod).limit(1);
-    if (rc.error || !rc.data || !rc.data.length) return setKMsg('Kod bulunamadı: ' + kod);
-    const ins = await supabase.from('dog_inbox').insert({ client_id: rc.data[0].id, tur: 'aktivite', baslik: act.ad, payload: { tur: act.tur || 'aktivite', ad: act.ad, faydalar: act.faydalar || [], aciklama: act.aciklama || null, videolar: act.videolar || [], zaman: act.zaman || 'gün', zamanlar: act.zamanlar || null, gunler: act.gunler || null, sure_gun: act.sure_gun || null, adimlar: act.adimlar || null }, from_code: client?.share_code || null, durum: 'yeni' });
+  async function loadKisiler(cid: string) {
+    const r = await supabase.from('dog_clients').select('kisiler').eq('id', cid).single();
+    setKisiler((r.data?.kisiler as any[]) || []);
+  }
+  async function kisilerKaydet(next: any[]) {
+    if (!client) return;
+    setKisiler(next);
+    await supabase.from('dog_clients').update({ kisiler: next }).eq('id', client.id);
+  }
+  function kisiEkle() {
+    const ad = kiAd.trim(), kod = kiKod.trim().toUpperCase();
+    if (!ad || !kod) return;
+    kisilerKaydet([...kisiler, { ad, kod }]); setKiAd(''); setKiKod('');
+  }
+  const kisiSil = (i: number) => kisilerKaydet(kisiler.filter((_, j) => j !== i));
+  const kisiAd = (kod: string) => kisiler.find((x) => x.kod === kod)?.ad;
+  // Ritüel / aktivite / programı bir paylaşım koduna yolla (dog_inbox).
+  async function paylas(o: any, isRit: boolean, kod: string) {
+    const k = (kod || '').trim().toUpperCase();
+    if (!k) return setKMsg('Kişi seç ya da kod gir');
+    const rc = await supabase.from('dog_clients').select('id').eq('share_code', k).limit(1);
+    if (rc.error || !rc.data || !rc.data.length) return setKMsg('Kod bulunamadı: ' + k);
+    let payload: any;
+    if (!isRit && o.tur === 'program') payload = { tur: 'program', ad: o.ad, adimlar: o.adimlar || [], sure_gun: o.sure_gun || null };
+    else if (!isRit) payload = { tur: 'aktivite', ad: o.ad, faydalar: o.faydalar || [], aciklama: o.aciklama || null, videolar: o.videolar || [], zaman: o.zaman || 'gün', zamanlar: o.zamanlar || null, gunler: o.gunler || null, sure_gun: o.sure_gun || null, kartTipi: o.kart_tipi || null, kartConfig: o.kart_config || null, aliskanlik: o.aliskanlik };
+    else payload = { tur: 'aktivite', ad: o.ad, faydalar: o.faydalar || [], url: o.url || null, zaman: o.zaman || 'gün', zamanlar: [o.zaman || 'gün'], gunler: o.gunler || null, sure_gun: null, kartTipi: o.kart_tipi || null, kartConfig: o.kart_config || null, aliskanlik: o.aliskanlik };
+    const ins = await supabase.from('dog_inbox').insert({ client_id: rc.data[0].id, tur: 'aktivite', baslik: o.ad, payload, from_code: client?.share_code || null, durum: 'yeni' });
     if (ins.error) return setKMsg('Hata: ' + ins.error.message);
-    setKShareTo(''); setKMsg('Gönderildi → ' + kod);
+    setKShareTo(''); setPaylasSel(''); setKMsg('Paylaşıldı → ' + (kisiAd(k) || k));
   }
   async function silAktivite(act: any) {
     if (!confirm('Bu kişisel aktivite havuzdan silinsin mi? (Ajandadaki ritüeller kalır)')) return;
@@ -826,7 +851,7 @@ export default function Rite() {
       await supabase.from('dog_activities').insert({ client_id: client.id, tur: 'program', ad: p.ad, grup: 'Program', adimlar: p.adimlar || [], sure_gun: p.sure_gun || null, faydalar: [], kaynak_etiket: 'Paylaşılan', aktif: true });
     } else {
       const alan0 = (p.faydalar && p.faydalar.length) ? (faydaList.find((f) => f.kod === p.faydalar[0])?.alan || null) : null;
-      await supabase.from('dog_activities').insert({ client_id: client.id, tur: 'aktivite', ad: p.ad, grup: alan0 || 'Kişisel', faydalar: p.faydalar || [], aciklama: p.aciklama || null, videolar: p.videolar || null, zaman: p.zaman || 'gün', zamanlar: p.zamanlar || null, gunler: p.gunler || null, sure_gun: p.sure_gun || null, kaynak_etiket: 'Paylaşılan', aktif: true });
+      await supabase.from('dog_activities').insert({ client_id: client.id, tur: 'aktivite', ad: p.ad, grup: alan0 || 'Kişisel', faydalar: p.faydalar || [], aciklama: p.aciklama || null, videolar: p.videolar || null, zaman: p.zaman || 'gün', zamanlar: p.zamanlar || null, gunler: p.gunler || null, sure_gun: p.sure_gun || null, kart_tipi: p.kartTipi || null, kart_config: p.kartConfig || null, kaynak_etiket: 'Paylaşılan', aktif: true });
     }
     await supabase.from('dog_inbox').update({ durum: 'alindi' }).eq('id', item.id);
     loadActivities(); loadInbox(client.id);
@@ -1272,7 +1297,7 @@ export default function Rite() {
           <div className="sheet topsheet" onClick={(e) => e.stopPropagation()}>
             <button className="x" onClick={() => setInboxOpen(false)}>×</button>
             <h2 style={{ marginTop: 2 }}>📥 Inbox</h2>
-            <div className="note" style={{ marginTop: 0 }}>Aklına takılan her şeyin ilk durağı; sonra bir güne yerleştir. Paylaşım kodun: <b>{client.share_code || '…'}</b> <button className="btn ghost sm" style={{ marginLeft: 6 }} onClick={() => client && loadInbox(client.id)}>🔄</button></div>
+            <div className="note" style={{ marginTop: 0 }}>Aklına takılan her şeyin ilk durağı; sonra bir güne yerleştir. <button className="btn ghost sm" style={{ marginLeft: 6 }} onClick={() => client && loadInbox(client.id)}>🔄 Yenile</button></div>
             <input ref={fotoRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={onFoto} />
             {!yeniAcik ? (
               <button className="btn" style={{ width: '100%', marginTop: 8 }} onClick={() => { setIb({ t: '', u: '' }); setIbImg(null); setYeniAcik(true); }}>＋ Ekle</button>
@@ -1334,6 +1359,18 @@ export default function Rite() {
         {screen === 'bilgi' && (
           <div>
             <h2>Ayarlar</h2>
+            <div className="card"><h3>Paylaşım</h3>
+              <div className="mrow" style={{ borderTop: 'none' }}><span>Paylaşım kodun</span><b style={{ letterSpacing: 1 }}>{client.share_code || '…'}</b></div>
+              <div className="note" style={{ marginTop: 2 }}>Bu kodu verdiğin kişiler sana ritüel/aktivite yollayabilir; sen de aşağıda tanımladığın kişilere paylaşırsın.</div>
+              <label className="fldlbl">Kişiler</label>
+              {kisiler.length === 0 ? <div className="note" style={{ marginTop: 0 }}>Henüz kişi yok.</div> : kisiler.map((ki, i) => (
+                <div key={i} className="mrow"><span>{ki.ad} <span className="note" style={{ margin: 0 }}>· {ki.kod}</span></span><button className="btn ghost sm" style={{ color: 'var(--red)', borderColor: '#e6c4bd' }} onClick={() => kisiSil(i)}>Sil</button></div>
+              ))}
+              <div className="grid" style={{ marginTop: 6 }}>
+                <div><input value={kiAd} onChange={(e) => setKiAd(e.target.value)} placeholder="Ad (ör. Eşim)" /></div>
+                <div style={{ display: 'flex', gap: 6 }}><input value={kiKod} onChange={(e) => setKiKod(e.target.value)} placeholder="RT-XXXXX" autoCapitalize="characters" /><button className="btn sm" onClick={kisiEkle}>Ekle</button></div>
+              </div>
+            </div>
             <div className="card"><h3>Gizlilik-önce</h3><p className="note">Anonim. Hesap yok, e-posta yok. Reklam/veri satışı yok — Rite bir hediye.</p></div>
             <div className="card"><h3>Anti-retention</h3><p className="note">Olgunlaşan ritüelleri emekli eder; seni bağımlı değil özerk kılar. Düşük uyumu suçlamaz, sinyal sayar.</p></div>
             <div className="card"><h3>Bildirimler</h3>
@@ -1466,15 +1503,18 @@ export default function Rite() {
               </Acc>
             )}
 
-            {!isRit && personal && (
-              <div className="kv"><div className="k">Gönder</div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <input value={kShareTo} onChange={(e) => setKShareTo(e.target.value)} placeholder="RT-XXXXX" autoCapitalize="characters" />
-                  <button className="btn sm" style={{ whiteSpace: 'nowrap' }} onClick={() => paylasAktivite(o)}>Gönder</button>
-                </div>
-                {kMsg && <div className="msg">{kMsg}</div>}
+            <Acc title="Paylaş" summary={kisiler.length ? kisiler.length + ' kişi' : 'kod ile'}>
+              {kisiler.length > 0 && <select value={paylasSel} onChange={(e) => setPaylasSel(e.target.value)}>
+                <option value="">— kişi seç —</option>
+                {kisiler.map((ki, i) => <option key={i} value={ki.kod}>{ki.ad} ({ki.kod})</option>)}
+              </select>}
+              <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                <input value={kShareTo} onChange={(e) => setKShareTo(e.target.value)} placeholder="RT-XXXXX (ya da kişi seç)" autoCapitalize="characters" />
+                <button className="btn sm" style={{ whiteSpace: 'nowrap' }} onClick={() => paylas(o, isRit, paylasSel || kShareTo)}>Paylaş</button>
               </div>
-            )}
+              {kisiler.length === 0 && <div className="note">Kişi tanımlamak için Ayarlar → Paylaşım.</div>}
+              {kMsg && <div className="msg">{kMsg}</div>}
+            </Acc>
 
             <div className="rowbtns" style={{ marginTop: 14 }}>
               {isProg && <button className="btn" onClick={() => { programBaslat(o); setDetay(null); setScreen('ajanda'); }}>Ajandama başlat{o.sure_gun ? ' (' + o.sure_gun + ' gün)' : ''}</button>}
