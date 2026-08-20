@@ -1147,7 +1147,8 @@ export default function Rite() {
                   <div className="calgrid">
                     {cells.map((ds, i) => {
                       if (!ds) return <div key={i} className="calcell empty" />;
-                      const gunRit = rituals.filter((r) => !r.mezun && activeOn(r, ds));
+                      // Sayıma yalnız "yapılabilir" (done'lanabilir) ritüeller: mesaj tipi video (done:false) hariç.
+                      const gunRit = rituals.filter((r) => !r.mezun && activeOn(r, ds) && !(r.kart_tipi === 'video' && r.kart_config && r.kart_config.done === false));
                       const n = gunRit.length;
                       const done = gunRit.filter((r) => logs.some((l) => l.ritual_id === r.id && l.tarih === ds && l.yapildi)).length;
                       return (
