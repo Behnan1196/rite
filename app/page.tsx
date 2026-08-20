@@ -300,7 +300,7 @@ export default function Rite() {
   const [code, setCode] = useState('');
   const [screen, setScreen] = useState('ajanda');
   const [inboxOpen, setInboxOpen] = useState(false);
-  const [ajView, setAjView] = useState<'gun' | 'hafta'>('gun');
+  const [ajView, setAjView] = useState<'gun' | 'ay'>('gun');
   const [selDate, setSelDate] = useState('');
   const [activities, setActivities] = useState<any[]>([]);
   const [actGroup, setActGroup] = useState('');
@@ -376,6 +376,12 @@ export default function Rite() {
     dt.setDate(dt.getDate() + delta);
     setSelDate(iso(dt));
   }
+  function shiftMonth(delta: number) {
+    const dt = parseD(selDate || today);
+    dt.setDate(1); dt.setMonth(dt.getMonth() + delta);
+    setSelDate(iso(dt));
+  }
+  const ayLabel = (d: string) => { const dt = parseD(d); return MONTHS[dt.getMonth()] + ' ' + dt.getFullYear(); };
   function weekDays(d: string) {
     const dt = parseD(d);
     const dow = (dt.getDay() + 6) % 7; // Pazartesi=0
@@ -1006,14 +1012,15 @@ export default function Rite() {
         {screen === 'ajanda' && (
           <div>
             <h2>Ajanda</h2>
-            <div className="daterow">
-              <button className="arrow" onClick={() => shiftDay(ajView === 'hafta' ? -7 : -1)}>‹</button>
-              <div className="dlabel">{ajView === 'hafta' ? weekLabel(day) : dayLabel(day)}</div>
-              <button className="arrow" onClick={() => shiftDay(ajView === 'hafta' ? 7 : 1)}>›</button>
-              {day !== today && <button className="today" onClick={() => setSelDate(today)}>Bugün</button>}
-            </div>
             <div className="vswitch">
-              {(['gun', 'hafta'] as const).map((v) => <div key={v} className={'vseg' + (ajView === v ? ' on' : '')} onClick={() => setAjView(v)}>{v === 'gun' ? 'Gün' : 'Hafta'}</div>)}
+              <div className={'vseg' + (ajView === 'gun' ? ' on' : '')} onClick={() => setAjView('gun')}>Gün</div>
+              <div className={'vseg' + (ajView === 'ay' ? ' on' : '')} onClick={() => setAjView('ay')}>📅 Ay</div>
+            </div>
+            <div className="daterow">
+              <button className="arrow" onClick={() => (ajView === 'ay' ? shiftMonth(-1) : shiftDay(-1))}>‹</button>
+              <div className="dlabel">{ajView === 'ay' ? ayLabel(day) : dayLabel(day)}</div>
+              <button className="arrow" onClick={() => (ajView === 'ay' ? shiftMonth(1) : shiftDay(1))}>›</button>
+              {day !== today && <button className="today" onClick={() => setSelDate(today)}>Bugün</button>}
             </div>
 
             {programGruplari.length > 0 && <div style={{ marginBottom: 4 }}>{programGruplari.map((g) => {
@@ -1126,26 +1133,35 @@ export default function Rite() {
               </div>
             ))}
 
-            {ajView === 'hafta' && (
-              <div className="card">
-                <p className="note" style={{ marginBottom: 8 }}>Haftalık uyum — yalnız alışkanlıklar izlenir.</p>
-                <table className="tracker">
-                  <thead><tr><th style={{ textAlign: 'left' }}>Alışkanlık</th>{weekArr.map((d) => <th key={d}>{WD[parseD(d).getDay()]}</th>)}</tr></thead>
-                  <tbody>
-                    {weekHabits.map((rt) => (
-                      <tr key={rt.id}><td className="h">{rt.ad}</td>
-                        {weekArr.map((d) => {
-                          if (!activeOn(rt, d)) return <td key={d}><span className="dot na"></span></td>;
-                          const ok = logs.some((l) => l.ritual_id === rt.id && l.tarih === d && l.yapildi);
-                          return <td key={d}><span className={'dot ' + (ok ? 'y' : 'n')}>{ok ? '✓' : '·'}</span></td>;
-                        })}
-                      </tr>
-                    ))}
-                    {weekHabits.length === 0 && <tr><td className="h" colSpan={8}>Bu hafta alışkanlık yok.</td></tr>}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            {ajView === 'ay' && (() => {
+              const base = parseD(day); const y = base.getFullYear(), mo = base.getMonth();
+              const startDow = (new Date(y, mo, 1).getDay() + 6) % 7; // Pzt=0
+              const gunSay = new Date(y, mo + 1, 0).getDate();
+              const cells: (string | null)[] = [];
+              for (let i = 0; i < startDow; i++) cells.push(null);
+              for (let d = 1; d <= gunSay; d++) cells.push(iso(new Date(y, mo, d)));
+              while (cells.length % 7) cells.push(null);
+              return (
+                <div className="card">
+                  <div className="calhead">{['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'].map((w) => <span key={w}>{w}</span>)}</div>
+                  <div className="calgrid">
+                    {cells.map((ds, i) => {
+                      if (!ds) return <div key={i} className="calcell empty" />;
+                      const gunRit = rituals.filter((r) => !r.mezun && activeOn(r, ds));
+                      const n = gunRit.length;
+                      const done = gunRit.filter((r) => logs.some((l) => l.ritual_id === r.id && l.tarih === ds && l.yapildi)).length;
+                      return (
+                        <button key={i} className={'calcell' + (ds === today ? ' today' : '') + (ds === day ? ' sel' : '')} onClick={() => { setSelDate(ds); setAjView('gun'); }}>
+                          <span className="calnum">{parseD(ds).getDate()}</span>
+                          {n > 0 && <span className={'calcount' + (done >= n ? ' full' : '')}>{done}/{n}</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="note" style={{ marginTop: 6 }}>Her günde yapılan/planlanan task. Bir güne dokun → o güne git.</div>
+                </div>
+              );
+            })()}
 
           </div>
         )}
@@ -1275,6 +1291,23 @@ export default function Rite() {
               )); })()}
               <div className="soul">Seri = art arda yaptığın gün sayısı; bugünü kaçırmadıysan kırılmaz. Kısa seri de bir başlangıç.</div>
             </div>}
+            <div className="card"><h3>Bu hafta (alışkanlık ızgarası)</h3>
+              <table className="tracker">
+                <thead><tr><th style={{ textAlign: 'left' }}>Alışkanlık</th>{weekArr.map((d) => <th key={d}>{WD[parseD(d).getDay()]}</th>)}</tr></thead>
+                <tbody>
+                  {weekHabits.map((rt) => (
+                    <tr key={rt.id}><td className="h">{rt.ad}</td>
+                      {weekArr.map((d) => {
+                        if (!activeOn(rt, d)) return <td key={d}><span className="dot na"></span></td>;
+                        const ok = logs.some((l) => l.ritual_id === rt.id && l.tarih === d && l.yapildi);
+                        return <td key={d}><span className={'dot ' + (ok ? 'y' : 'n')}>{ok ? '✓' : '·'}</span></td>;
+                      })}
+                    </tr>
+                  ))}
+                  {weekHabits.length === 0 && <tr><td className="h" colSpan={8}>Bu hafta alışkanlık yok.</td></tr>}
+                </tbody>
+              </table>
+            </div>
             <div className="card"><h3>Ölçümler</h3>
               {(() => { const keys = Object.keys(measByKey).filter((k) => k !== 'ruh_hali'); return keys.length === 0 ? <div className="note">Koçun ölçüm girince görünür.</div> : keys.slice(0, 6).map((k) => {
                 const arr = measByKey[k]; const l = arr[arr.length - 1];
