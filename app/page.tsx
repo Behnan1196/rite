@@ -470,6 +470,7 @@ export default function Rite() {
     const sub = await currentSub(); if (!sub) return;
     const j: any = sub.toJSON();
     await supabase.from('dog_push_subs').upsert({ client_id: clientId, endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth }, { onConflict: 'endpoint' });
+    setPushOn(true); // abonelik zaten var → UI'da "açık" göster (her açılışta yeniden açmaya gerek yok)
   }
   async function removePushForDevice() {
     const sub = await currentSub(); if (!sub) return;
@@ -621,6 +622,7 @@ export default function Rite() {
     else payload = { tur: 'aktivite', ad: o.ad, faydalar: o.faydalar || [], url: o.url || null, zaman: o.zaman || 'gün', zamanlar: [o.zaman || 'gün'], gunler: o.gunler || null, sure_gun: null, kartTipi: o.kart_tipi || null, kartConfig: o.kart_config || null, aliskanlik: o.aliskanlik };
     const ins = await supabase.from('dog_inbox').insert({ client_id: rc.data[0].id, tur: 'aktivite', baslik: o.ad, payload, from_code: client?.share_code || null, durum: 'yeni' });
     if (ins.error) return setKMsg('Hata: ' + ins.error.message);
+    try { await fetch('/api/push/send', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ clientId: rc.data[0].id, title: '📩 Yeni paylaşım', body: o.ad + ' · Rite Inbox\'ında', url: '/' }) }); } catch (_) { /* sessiz */ }
     setKShareTo(''); setPaylasSel(''); setKMsg('Paylaşıldı → ' + (kisiAd(k) || k));
   }
   async function silAktivite(act: any) {
