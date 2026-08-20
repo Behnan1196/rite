@@ -109,6 +109,21 @@ function Acc({ title, summary, defaultOpen, children }: { title: string; summary
     </div>
   );
 }
+// Video linkini tanı: YouTube / Instagram (public) → gömülü oynatıcı; değilse dış link.
+function embedInfo(url?: string | null): { tur: 'yt' | 'ig'; src: string } | null {
+  if (!url) return null;
+  let m = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|shorts\/|embed\/|live\/))([\w-]{6,})/);
+  if (m) return { tur: 'yt', src: 'https://www.youtube.com/embed/' + m[1] };
+  m = url.match(/instagram\.com\/(reel|reels|p|tv)\/([\w-]+)/);
+  if (m) { const t = m[1] === 'reels' ? 'reel' : m[1]; return { tur: 'ig', src: 'https://www.instagram.com/' + t + '/' + m[2] + '/embed' }; }
+  return null;
+}
+function EmbedVideo({ url }: { url?: string | null }) {
+  const info = embedInfo(url);
+  if (!info) return url ? <a className="btn ghost sm" href={url} target="_blank" rel="noreferrer">▶ Aç</a> : null;
+  if (info.tur === 'yt') return <div className="ytwrap"><iframe src={info.src} title="video" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen /></div>;
+  return <iframe className="igframe" src={info.src} title="video" scrolling="no" allowFullScreen />;
+}
 // Anket kartı (taslak): soruları form olarak gösterir; Gönder → ritüeli "yapıldı" işaretler.
 function AnketKart({ cfg, done, onGonder }: { cfg: any; done: boolean; onGonder: () => void }) {
   const [ans, setAns] = useState<string[]>([]);
@@ -1368,7 +1383,7 @@ export default function Rite() {
             {areas.length > 0 && <div style={{ margin: '6px 0' }}>{areas.map((a) => <span key={a} className="tagp p-alan">{a}</span>)}</div>}
 
             {isRit && kTip === 'standart' && o.kart_config?.resim && <img src={o.kart_config.resim} alt="" style={{ maxWidth: '100%', borderRadius: 8, margin: '4px 0 8px', display: 'block' }} />}
-            {isRit && kTip === 'video' && <div className="kv"><div className="k">🎬 Video</div><div>{(kCfg.url || o.url) ? <a className="btn" href={kCfg.url || o.url} target="_blank" rel="noreferrer">▶ Videoyu aç</a> : <span className="note" style={{ marginTop: 0 }}>Video linki yok</span>}</div></div>}
+            {isRit && kTip === 'video' && <div style={{ margin: '4px 0 8px' }}>{(kCfg.url || o.url) ? <EmbedVideo url={kCfg.url || o.url} /> : <span className="note" style={{ marginTop: 0 }}>Video linki yok</span>}</div>}
             {isRit && kTip === 'anket' && <AnketKart cfg={kCfg} done={ritDone(o.id)} onGonder={() => { if (!ritDone(o.id)) toggleRit(o.id); }} />}
             {isRit && kTip === 'diyet' && <DiyetKart cfg={kCfg} />}
             {isRit && kTip === 'nefes' && <NefesKart cfg={kCfg} done={ritDone(o.id)} onFinish={() => { if (!ritDone(o.id)) toggleRit(o.id); }} />}
@@ -1426,7 +1441,7 @@ export default function Rite() {
                 {act.ozet && <p style={{ fontSize: 13, marginTop: 2, color: '#3a362e', lineHeight: 1.5 }}>{act.ozet}</p>}
                 {act.aciklama && <div className="kv"><div className="k">Nedir / neden</div><div className="v">{act.aciklama}</div></div>}
                 {act.nasil && <div className="kv"><div className="k">Nasıl yapılır</div><div className="v">{act.nasil}</div></div>}
-                {(act.videolar || []).length > 0 && <div className="kv"><div className="k">Videolar</div>{act.videolar.map((v: any, i: number) => <a key={i} className="vidlink" href={v.url} target="_blank" rel="noreferrer">▶ {v.baslik}</a>)}</div>}
+                {(act.videolar || []).length > 0 && <div className="kv"><div className="k">Videolar</div><div style={{ width: '100%' }}>{act.videolar.map((v: any, i: number) => <div key={i} style={{ marginBottom: 6 }}>{v.baslik && <div className="note" style={{ margin: '0 0 2px' }}>{v.baslik}</div>}<EmbedVideo url={v.url} /></div>)}</div></div>}
                 {(act.alternatifler || []).length > 0 && <div className="kv"><div className="k">Alternatifler</div><div className="v">{act.alternatifler.join(' · ')}</div></div>}
                 {act.dikkat && <div className="kv"><div className="k">Dikkat edilecekler</div><div className="dikkat">⚠ {act.dikkat}</div></div>}
                 {act.kaynak && <div className="kv"><div className="k">Kaynak</div><div className="v">{act.kaynak}</div></div>}
