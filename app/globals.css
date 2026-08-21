@@ -165,9 +165,11 @@ input{width:100%;font-size:15px;padding:11px 12px;border:1px solid var(--line);b
 .modal.top2{z-index:70;}
 .detbaslik{width:100%;border:none;background:transparent;font-weight:700;font-size:17px;color:var(--ink,#2a2620);padding:2px 34px 4px 0;outline:none;}
 .detbaslik:focus{border-bottom:1px solid var(--line);}
-.detacts{display:flex;gap:8px;margin:8px 0 4px;flex-wrap:wrap;}
-.detact{font-size:12px;font-weight:700;border:1px solid var(--line);background:#fff;color:var(--green);border-radius:20px;padding:6px 12px;cursor:pointer;}
-.detact:active{background:var(--green2,#eaf5ee);}
+.dettoolbar{position:sticky;bottom:0;display:flex;gap:4px;justify-content:space-around;background:#f4efe6;border-top:1px solid var(--line);margin:16px -16px -30px;padding:8px 6px calc(8px + env(safe-area-inset-bottom,0px));}
+.tbtn{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;border:none;background:transparent;color:#5c554a;font-size:10px;font-weight:700;cursor:pointer;padding:4px 2px;}
+.tbtn .tbic{font-size:18px;line-height:1;}
+.tbtn:active{opacity:.6;}
+.tbtn.danger{color:var(--red);}
 .topsheet{border-radius:0 0 18px 18px;max-height:88vh;padding:16px 16px 24px;animation:down .2s ease;}
 @keyframes down{from{transform:translateY(-20px);opacity:.6}to{transform:none;opacity:1}}
 .sheet .x{position:absolute;top:14px;right:14px;z-index:2;background:#efe8da;border:none;border-radius:50%;width:30px;height:30px;font-size:16px;cursor:pointer;color:#6b6250;}

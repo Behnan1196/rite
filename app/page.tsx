@@ -1526,10 +1526,6 @@ export default function Rite() {
             ) : <h2 style={{ paddingRight: 34 }}>{o.ad}</h2>}
             <div className="m">{(isRit ? o.kaynak : o.grup) || ''}{act?.kanit_duzeyi && <span className="evi">kanıt: {act.kanit_duzeyi}</span>}</div>
             {areas.length > 0 && <div style={{ margin: '6px 0' }}>{areas.map((a) => <span key={a} className="tagp p-alan">{a}</span>)}</div>}
-            <div className="detacts">
-              {isRit && <button className="detact" onClick={() => setZamanOpen(true)}>🕐 Zamanlama</button>}
-              <button className="detact" onClick={() => { setPaylasOpen(true); setKMsg(''); }}>📤 Paylaş</button>
-            </div>
 
             {isRit && kTip === 'standart' && o.kart_config?.resim && <img src={o.kart_config.resim} alt="" style={{ maxWidth: '100%', borderRadius: 8, margin: '4px 0 8px', display: 'block' }} />}
             {isRit && kTip === 'bilgi' && <BilgiKart cfg={kCfg} done={ritDone(o.id)} onOkudum={() => { if (!ritDone(o.id)) toggleRit(o.id); }} />}
@@ -1638,13 +1634,16 @@ export default function Rite() {
               </div>
             )}
 
-            <div className="rowbtns" style={{ marginTop: 14 }}>
-              {isProg && <button className="btn" onClick={() => { programBaslat(o); setDetay(null); setScreen('ajanda'); }}>Ajandama başlat{o.sure_gun ? ' (' + o.sure_gun + ' gün)' : ''}</button>}
-              {!isRit && !isProg && <button className="btn" onClick={() => { aktiviteEkleSlotlar(o, addSlot || undefined); setDetay(null); setAddSlot(null); setScreen('ajanda'); }}>Ajandama ekle{addSlot ? ' (' + (TODS.find((t) => t[0] === addSlot)?.[1]) + ')' : ''}</button>}
-              {personal && !isProg && <button className="btn ghost sm" onClick={() => { setDetay(null); openStudioEdit(act); }}>✎ Düzenle</button>}
-              {!isRit && personal && <button className="btn ghost sm" style={{ color: 'var(--red)', borderColor: '#e6c4bd' }} onClick={() => silAktivite(o)}>Sil</button>}
-              {isRit && <button className="btn sm ghost" onClick={() => { const id = o.id; setDetay(null); ritSil(id); }}>Ajandadan kaldır</button>}
-              {isRit && !o.mezun && !o.bitis && <button className="btn sm ghost" onClick={() => { const id = o.id; setDetay(null); emekli(id); }}>Emekli et</button>}
+            {isProg && <button className="btn" style={{ width: '100%', marginTop: 14 }} onClick={() => { programBaslat(o); setDetay(null); setScreen('ajanda'); }}>Ajandama başlat{o.sure_gun ? ' (' + o.sure_gun + ' gün)' : ''}</button>}
+            {!isRit && !isProg && <button className="btn" style={{ width: '100%', marginTop: 14 }} onClick={() => { aktiviteEkleSlotlar(o, addSlot || undefined); setDetay(null); setAddSlot(null); setScreen('ajanda'); }}>Ajandama ekle{addSlot ? ' (' + (TODS.find((t) => t[0] === addSlot)?.[1]) + ')' : ''}</button>}
+
+            <div className="dettoolbar">
+              {isRit && <button className="tbtn" onClick={() => setZamanOpen(true)}><span className="tbic">🕐</span>Zamanlama</button>}
+              <button className="tbtn" onClick={() => { setPaylasOpen(true); setKMsg(''); }}><span className="tbic">📤</span>Paylaş</button>
+              {personal && !isProg && <button className="tbtn" onClick={() => { setDetay(null); openStudioEdit(act); }}><span className="tbic">✎</span>Düzenle</button>}
+              {isRit && <button className="tbtn danger" onClick={() => { const id = o.id; setDetay(null); ritSil(id); }}><span className="tbic">🗑</span>Kaldır</button>}
+              {!isRit && personal && <button className="tbtn danger" onClick={() => silAktivite(o)}><span className="tbic">🗑</span>Sil</button>}
+              {isRit && !o.mezun && !o.bitis && <button className="tbtn" onClick={() => { const id = o.id; setDetay(null); emekli(id); }}><span className="tbic">🎓</span>Emekli</button>}
             </div>
           </div>
         </div>
