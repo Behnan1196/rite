@@ -48,8 +48,8 @@ function inlineMetin(s: string): ReactNode[] {
   return s.split(/(\*\*[^*]+\*\*)/g).map((p, i) => (p.startsWith('**') && p.endsWith('**') ? <strong key={i}>{p.slice(2, -2)}</strong> : <span key={i}>{p}</span>));
 }
 // # başlık, ## alt başlık, - madde, boş satır = paragraf ayırıcı
-function renderMetin(t: string): ReactNode[] {
-  const lines = (t || '').split('\n'); const out: ReactNode[] = []; let bullets: string[] = [];
+function renderFlow(lines: string[]): ReactNode[] {
+  const out: ReactNode[] = []; let bullets: string[] = [];
   const flush = () => { if (bullets.length) { out.push(<ul key={'u' + out.length} className="bilul">{bullets.map((b, i) => <li key={i}>{inlineMetin(b)}</li>)}</ul>); bullets = []; } };
   lines.forEach((ln, idx) => {
     const s = ln.trim();
@@ -60,6 +60,20 @@ function renderMetin(t: string): ReactNode[] {
     else { flush(); out.push(<p key={idx} className="bilp">{inlineMetin(s)}</p>); }
   });
   flush(); return out;
+}
+// "?? Başlık" satırı = açılır (katlanır) senaryo bölümü. Öncesi normal akış.
+function renderMetin(t: string): ReactNode[] {
+  const lines = (t || '').split('\n');
+  const blocks: { coll: boolean; title: string; lines: string[] }[] = [];
+  let cur = { coll: false, title: '', lines: [] as string[] };
+  for (const ln of lines) {
+    if (ln.trim().startsWith('?? ')) { blocks.push(cur); cur = { coll: true, title: ln.trim().slice(3), lines: [] }; }
+    else cur.lines.push(ln);
+  }
+  blocks.push(cur);
+  return blocks.filter((b) => b.coll || b.lines.some((l) => l.trim())).map((b, i) => (
+    b.coll ? <Acc key={i} title={b.title}>{renderFlow(b.lines)}</Acc> : <div key={i}>{renderFlow(b.lines)}</div>
+  ));
 }
 const MOOD = ['😞', '😕', '😐', '🙂', '😄'];
 // Nefes desenleri: faz = [etiket, saniye, çember-ölçek]
