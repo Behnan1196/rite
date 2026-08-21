@@ -346,6 +346,9 @@ export default function Rite() {
   const [ib, setIb] = useState({ t: '', u: '' });
   const [yeniAcik, setYeniAcik] = useState(false);
   const [ibImg, setIbImg] = useState<string | null>(null);
+  const [ekMenu, setEkMenu] = useState(false);
+  const [randevuMod, setRandevuMod] = useState(false);
+  const [rdvTarih, setRdvTarih] = useState('');
   const fotoRef = useRef<HTMLInputElement>(null);
   const [addSlot, setAddSlot] = useState<string | null>(null);
   const [msg, setMsg] = useState('');
@@ -836,12 +839,18 @@ export default function Rite() {
     setDayNote(v);
     if (client) localStorage.setItem('rite_note_' + client.id + '_' + day, v);
   }
+  function yakalaKapat() { setIb({ t: '', u: '' }); setIbImg(null); setEkMenu(false); setRandevuMod(false); setRdvTarih(''); setYeniAcik(false); }
   async function inboxYakala() {
     const t = ib.t.trim();
     if (!client || (!t && !ibImg)) return;
+    if (randevuMod && rdvTarih) {
+      // Doğrudan randevu (tarihli olay), inbox'a düşmeden
+      await supabase.from('dog_rituals').insert({ client_id: client.id, ad: t || '📷 Randevu', zaman: 'gün', kaynak: 'Randevu', tip: 'aliskanlik', kart_config: ibImg ? { resim: ibImg } : null, baslangic: rdvTarih, bitis: rdvTarih, aliskanlik: false, aktif: true, mezun: false, blok_sira: Date.now() });
+      loadData(client.id); yakalaKapat(); return;
+    }
     const isUrl = /^https?:\/\//i.test(t);
     await supabase.from('dog_inbox').insert({ client_id: client.id, tur: 'not', baslik: t || '📷 Fotoğraf', url: isUrl ? t : null, payload: ibImg ? { resim: ibImg } : null, durum: 'yeni' });
-    setIb({ t: '', u: '' }); setIbImg(null); setYeniAcik(false);
+    yakalaKapat();
     loadInbox(client.id);
   }
   // Kamera/galeri fotoğrafını küçültüp base64 olarak yakala.
@@ -899,7 +908,7 @@ export default function Rite() {
       const alan0 = (p.faydalar && p.faydalar.length) ? (faydaList.find((f) => f.kod === p.faydalar[0])?.alan || null) : null;
       await supabase.from('dog_activities').insert({ client_id: client.id, tur: 'aktivite', ad: p.ad, grup: alan0 || 'Kişisel', faydalar: p.faydalar || [], aciklama: p.aciklama || null, videolar: p.videolar || null, zaman: p.zaman || 'gün', zamanlar: p.zamanlar || null, gunler: p.gunler || null, sure_gun: p.sure_gun || null, kart_tipi: p.kartTipi || null, kart_config: p.kartConfig || null, kaynak_etiket: 'Paylaşılan', aktif: true });
     }
-    await supabase.from('dog_inbox').update({ durum: 'alindi' }).eq('id', item.id);
+    await supabase.from('dog_inbox').delete().eq('id', item.id);
     loadActivities(); loadInbox(client.id);
   }
   // Paylaşılanı doğrudan ajandaya al (gönderenin varsayılan zamanlaması / program adımlarıyla).
@@ -914,7 +923,7 @@ export default function Rite() {
       for (const s of slots) await ritEkle(p.ad || item.baslik, s, 'Paylaşılan', 'aliskanlik', alan0, null, p.faydalar || [], (p.videolar && p.videolar[0]?.url) || null, p.gunler || null, p.sure_gun || null, null, null, false, 0, null, 0, p.kartTipi || null, p.kartConfig || null, typeof p.aliskanlik === 'boolean' ? p.aliskanlik : null);
       loadData(client.id);
     }
-    await supabase.from('dog_inbox').update({ durum: 'alindi' }).eq('id', item.id);
+    await supabase.from('dog_inbox').delete().eq('id', item.id);
     loadInbox(client.id); setScreen('ajanda');
   }
 
@@ -1374,15 +1383,20 @@ export default function Rite() {
             <div className="note" style={{ marginTop: 0 }}>Aklına takılan her şeyin ilk durağı; sonra bir güne yerleştir. <button className="btn ghost sm" style={{ marginLeft: 6 }} onClick={() => client && loadInbox(client.id)}>🔄 Yenile</button></div>
             <input ref={fotoRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={onFoto} />
             {!yeniAcik ? (
-              <button className="btn" style={{ width: '100%', marginTop: 8 }} onClick={() => { setIb({ t: '', u: '' }); setIbImg(null); setYeniAcik(true); }}>＋ Ekle</button>
+              <button className="btn" style={{ width: '100%', marginTop: 8 }} onClick={() => { yakalaKapat(); setYeniAcik(true); }}>＋ Ekle</button>
             ) : (
               <div className="card">
-                <textarea autoFocus value={ib.t} onChange={(e) => setIb((s) => ({ ...s, t: e.target.value }))} placeholder="Yaz ya da yapıştır… (fikir, not, link, reçete no…)" style={{ minHeight: 64 }} />
+                <textarea autoFocus value={ib.t} onChange={(e) => setIb((s) => ({ ...s, t: e.target.value }))} placeholder="Yaz ya da yapıştır… (fikir, not, link, reçete no…)" style={{ width: '100%', minHeight: 52 }} rows={2} />
                 {ibImg && <div style={{ position: 'relative', marginTop: 6 }}><img src={ibImg} alt="" style={{ maxWidth: '100%', borderRadius: 8, display: 'block' }} /><button className="rmx" style={{ position: 'absolute', top: 6, right: 6 }} onClick={() => setIbImg(null)}>✕</button></div>}
-                <div className="rowbtns" style={{ marginTop: 6 }}>
-                  <button className="btn" onClick={inboxYakala}>Kaydet</button>
-                  <button className="btn ghost sm" onClick={() => fotoRef.current?.click()}>📷 {ibImg ? 'Değiştir' : 'Tara/Fotoğraf'}</button>
-                  <button className="btn ghost sm" onClick={() => { setIb({ t: '', u: '' }); setIbImg(null); setYeniAcik(false); }}>İptal</button>
+                {randevuMod && <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}><span style={{ fontSize: 13 }}>📅 Tarih:</span><input type="date" min={today} value={rdvTarih} onChange={(e) => setRdvTarih(e.target.value)} style={{ width: 'auto' }} /></div>}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+                  <button className="ekcircle" onClick={() => setEkMenu((m) => !m)} title="ekle">＋</button>
+                  {ekMenu && <button className="btn ghost sm" onClick={() => { fotoRef.current?.click(); setEkMenu(false); }}>📷 Foto Ekle</button>}
+                  <button className={'btn ghost sm' + (randevuMod ? ' on' : '')} style={randevuMod ? { background: 'var(--green2,#eaf5ee)', borderColor: 'var(--green)' } : undefined} onClick={() => setRandevuMod((r) => !r)}>📅 Randevu</button>
+                </div>
+                <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                  <button className="btn ghost sm" style={{ flex: '0 0 30%' }} onClick={yakalaKapat}>Vazgeç</button>
+                  <button className="btn" style={{ flex: 1 }} onClick={inboxYakala}>Kaydet</button>
                 </div>
               </div>
             )}
