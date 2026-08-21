@@ -302,7 +302,7 @@ function InboxNot({ v, minDate, onGun, onRandevu, onSil }: { v: any; minDate: st
   const [ds, setDs] = useState('');
   return (
     <div className="card">
-      <div style={{ fontSize: 13, fontWeight: 700 }}>{v.url ? '🔗 ' : v.payload?.resim ? '📷 ' : '📌 '}{v.baslik}</div>
+      <div style={{ fontSize: 13, fontWeight: 700 }}>{v.payload?.kartTipi === 'video' ? '🎬 ' : v.url ? '🔗 ' : v.payload?.resim ? '📷 ' : '📌 '}{v.baslik}</div>
       {v.payload?.resim && <img src={v.payload.resim} alt="" style={{ maxWidth: '100%', borderRadius: 8, marginTop: 6, display: 'block' }} />}
       {v.url && <a href={v.url} target="_blank" rel="noreferrer" style={{ fontSize: 11 }}>{v.url}</a>}
       <div className="rowbtns" style={{ marginTop: 6 }}>
@@ -360,6 +360,7 @@ export default function Rite() {
   const [ib, setIb] = useState({ t: '', u: '' });
   const [yeniAcik, setYeniAcik] = useState(false);
   const [ibImg, setIbImg] = useState<string | null>(null);
+  const [ibBaslik, setIbBaslik] = useState('');
   const [ekMenu, setEkMenu] = useState(false);
   const [randevuMod, setRandevuMod] = useState(false);
   const [rdvTarih, setRdvTarih] = useState('');
@@ -869,17 +870,21 @@ export default function Rite() {
     setDayNote(v);
     if (client) localStorage.setItem('rite_note_' + client.id + '_' + day, v);
   }
-  function yakalaKapat() { setIb({ t: '', u: '' }); setIbImg(null); setEkMenu(false); setRandevuMod(false); setRdvTarih(''); setYeniAcik(false); }
+  function yakalaKapat() { setIb({ t: '', u: '' }); setIbImg(null); setIbBaslik(''); setEkMenu(false); setRandevuMod(false); setRdvTarih(''); setYeniAcik(false); }
   async function inboxYakala() {
     const t = ib.t.trim();
     if (!client || (!t && !ibImg)) return;
+    const linkVar = /^https?:\/\//i.test(t);
+    const baslik = linkVar ? (ibBaslik.trim() || 'Video') : (t || '📷 Fotoğraf');
+    // Link yapıştırıldıysa video kartı; foto varsa resim; ikisi de yoksa düz not.
+    const payload: any = {};
+    if (ibImg) payload.resim = ibImg;
+    if (linkVar) { payload.kartTipi = 'video'; payload.kartConfig = { url: t, done: false }; }
     if (randevuMod && rdvTarih) {
-      // Doğrudan randevu (tarihli olay), inbox'a düşmeden
-      await supabase.from('dog_rituals').insert({ client_id: client.id, ad: t || '📷 Randevu', zaman: 'gün', kaynak: 'Randevu', tip: 'aliskanlik', kart_config: ibImg ? { resim: ibImg } : null, baslangic: rdvTarih, bitis: rdvTarih, aliskanlik: false, aktif: true, mezun: false, blok_sira: Date.now() });
+      await supabase.from('dog_rituals').insert({ client_id: client.id, ad: baslik, zaman: 'gün', kaynak: 'Randevu', tip: 'aliskanlik', url: linkVar ? t : null, kart_tipi: linkVar ? 'video' : null, kart_config: linkVar ? { url: t, done: false } : (ibImg ? { resim: ibImg } : null), baslangic: rdvTarih, bitis: rdvTarih, aliskanlik: false, aktif: true, mezun: false, blok_sira: Date.now() });
       loadData(client.id); yakalaKapat(); return;
     }
-    const isUrl = /^https?:\/\//i.test(t);
-    await supabase.from('dog_inbox').insert({ client_id: client.id, tur: 'not', baslik: t || '📷 Fotoğraf', url: isUrl ? t : null, payload: ibImg ? { resim: ibImg } : null, durum: 'yeni' });
+    await supabase.from('dog_inbox').insert({ client_id: client.id, tur: 'not', baslik, url: linkVar ? t : null, payload: Object.keys(payload).length ? payload : null, durum: 'yeni' });
     yakalaKapat();
     loadInbox(client.id);
   }
@@ -901,7 +906,7 @@ export default function Rite() {
   // Inbox notunu belirli bir tarihe randevu olarak koy (tarihli tek-seferlik, alışkanlık değil).
   async function inboxToRandevu(item: any, ds: string) {
     if (!client || !ds) return;
-    await supabase.from('dog_rituals').insert({ client_id: client.id, ad: item.baslik || 'Randevu', zaman: 'gün', kaynak: 'Randevu', tip: 'aliskanlik', url: item.url || null, kart_config: item.payload?.resim ? { resim: item.payload.resim } : null, baslangic: ds, bitis: ds, aliskanlik: false, aktif: true, mezun: false, blok_sira: Date.now() });
+    await supabase.from('dog_rituals').insert({ client_id: client.id, ad: item.baslik || 'Randevu', zaman: 'gün', kaynak: 'Randevu', tip: 'aliskanlik', url: item.url || null, kart_tipi: item.payload?.kartTipi || null, kart_config: item.payload?.kartConfig || (item.payload?.resim ? { resim: item.payload.resim } : null), baslangic: ds, bitis: ds, aliskanlik: false, aktif: true, mezun: false, blok_sira: Date.now() });
     await supabase.from('dog_inbox').delete().eq('id', item.id);
     loadInbox(client.id); loadData(client.id);
   }
@@ -924,8 +929,8 @@ export default function Rite() {
   async function inboxToRitual(item: any, dayOffset: number) {
     if (!client) return;
     const d = parseD(today); d.setDate(d.getDate() + dayOffset); const ds = iso(d);
-    const ad = (item.tur === 'link' ? 'İzle: ' : '') + (item.baslik || '');
-    await supabase.from('dog_rituals').insert({ client_id: client.id, ad, zaman: 'gün', kaynak: 'Inbox', tip: 'aliskanlik', url: item.url || null, baslangic: ds, bitis: ds, aktif: true, mezun: false, blok_sira: Date.now() });
+    const ad = item.baslik || 'Not';
+    await supabase.from('dog_rituals').insert({ client_id: client.id, ad, zaman: 'gün', kaynak: 'Inbox', tip: 'aliskanlik', url: item.url || null, kart_tipi: item.payload?.kartTipi || null, kart_config: item.payload?.kartConfig || (item.payload?.resim ? { resim: item.payload.resim } : null), baslangic: ds, bitis: ds, aktif: true, mezun: false, blok_sira: Date.now() });
     await supabase.from('dog_inbox').delete().eq('id', item.id);
     loadInbox(client.id); loadData(client.id);
   }
@@ -1412,6 +1417,10 @@ export default function Rite() {
             ) : (
               <div className="card">
                 <textarea autoFocus value={ib.t} onChange={(e) => setIb((s) => ({ ...s, t: e.target.value }))} placeholder="Yaz ya da yapıştır… (fikir, not, link, reçete no…)" style={{ width: '100%', minHeight: 52 }} rows={2} />
+                {/^https?:\/\//i.test(ib.t.trim()) && <div style={{ marginTop: 6 }}>
+                  <div className="note" style={{ marginTop: 0 }}>🎬 Video linki algılandı — bir başlık ver:</div>
+                  <input value={ibBaslik} onChange={(e) => setIbBaslik(e.target.value)} placeholder="Video başlığı…" style={{ width: '100%', marginTop: 4 }} />
+                </div>}
                 {ibImg && <div style={{ position: 'relative', marginTop: 6 }}><img src={ibImg} alt="" style={{ maxWidth: '100%', borderRadius: 8, display: 'block' }} /><button className="rmx" style={{ position: 'absolute', top: 6, right: 6 }} onClick={() => setIbImg(null)}>✕</button></div>}
                 {randevuMod && <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}><span style={{ fontSize: 13 }}>📅 Tarih:</span><input type="date" min={today} value={rdvTarih} onChange={(e) => setRdvTarih(e.target.value)} style={{ width: 'auto' }} /></div>}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
