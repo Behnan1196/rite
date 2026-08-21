@@ -418,8 +418,7 @@ export default function Rite() {
   const day = selDate || today;
   function dayLabel(d: string) {
     const dt = parseD(d);
-    const wd = WDFULL[dt.getDay()];
-    return d === today ? 'Bugün · ' + wd : dt.getDate() + ' ' + MONTHS[dt.getMonth()] + ' · ' + wd;
+    return (d === today ? 'Bugün · ' : '') + dt.getDate() + ' ' + MONTHS[dt.getMonth()] + ' ' + WDFULL[dt.getDay()];
   }
   function shiftDay(delta: number) {
     const dt = parseD(selDate || today);
@@ -1085,11 +1084,10 @@ export default function Rite() {
               <div className={'vseg' + (ajView === 'gun' ? ' on' : '')} onClick={() => setAjView('gun')}>Gün</div>
               <div className={'vseg' + (ajView === 'ay' ? ' on' : '')} onClick={() => setAjView('ay')}>📅 Ay</div>
             </div>
-            <div className="daterow">
+            <div className="datenav">
               <button className="arrow" onClick={() => (ajView === 'ay' ? shiftMonth(-1) : shiftDay(-1))}>‹</button>
-              <div className="dlabel">{ajView === 'ay' ? ayLabel(day) : dayLabel(day)}</div>
+              <div className="dlabel" onClick={() => setSelDate(today)}>{ajView === 'ay' ? ayLabel(day) : dayLabel(day)}</div>
               <button className="arrow" onClick={() => (ajView === 'ay' ? shiftMonth(1) : shiftDay(1))}>›</button>
-              {day !== today && <button className="today" onClick={() => setSelDate(today)}>Bugün</button>}
             </div>
 
             {programGruplari.length > 0 && <div style={{ marginBottom: 4 }}>{programGruplari.map((g) => {
@@ -1194,10 +1192,6 @@ export default function Rite() {
                   <input value={dayNote} onChange={(e) => saveNote(e.target.value)} placeholder="Serbest not — izlenmez, sadece bugün burada durur." />
                 </div>
 
-                <div className="rowbtns">
-                  <button className="btn ghost sm" onClick={startLink}>＋ Zincir/rutin oluştur</button>
-                  {mezunlar.length > 0 && <button className="btn ghost sm" onClick={() => setScreen('mezunlar')}>🎓 Mezunlar ({mezunlar.length})</button>}
-                </div>
                 {pushMsg && <div className="msg">{pushMsg}</div>}
               </div>
             ))}

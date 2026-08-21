@@ -159,6 +159,8 @@ input{width:100%;font-size:15px;padding:11px 12px;border:1px solid var(--line);b
 .modal{position:fixed;inset:0;background:rgba(24,21,16,.5);display:flex;align-items:flex-end;justify-content:center;z-index:50;}
 .sheet{position:relative;background:#fff;width:100%;max-width:460px;max-height:90vh;overflow-y:auto;border-radius:18px 18px 0 0;padding:16px 16px 30px;animation:up .2s ease;}
 @keyframes up{from{transform:translateY(20px);opacity:.6}to{transform:none;opacity:1}}
+.datenav{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:6px 0 10px;}
+.datenav .dlabel{flex:1;text-align:center;font-weight:700;font-size:14px;color:var(--ink,#2a2620);cursor:pointer;}
 .modal.top{align-items:flex-start;}
 .modal.full{align-items:flex-start;}
 .fullsheet{max-width:520px;width:100%;min-height:100dvh;border-radius:0;padding:16px 16px 0;animation:none;display:flex;flex-direction:column;}
