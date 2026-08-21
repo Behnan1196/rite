@@ -375,6 +375,8 @@ export default function Rite() {
   const [detayAct, setDetayAct] = useState<any>(null);
   const [zamanOpen, setZamanOpen] = useState(false);
   const [paylasOpen, setPaylasOpen] = useState(false);
+  const [mezunModal, setMezunModal] = useState<any>(null);
+  const [mezunPuan, setMezunPuan] = useState(0);
   const [remInput, setRemInput] = useState('');
   const [urlInput, setUrlInput] = useState('');
   const [adInput, setAdInput] = useState('');
@@ -822,6 +824,19 @@ export default function Rite() {
     await supabase.from('dog_rituals').update({ mezun: true, aktif: false, bitis: today }).eq('id', id);
     loadData(client.id);
   }
+  // Mezun et: memnuniyet/yarar puanıyla havuza döner (aktivite kaydı) + ritüel mezun olur.
+  async function mezunEt(rt: any, puan: number) {
+    if (!client) return;
+    if (rt.activity_id) {
+      await supabase.from('dog_activities').update({ puan: puan || null }).eq('id', rt.activity_id);
+    } else {
+      const alan0 = rt.faydalar?.length ? (faydaMap[rt.faydalar[0]]?.alan || 'Kişisel') : 'Kişisel';
+      await supabase.from('dog_activities').insert({ client_id: client.id, tur: 'aktivite', ad: rt.ad, grup: alan0, faydalar: rt.faydalar || [], zaman: rt.zaman || 'gün', zamanlar: [rt.zaman || 'gün'], kart_tipi: rt.kart_tipi || null, kart_config: rt.kart_config || null, puan: puan || null, kaynak_etiket: 'Mezun', aktif: true });
+    }
+    await supabase.from('dog_rituals').update({ mezun: true, aktif: false, bitis: today }).eq('id', rt.id);
+    setMezunModal(null); setMezunPuan(0); setDetay(null);
+    loadActivities(); loadData(client.id);
+  }
   // Programın tüm (tarihli) adımlarının bitişini topluca ±gün kaydır.
   async function programSureDegis(pid: string, delta: number) {
     if (!client) return;
@@ -1048,7 +1063,7 @@ export default function Rite() {
           <button className="rmx" onClick={() => ritSil(rt.id)} title="Kaldır">✕</button>
         </div>
         {!rt.mezun && !rt.bitis && total >= 21 && (
-          <div className="retirebox">🎉 <div>&quot;{rt.ad}&quot; {total} kez yapıldı — artık otomatik. <b>Emekli edip</b> listeni sadeleştirelim mi?</div><button className="rb" onClick={() => emekli(rt.id)}>Emekli et</button></div>
+          <div className="retirebox">🎉 <div>&quot;{rt.ad}&quot; {total} kez yapıldı — artık otomatik. <b>Mezun edip</b> listeni sadeleştirelim mi?</div><button className="rb" onClick={() => { setMezunPuan(0); setMezunModal(rt); }}>Mezun et</button></div>
         )}
       </div>
     );
@@ -1238,7 +1253,7 @@ export default function Rite() {
               <div className="card">
                 {personalActs.length === 0 ? <div className="note">Henüz kişisel aktivite yok. <button className="linkbtn" onClick={openStudioNew}>＋ Tasarla</button> ile oluştur.</div> : personalActs.map((a) => (
                   <div key={a.id} className="actcard" onClick={() => openDetay(a, 'aktivite')}>
-                    <div style={{ flex: 1 }}><div className="n">{a.tur === 'program' ? '🧩 ' : ''}{a.ad}</div><div className="o">{a.tur === 'program' ? (a.adimlar || []).length + ' adım' + (a.sure_gun ? ' · ' + a.sure_gun + ' gün' : '') : Array.from(new Set((a.faydalar || []).map((k: string) => faydaMap[k]?.alan).filter(Boolean))).join(' · ')}</div></div>
+                    <div style={{ flex: 1 }}><div className="n">{a.tur === 'program' ? '🧩 ' : ''}{a.ad}{a.puan ? <span className="puanp"> {'★'.repeat(a.puan)}</span> : ''}</div><div className="o">{a.tur === 'program' ? (a.adimlar || []).length + ' adım' + (a.sure_gun ? ' · ' + a.sure_gun + ' gün' : '') : (a.kaynak_etiket === 'Mezun' ? 'Mezun · ' : '') + Array.from(new Set((a.faydalar || []).map((k: string) => faydaMap[k]?.alan).filter(Boolean))).join(' · ')}</div></div>
                     <span className="go">›</span>
                   </div>
                 ))}
@@ -1643,12 +1658,30 @@ export default function Rite() {
               {personal && !isProg && <button className="tbtn" onClick={() => { setDetay(null); openStudioEdit(act); }}><span className="tbic">✎</span>Düzenle</button>}
               {isRit && <button className="tbtn danger" onClick={() => { const id = o.id; setDetay(null); ritSil(id); }}><span className="tbic">🗑</span>Kaldır</button>}
               {!isRit && personal && <button className="tbtn danger" onClick={() => silAktivite(o)}><span className="tbic">🗑</span>Sil</button>}
-              {isRit && !o.mezun && !o.bitis && <button className="tbtn" onClick={() => { const id = o.id; setDetay(null); emekli(id); }}><span className="tbic">🎓</span>Emekli</button>}
+              {isRit && !o.mezun && <button className="tbtn" onClick={() => { setMezunPuan(0); setMezunModal(o); }}><span className="tbic">🎓</span>Mezun et</button>}
             </div>
           </div>
         </div>
         );
       })()}
+
+      {mezunModal && (
+        <div className="modal top2" onClick={() => setMezunModal(null)}>
+          <div className="sheet small" onClick={(e) => e.stopPropagation()}>
+            <button className="x" onClick={() => setMezunModal(null)}>×</button>
+            <h3 style={{ marginBottom: 2 }}>🎓 Mezun et</h3>
+            <p className="note" style={{ marginTop: 0 }}><b>{mezunModal.ad}</b> — bu alışkanlık ne kadar yararlı/tatmin ediciydi? Puanla, havuzuna bu bilgiyle dönsün.</p>
+            <div style={{ display: 'flex', gap: 4, justifyContent: 'center', margin: '8px 0' }}>
+              {[1, 2, 3, 4, 5].map((n) => <button key={n} className="starbtn" onClick={() => setMezunPuan(n)}>{n <= mezunPuan ? '★' : '☆'}</button>)}
+            </div>
+            <div className="rowbtns" style={{ marginTop: 8 }}>
+              <button className="btn" onClick={() => mezunEt(mezunModal, mezunPuan)}>Mezun et</button>
+              <button className="btn ghost sm" onClick={() => setMezunModal(null)}>Vazgeç</button>
+            </div>
+            <div className="note" style={{ marginTop: 4 }}>Puan opsiyonel — vermeden de mezun edebilirsin. Ritüel ajandadan kalkar, aktivite havuzda kalır.</div>
+          </div>
+        </div>
+      )}
 
       {studioOpen && (
         <div className="modal" onClick={() => { studioReset(); setStudioOpen(false); }}>
