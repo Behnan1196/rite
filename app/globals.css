@@ -58,6 +58,12 @@ input{width:100%;font-size:15px;padding:11px 12px;border:1px solid var(--line);b
 .nefcircle{width:172px;height:172px;border-radius:50%;background:var(--green);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;transform:scale(.5);transition:transform 4s ease-in-out;will-change:transform;}
 .nefphase{font-size:17px;font-weight:700;}
 .nefcount{font-size:30px;font-weight:800;line-height:1;margin-top:3px;font-variant-numeric:tabular-nums;}
+.bilgi{font-size:14px;line-height:1.6;color:#2f2b24;}
+.bilh1{font-size:16px;font-weight:800;margin:10px 0 4px;color:var(--ink,#2a2620);}
+.bilh2{font-size:14px;font-weight:800;margin:8px 0 3px;color:#4a4438;}
+.bilp{margin:4px 0;}
+.bilul{margin:4px 0 4px 2px;padding-left:16px;}
+.bilul li{margin:2px 0;}
 .calhead{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin-bottom:4px;}
 .calhead span{text-align:center;font-size:10px;font-weight:700;color:var(--muted);}
 .calgrid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;}
