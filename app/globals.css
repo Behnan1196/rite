@@ -161,6 +161,8 @@ input{width:100%;font-size:15px;padding:11px 12px;border:1px solid var(--line);b
 @keyframes up{from{transform:translateY(20px);opacity:.6}to{transform:none;opacity:1}}
 .datenav{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:6px 0 10px;}
 .datenav .dlabel{flex:1;text-align:center;font-weight:700;font-size:14px;color:var(--ink,#2a2620);cursor:pointer;}
+.datenav .arrow{flex:0 0 auto;background:#efe8da;border:none;border-radius:10px;min-width:52px;height:38px;font-size:20px;cursor:pointer;color:#6b6250;}
+.datenav .arrow:active{background:#e4dcc9;}
 .modal.top{align-items:flex-start;}
 .modal.full{align-items:flex-start;}
 .fullsheet{max-width:520px;width:100%;min-height:100dvh;border-radius:0;padding:16px 16px 0;animation:none;display:flex;flex-direction:column;}
