@@ -373,6 +373,8 @@ export default function Rite() {
   const [linkIds, setLinkIds] = useState<string[]>([]);
   const [detay, setDetay] = useState<any>(null);
   const [detayAct, setDetayAct] = useState<any>(null);
+  const [zamanOpen, setZamanOpen] = useState(false);
+  const [paylasOpen, setPaylasOpen] = useState(false);
   const [remInput, setRemInput] = useState('');
   const [urlInput, setUrlInput] = useState('');
   const [adInput, setAdInput] = useState('');
@@ -1516,17 +1518,18 @@ export default function Rite() {
         const kTip = (isRit ? o.kart_tipi : act?.kart_tipi) || 'standart';
         const kCfg = (isRit ? o.kart_config : act?.kart_config) || {};
         return (
-        <div className="modal" onClick={() => setDetay(null)}>
-          <div className="sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="modal full" onClick={() => setDetay(null)}>
+          <div className="sheet fullsheet" onClick={(e) => e.stopPropagation()}>
             <button className="x" onClick={() => setDetay(null)}>×</button>
             {isRit ? (
-              <div className="daterow" style={{ marginTop: 2, marginBottom: 4 }}>
-                <input value={adInput} onChange={(e) => setAdInput(e.target.value)} style={{ flex: 1, fontWeight: 700, fontSize: 16 }} />
-                <button className="btn ghost sm" disabled={!adInput.trim() || adInput.trim() === (o.ad || '')} onClick={() => setRitAd(o.id, adInput)}>Kaydet</button>
-              </div>
-            ) : <h2>{o.ad}</h2>}
+              <input className="detbaslik" value={adInput} onChange={(e) => setAdInput(e.target.value)} onBlur={() => { if (adInput.trim() && adInput.trim() !== (o.ad || '')) setRitAd(o.id, adInput); }} />
+            ) : <h2 style={{ paddingRight: 34 }}>{o.ad}</h2>}
             <div className="m">{(isRit ? o.kaynak : o.grup) || ''}{act?.kanit_duzeyi && <span className="evi">kanıt: {act.kanit_duzeyi}</span>}</div>
             {areas.length > 0 && <div style={{ margin: '6px 0' }}>{areas.map((a) => <span key={a} className="tagp p-alan">{a}</span>)}</div>}
+            <div className="detacts">
+              {isRit && <button className="detact" onClick={() => setZamanOpen(true)}>🕐 Zamanlama</button>}
+              <button className="detact" onClick={() => { setPaylasOpen(true); setKMsg(''); }}>📤 Paylaş</button>
+            </div>
 
             {isRit && kTip === 'standart' && o.kart_config?.resim && <img src={o.kart_config.resim} alt="" style={{ maxWidth: '100%', borderRadius: 8, margin: '4px 0 8px', display: 'block' }} />}
             {isRit && kTip === 'bilgi' && <BilgiKart cfg={kCfg} done={ritDone(o.id)} onOkudum={() => { if (!ritDone(o.id)) toggleRit(o.id); }} />}
@@ -1537,8 +1540,11 @@ export default function Rite() {
             {isRit && kTip === 'ruhhali' && <MoodKart soru={kCfg.soru} bugun={(() => { const arr = meas.filter((m) => m.anahtar === 'ruh_hali' && m.tarih === today); return arr.length ? Number(arr[arr.length - 1].deger) : null; })()} onKaydet={(d) => moodKaydet(o.id, d)} />}
             {isRit && kTip === 'workout' && <WorkoutKart cfg={kCfg} done={ritDone(o.id)} onBitir={() => { if (!ritDone(o.id)) toggleRit(o.id); }} />}
 
-            {isRit && (
-              <Acc title="Zamanlama" summary={schedSummary} defaultOpen={kTip === 'standart'}>
+            {isRit && zamanOpen && (
+              <div className="modal top2" onClick={() => setZamanOpen(false)}>
+              <div className="sheet" onClick={(e) => e.stopPropagation()}>
+                <button className="x" onClick={() => setZamanOpen(false)}>×</button>
+                <h3 style={{ marginBottom: 6 }}>🕐 Zamanlama</h3>
                 <div className="kv"><div className="k">Süre</div>
                   <div>
                     <span className={'chip' + (!o.bitis ? ' on' : '')} onClick={() => setRitSure(o.id, null)}>Süregelen</span>
@@ -1580,7 +1586,8 @@ export default function Rite() {
                     {o.url && <a className="btn ghost sm" href={o.url} target="_blank" rel="noreferrer">▶ Aç</a>}
                   </div>
                 </div>}
-              </Acc>
+              </div>
+              </div>
             )}
 
             {hasBilgi && (
@@ -1613,18 +1620,23 @@ export default function Rite() {
               </Acc>
             )}
 
-            <Acc title="Paylaş" summary={kisiler.length ? kisiler.length + ' kişi' : 'kod ile'}>
-              {kisiler.length > 0 && <select value={paylasSel} onChange={(e) => setPaylasSel(e.target.value)}>
-                <option value="">— kişi seç —</option>
-                {kisiler.map((ki, i) => <option key={i} value={ki.kod}>{ki.ad} ({ki.kod})</option>)}
-              </select>}
-              <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-                <input value={kShareTo} onChange={(e) => setKShareTo(e.target.value)} placeholder="RT-XXXXX (ya da kişi seç)" autoCapitalize="characters" />
-                <button className="btn sm" style={{ whiteSpace: 'nowrap' }} onClick={() => paylas(o, isRit, paylasSel || kShareTo)}>Paylaş</button>
+            {paylasOpen && (
+              <div className="modal top2" onClick={() => setPaylasOpen(false)}>
+              <div className="sheet small" onClick={(e) => e.stopPropagation()}>
+                <button className="x" onClick={() => setPaylasOpen(false)}>×</button>
+                <h3 style={{ marginBottom: 4 }}>📤 Paylaş</h3>
+                <p className="note" style={{ marginTop: 0 }}><b>{o.ad}</b></p>
+                {kisiler.length > 0 ? (<>
+                  <label className="fldlbl">Kişi</label>
+                  <div>{kisiler.map((ki, i) => <button key={i} className={'chip' + (paylasSel === ki.kod ? ' on' : '')} onClick={() => { setPaylasSel(ki.kod); setKShareTo(''); }}>{ki.ad}</button>)}</div>
+                </>) : <div className="note">Henüz kişi yok — Ayarlar → Paylaşım'dan ekle. Ya da kod gir:</div>}
+                <label className="fldlbl">Kod (ops.)</label>
+                <input value={kShareTo} onChange={(e) => { setKShareTo(e.target.value); setPaylasSel(''); }} placeholder="RT-XXXXX" autoCapitalize="characters" />
+                <div style={{ marginTop: 10 }}><button className="btn" onClick={() => paylas(o, isRit, paylasSel || kShareTo)}>Paylaş</button></div>
+                {kMsg && <div className="msg">{kMsg}</div>}
               </div>
-              {kisiler.length === 0 && <div className="note">Kişi tanımlamak için Ayarlar → Paylaşım.</div>}
-              {kMsg && <div className="msg">{kMsg}</div>}
-            </Acc>
+              </div>
+            )}
 
             <div className="rowbtns" style={{ marginTop: 14 }}>
               {isProg && <button className="btn" onClick={() => { programBaslat(o); setDetay(null); setScreen('ajanda'); }}>Ajandama başlat{o.sure_gun ? ' (' + o.sure_gun + ' gün)' : ''}</button>}
