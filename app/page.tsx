@@ -1062,7 +1062,7 @@ export default function Rite() {
           {vurl && <a className="playbtn" href={vurl} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} title="Aç">▶</a>}
           <button className="rmx" onClick={() => ritSil(rt.id)} title="Kaldır">✕</button>
         </div>
-        {!rt.mezun && !rt.bitis && total >= 21 && (
+        {!rt.mezun && !rt.bitis && rt.aliskanlik && total >= 21 && (
           <div className="retirebox">🎉 <div>&quot;{rt.ad}&quot; {total} kez yapıldı — artık otomatik. <b>Mezun edip</b> listeni sadeleştirelim mi?</div><button className="rb" onClick={() => { setMezunPuan(0); setMezunModal(rt); }}>Mezun et</button></div>
         )}
       </div>
@@ -1658,7 +1658,7 @@ export default function Rite() {
               {personal && !isProg && <button className="tbtn" onClick={() => { setDetay(null); openStudioEdit(act); }}><span className="tbic">✎</span>Düzenle</button>}
               {isRit && <button className="tbtn danger" onClick={() => { const id = o.id; setDetay(null); ritSil(id); }}><span className="tbic">🗑</span>Kaldır</button>}
               {!isRit && personal && <button className="tbtn danger" onClick={() => silAktivite(o)}><span className="tbic">🗑</span>Sil</button>}
-              {isRit && !o.mezun && <button className="tbtn" onClick={() => { setMezunPuan(0); setMezunModal(o); }}><span className="tbic">🎓</span>Mezun et</button>}
+              {isRit && !o.mezun && o.aliskanlik && <button className="tbtn" onClick={() => { setMezunPuan(0); setMezunModal(o); }}><span className="tbic">🎓</span>Mezun et</button>}
             </div>
           </div>
         </div>
