@@ -297,24 +297,17 @@ function WorkoutKart({ cfg, done, onBitir }: { cfg: any; done: boolean; onBitir:
     </div>
   );
 }
-// Inbox notu kartı: başlık/foto/link + Bugüne/Yarına + belirli tarihe Randevu + Sil.
-function InboxNot({ v, minDate, onGun, onRandevu, onSil }: { v: any; minDate: string; onGun: (o: number) => void; onRandevu: (ds: string) => void; onSil: () => void }) {
-  const [ds, setDs] = useState('');
+// Inbox notu kartı: dokunulabilir; tıklayınca editör açılır.
+function InboxNot({ v, onOpen }: { v: any; onOpen: () => void }) {
+  const ikon = v.payload?.kartTipi === 'video' ? '🎬' : v.url ? '🔗' : v.payload?.resim ? '📷' : '📌';
   return (
-    <div className="card">
-      <div style={{ fontSize: 13, fontWeight: 700 }}>{v.payload?.kartTipi === 'video' ? '🎬 ' : v.url ? '🔗 ' : v.payload?.resim ? '📷 ' : '📌 '}{v.baslik}</div>
-      {v.payload?.resim && <img src={v.payload.resim} alt="" style={{ maxWidth: '100%', borderRadius: 8, marginTop: 6, display: 'block' }} />}
-      {v.url && <a href={v.url} target="_blank" rel="noreferrer" style={{ fontSize: 11 }}>{v.url}</a>}
-      <div className="rowbtns" style={{ marginTop: 6 }}>
-        <button className="btn ghost sm" onClick={() => onGun(0)}>→ Bugüne</button>
-        <button className="btn ghost sm" onClick={() => onGun(1)}>→ Yarına</button>
-        <button className="btn ghost sm" style={{ color: 'var(--red)', borderColor: '#e6c4bd' }} onClick={onSil}>Sil</button>
+    <div className="actcard" onClick={onOpen} style={{ cursor: 'pointer' }}>
+      {v.payload?.resim && <img src={v.payload.resim} alt="" style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 6, flex: '0 0 auto' }} />}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="n">{ikon} {v.baslik}</div>
+        {v.payload?.aciklama && <div className="o">{v.payload.aciklama}</div>}
       </div>
-      <div className="rowbtns" style={{ marginTop: 6, alignItems: 'center' }}>
-        <span style={{ fontSize: 13 }}>📅</span>
-        <input type="date" min={minDate} value={ds} onChange={(e) => setDs(e.target.value)} style={{ width: 'auto' }} />
-        <button className="btn sm" disabled={!ds} onClick={() => onRandevu(ds)}>Randevu</button>
-      </div>
+      <span className="go">›</span>
     </div>
   );
 }
@@ -361,6 +354,11 @@ export default function Rite() {
   const [yeniAcik, setYeniAcik] = useState(false);
   const [ibImg, setIbImg] = useState<string | null>(null);
   const [ibBaslik, setIbBaslik] = useState('');
+  const [ibDetay, setIbDetay] = useState<any>(null);
+  const [ibdAd, setIbdAd] = useState('');
+  const [ibdAcik, setIbdAcik] = useState('');
+  const [ibdUrl, setIbdUrl] = useState('');
+  const [ibdTarih, setIbdTarih] = useState('');
   const [ekMenu, setEkMenu] = useState(false);
   const [randevuMod, setRandevuMod] = useState(false);
   const [rdvTarih, setRdvTarih] = useState('');
@@ -381,6 +379,8 @@ export default function Rite() {
   const [remInput, setRemInput] = useState('');
   const [urlInput, setUrlInput] = useState('');
   const [adInput, setAdInput] = useState('');
+  const [aciklamaInput, setAciklamaInput] = useState('');
+  const [kartUrlInput, setKartUrlInput] = useState('');
   const [sureInput, setSureInput] = useState('21');
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { delay: 180, tolerance: 6 } }));
   const [faydaList, setFaydaList] = useState<any[]>([]);
@@ -491,7 +491,7 @@ export default function Rite() {
   }
 
   async function loadData(clientId: string) {
-    const r = await supabase.from('dog_rituals').select('id,ad,zaman,kategori,tip,kaynak,mezun,aktif,alan,rutin,sira,baslangic,bitis,activity_id,hatirlatma_saat,blok_sira,faydalar,url,gunler,kart_tipi,kart_config,aliskanlik').eq('client_id', clientId).order('zaman');
+    const r = await supabase.from('dog_rituals').select('id,ad,zaman,kategori,tip,kaynak,mezun,aktif,alan,rutin,sira,baslangic,bitis,activity_id,hatirlatma_saat,blok_sira,faydalar,url,gunler,kart_tipi,kart_config,aliskanlik,aciklama').eq('client_id', clientId).order('zaman');
     setRituals(r.data || []);
     const lg = await supabase.from('dog_ritual_logs').select('id,ritual_id,tarih,yapildi').eq('client_id', clientId);
     setLogs(lg.data || []);
@@ -702,7 +702,7 @@ export default function Rite() {
   async function openDetay(obj: any, tur: string) {
     setDetay({ obj, tur });
     if (tur === 'ritual') {
-      setAdInput(obj.ad || ''); setRemInput(obj.hatirlatma_saat || ''); setUrlInput(obj.url || '');
+      setAdInput(obj.ad || ''); setRemInput(obj.hatirlatma_saat || ''); setUrlInput(obj.url || ''); setAciklamaInput(obj.aciklama || ''); setKartUrlInput((obj.kart_config && obj.kart_config.url) || obj.url || '');
       const n = sureGun(obj); setSureInput(n > 0 ? String(n) : '21');
       if (obj.activity_id) { const a = await supabase.from('dog_activities').select('*').eq('id', obj.activity_id).single(); setDetayAct(a.data || null); }
       else setDetayAct(null);
@@ -720,6 +720,21 @@ export default function Rite() {
     if (!client || !ad.trim()) return;
     await supabase.from('dog_rituals').update({ ad: ad.trim() }).eq('id', id);
     patchDetay({ ad: ad.trim() });
+    loadData(client.id);
+  }
+  async function setRitAciklama(id: string, v: string) {
+    if (!client) return;
+    const a = v.trim() || null;
+    await supabase.from('dog_rituals').update({ aciklama: a }).eq('id', id);
+    patchDetay({ aciklama: a });
+    loadData(client.id);
+  }
+  async function setRitKartUrl(id: string, url: string) {
+    if (!client) return;
+    const u = url.trim() || null;
+    const cfg = { ...(detay?.obj?.kart_config || {}), url: u };
+    await supabase.from('dog_rituals').update({ kart_config: cfg, url: u }).eq('id', id);
+    patchDetay({ kart_config: cfg, url: u });
     loadData(client.id);
   }
   // gun: null = süregelen (bitiş kaldır); >0 = başlangıçtan itibaren N gün
@@ -925,6 +940,29 @@ export default function Rite() {
   async function inboxSil(id: string) {
     await supabase.from('dog_inbox').delete().eq('id', id);
     if (client) loadInbox(client.id);
+  }
+  function openIbDetay(v: any) {
+    setIbDetay(v); setIbdAd(v.baslik || ''); setIbdAcik(v.payload?.aciklama || ''); setIbdUrl((v.payload?.kartConfig && v.payload.kartConfig.url) || v.url || ''); setIbdTarih('');
+  }
+  async function ibKaydet() {
+    if (!client || !ibDetay) return;
+    const link = ibdUrl.trim();
+    const payload: any = { ...(ibDetay.payload || {}) };
+    if (ibdAcik.trim()) payload.aciklama = ibdAcik.trim(); else delete payload.aciklama;
+    if (link) { payload.kartTipi = 'video'; payload.kartConfig = { url: link, done: false }; }
+    else if (payload.kartTipi === 'video') { delete payload.kartTipi; delete payload.kartConfig; }
+    await supabase.from('dog_inbox').update({ baslik: ibdAd.trim() || 'Not', url: link || null, payload: Object.keys(payload).length ? payload : null }).eq('id', ibDetay.id);
+    setIbDetay({ ...ibDetay, baslik: ibdAd.trim() || 'Not', url: link || null, payload });
+    loadInbox(client.id);
+  }
+  // Inbox kartını bir güne planla (randevu/gün) → ajandaya taşı, düzenlenen alanlarla.
+  async function ibPlanla(ds: string) {
+    if (!client || !ibDetay || !ds) return;
+    const link = ibdUrl.trim();
+    const p = ibDetay.payload || {};
+    await supabase.from('dog_rituals').insert({ client_id: client.id, ad: ibdAd.trim() || 'Not', aciklama: ibdAcik.trim() || null, zaman: 'gün', kaynak: 'Inbox', tip: 'aliskanlik', url: link || null, kart_tipi: link ? 'video' : (p.kartTipi || null), kart_config: link ? { url: link, done: false } : (p.resim ? { resim: p.resim } : (p.kartConfig || null)), baslangic: ds, bitis: ds, aliskanlik: false, aktif: true, mezun: false, blok_sira: Date.now() });
+    await supabase.from('dog_inbox').delete().eq('id', ibDetay.id);
+    setIbDetay(null); loadInbox(client.id); loadData(client.id);
   }
   async function inboxToRitual(item: any, dayOffset: number) {
     if (!client) return;
@@ -1436,7 +1474,7 @@ export default function Rite() {
             )}
             {inbox.length === 0 && <div className="note" style={{ textAlign: 'center', marginTop: 10 }}>Inbox boş.</div>}
             {inbox.map((v) => v.tur !== 'aktivite' ? (
-              <InboxNot key={v.id} v={v} minDate={today} onGun={(o) => inboxToRitual(v, o)} onRandevu={(ds) => inboxToRandevu(v, ds)} onSil={() => inboxSil(v.id)} />
+              <InboxNot key={v.id} v={v} onOpen={() => openIbDetay(v)} />
             ) : (
               <div key={v.id} className="card">
                 {(
@@ -1458,6 +1496,35 @@ export default function Rite() {
                 )}
               </div>
             ))}
+          </div>
+          </div>
+        )}
+
+        {ibDetay && (
+          <div className="modal top" onClick={() => setIbDetay(null)}>
+          <div className="sheet topsheet" onClick={(e) => e.stopPropagation()}>
+            <button className="x" onClick={() => setIbDetay(null)}>×</button>
+            <input className="detbaslik" value={ibdAd} onChange={(e) => setIbdAd(e.target.value)} onBlur={ibKaydet} placeholder="Başlık" />
+            {ibDetay.payload?.resim && <img src={ibDetay.payload.resim} alt="" style={{ maxWidth: '100%', borderRadius: 8, margin: '4px 0', display: 'block' }} />}
+            {ibdUrl.trim() && /^https?:\/\//i.test(ibdUrl.trim()) && <div style={{ margin: '4px 0' }}><EmbedVideo url={ibdUrl.trim()} /></div>}
+            <label className="fldlbl">Açıklama</label>
+            <textarea value={ibdAcik} onChange={(e) => setIbdAcik(e.target.value)} onBlur={ibKaydet} placeholder="Açıklama / not…" style={{ width: '100%', minHeight: 44 }} />
+            <label className="fldlbl">Video linki (ops.)</label>
+            <input value={ibdUrl} onChange={(e) => setIbdUrl(e.target.value)} onBlur={ibKaydet} placeholder="https://youtube.com/… (girince video kartı olur)" />
+            <div style={{ borderTop: '1px solid var(--line)', marginTop: 12, paddingTop: 10 }}>
+              <label className="fldlbl" style={{ marginTop: 0 }}>Ne zaman?</label>
+              <div className="rowbtns">
+                <button className="btn ghost sm" onClick={() => ibPlanla(today)}>→ Bugüne</button>
+                <button className="btn ghost sm" onClick={() => { const d = parseD(today); d.setDate(d.getDate() + 1); ibPlanla(iso(d)); }}>→ Yarına</button>
+              </div>
+              <div className="rowbtns" style={{ marginTop: 6, alignItems: 'center' }}>
+                <span style={{ fontSize: 13 }}>📅</span>
+                <input type="date" min={today} value={ibdTarih} onChange={(e) => setIbdTarih(e.target.value)} style={{ width: 'auto' }} />
+                <button className="btn sm" disabled={!ibdTarih} onClick={() => ibPlanla(ibdTarih)}>Randevu (o güne)</button>
+              </div>
+              <div className="note">Tarihsizken Inbox'ta kalır. Bir gün seçince ajandaya taşınır.</div>
+            </div>
+            <div style={{ textAlign: 'center', marginTop: 10 }}><button className="btn ghost sm" style={{ color: 'var(--red)', borderColor: '#e6c4bd' }} onClick={() => { inboxSil(ibDetay.id); setIbDetay(null); }}>Sil</button></div>
           </div>
           </div>
         )}
@@ -1545,9 +1612,14 @@ export default function Rite() {
             <div className="m">{(isRit ? o.kaynak : o.grup) || ''}{act?.kanit_duzeyi && <span className="evi">kanıt: {act.kanit_duzeyi}</span>}</div>
             {areas.length > 0 && <div style={{ margin: '6px 0' }}>{areas.map((a) => <span key={a} className="tagp p-alan">{a}</span>)}</div>}
 
-            {isRit && kTip === 'standart' && o.kart_config?.resim && <img src={o.kart_config.resim} alt="" style={{ maxWidth: '100%', borderRadius: 8, margin: '4px 0 8px', display: 'block' }} />}
+            {isRit && <textarea value={aciklamaInput} onChange={(e) => setAciklamaInput(e.target.value)} onBlur={() => { if (aciklamaInput.trim() !== (o.aciklama || '')) setRitAciklama(o.id, aciklamaInput); }} placeholder="Açıklama / not ekle…" style={{ width: '100%', minHeight: 44, margin: '2px 0 8px' }} />}
+
+            {isRit && kTip === 'standart' && o.kart_config?.resim &&<img src={o.kart_config.resim} alt="" style={{ maxWidth: '100%', borderRadius: 8, margin: '4px 0 8px', display: 'block' }} />}
             {isRit && kTip === 'bilgi' && <BilgiKart cfg={kCfg} done={ritDone(o.id)} onOkudum={() => { if (!ritDone(o.id)) toggleRit(o.id); }} />}
-            {isRit && kTip === 'video' && <div style={{ margin: '4px 0 8px' }}>{(kCfg.url || o.url) ? <EmbedVideo url={kCfg.url || o.url} /> : <span className="note" style={{ marginTop: 0 }}>Video linki yok</span>}</div>}
+            {isRit && kTip === 'video' && <div style={{ margin: '4px 0 8px' }}>
+              {(kCfg.url || o.url) && <EmbedVideo url={kCfg.url || o.url} />}
+              <div className="daterow" style={{ marginTop: 6 }}><input value={kartUrlInput} onChange={(e) => setKartUrlInput(e.target.value)} onBlur={() => { if (kartUrlInput.trim() !== ((o.kart_config && o.kart_config.url) || o.url || '')) setRitKartUrl(o.id, kartUrlInput); }} placeholder="Video linki (düzenle)…" style={{ flex: 1 }} /></div>
+            </div>}
             {isRit && kTip === 'anket' && <AnketKart cfg={kCfg} done={ritDone(o.id)} onGonder={() => { if (!ritDone(o.id)) toggleRit(o.id); }} />}
             {isRit && kTip === 'diyet' && <DiyetKart cfg={kCfg} />}
             {isRit && kTip === 'nefes' && <NefesKart cfg={kCfg} done={ritDone(o.id)} onFinish={() => { if (!ritDone(o.id)) toggleRit(o.id); }} />}
@@ -1593,13 +1665,6 @@ export default function Rite() {
                   </div>
                   <div className="note">Uygulama kapalıyken de bildirim gelir (push açıksa). Saat: Türkiye saati.</div>
                 </div>
-                {kTip === 'standart' && <div className="kv"><div className="k">Bağlantı</div>
-                  <div className="daterow">
-                    <input value={urlInput} onChange={(e) => setUrlInput(e.target.value)} placeholder="https://youtube.com/…" style={{ flex: 1 }} />
-                    <button className="btn ghost sm" onClick={() => setRitUrl(o.id, urlInput)}>Kaydet</button>
-                    {o.url && <a className="btn ghost sm" href={o.url} target="_blank" rel="noreferrer">▶ Aç</a>}
-                  </div>
-                </div>}
               </div>
               </div>
             )}
