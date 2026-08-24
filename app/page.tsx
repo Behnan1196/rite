@@ -42,7 +42,7 @@ const SLOTBG: Record<string, string> = { sabah: '#fbf6ec', 'gün': '#f2f5ee', 'a
 // Haftagünü: getDay değeri (0=Paz..6=Cmt), Pazartesi-önce görüntü sırası
 const GUNLER: [number, string][] = [[1, 'Pzt'], [2, 'Sal'], [3, 'Çar'], [4, 'Per'], [5, 'Cum'], [6, 'Cmt'], [0, 'Paz']];
 // Akıllı kart tipleri: kod · etiket · ikon
-const KARTLAR: [string, string, string][] = [['standart', 'Standart', '•'], ['bilgi', 'Bilgi', '📄'], ['video', 'Video', '🎬'], ['anket', 'Anket', '📋'], ['diyet', 'Diyet', '🍽'], ['olcum', 'Ölçüm', '📏'], ['nefes', 'Nefes', '🫁'], ['ruhhali', 'Ruh hali', '🙂'], ['workout', 'Egzersiz', '🏋️']];
+const KARTLAR: [string, string, string][] = [['standart', 'Standart', '•'], ['bilgi', 'Bilgi', '📄'], ['video', 'Video', '🎬'], ['anket', 'Anket', '📋'], ['coktan', 'Çoktan seçmeli', '❓'], ['diyet', 'Diyet', '🍽'], ['tarif', 'Tarif', '🍳'], ['olcum', 'Ölçüm', '📏'], ['nefes', 'Nefes', '🫁'], ['ruhhali', 'Ruh hali', '🙂'], ['workout', 'Egzersiz', '🏋️']];
 // Ölçüm anahtarları için okunur etiketler (Gelişim grafiği + kart). Bilinmeyen anahtar ham gösterilir.
 const OLCU_ETIKET: Record<string, string> = { kilo: 'Kilo', boy: 'Boy', bel: 'Bel', kalca: 'Kalça', gogus: 'Göğüs', kol: 'Kol', bacak: 'Bacak', vucut_yagi: 'Vücut yağı', kas: 'Kas kütlesi', bel_kalca: 'Bel/Kalça', vki: 'VKİ', ruh_hali: 'Ruh hali' };
 // Basit metin biçimlendirme: **kalın**
@@ -158,11 +158,12 @@ function EmbedVideo({ url }: { url?: string | null }) {
   if (info.tur === 'yt') return <div className="ytwrap"><iframe src={info.src} title="video" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen /></div>;
   return <iframe className="igframe" src={info.src} title="video" scrolling="no" allowFullScreen />;
 }
-// Bilgi/makale kartı: biçimli metin + kaynaklar; "Okudum" → yapıldı.
+// Bilgi/makale kartı: biçimli metin + kaynaklar (+ opsiyonel video, varsa üstte gösterilir); "Okudum" → yapıldı.
 function BilgiKart({ cfg, done, onOkudum }: { cfg: any; done: boolean; onOkudum: () => void }) {
   const kaynaklar: string[] = cfg?.kaynaklar || [];
   return (
     <div className="bilgi">
+      {cfg?.video && <div style={{ margin: '0 0 8px' }}><EmbedVideo url={cfg.video} /></div>}
       {cfg?.icerik ? renderMetin(cfg.icerik) : <div className="note" style={{ marginTop: 0 }}>İçerik yok (taslak).</div>}
       {kaynaklar.length > 0 && <div className="kv" style={{ marginTop: 4 }}><div className="k">Kaynaklar</div><div className="v">{kaynaklar.map((k, i) => <div key={i} className="note" style={{ margin: '2px 0' }}>{k}</div>)}</div></div>}
       <div style={{ marginTop: 10 }}>{done ? <div className="note" style={{ color: 'var(--green)', fontWeight: 700 }}>✓ Okundu</div> : <button className="btn" onClick={onOkudum}>Okudum ✓</button>}</div>
@@ -180,6 +181,37 @@ function AnketKart({ cfg, done, onGonder }: { cfg: any; done: boolean; onGonder:
           <div key={i} style={{ marginBottom: 6 }}><label className="fldlbl" style={{ marginTop: 0 }}>{i + 1}. {q}</label><input value={ans[i] || ''} onChange={(e) => setAns((a) => { const b = [...a]; b[i] = e.target.value; return b; })} /></div>
         ))}
         {done ? <div className="note" style={{ marginTop: 4, color: 'var(--green)', fontWeight: 700 }}>✓ Gönderildi</div> : <button className="btn" onClick={onGonder}>Gönder</button>}
+      </div>
+    </div>
+  );
+}
+// Çoktan seçmeli soru kartı: doğru cevaplı; seçim + Gönder → doğru/yanlış gösterir, yanıt tabloya yazılmaz (ephemeral).
+function ChoktanKart({ cfg, done, onGonder }: { cfg: any; done: boolean; onGonder: () => void }) {
+  const [sec, setSec] = useState<number | null>(null);
+  const [gonderildi, setGonderildi] = useState(false);
+  const secenekler: string[] = cfg?.secenekler || [];
+  const dogru: number = typeof cfg?.dogru === 'number' ? cfg.dogru : -1;
+  const showResult = gonderildi || done;
+  function gonder() {
+    if (sec == null) return;
+    setGonderildi(true);
+    if (!done) onGonder();
+  }
+  return (
+    <div className="kv"><div className="k">❓ Soru</div>
+      <div style={{ width: '100%' }}>
+        {cfg?.soru && <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8, color: 'var(--ink)' }}>{cfg.soru}</div>}
+        {secenekler.length === 0 ? <div className="note" style={{ marginTop: 0 }}>Seçenek yok (taslak).</div> : secenekler.map((s, i) => {
+          const isSel = sec === i;
+          const isCorrect = i === dogru;
+          const cls = 'mcopt' + (isSel ? ' sel' : '') + (showResult && isCorrect ? ' correct' : '') + (showResult && isSel && !isCorrect ? ' wrong' : '');
+          return <div key={i} className={cls} onClick={() => !showResult && setSec(i)}>{s}{showResult && isCorrect ? ' ✓' : ''}{showResult && isSel && !isCorrect ? ' ✕' : ''}</div>;
+        })}
+        {secenekler.length > 0 && (showResult ? (
+          <div className="note" style={{ marginTop: 6, fontWeight: 700, color: sec === dogru ? 'var(--green)' : undefined }}>{dogru >= 0 ? (sec === dogru ? '✓ Doğru!' : 'Doğru cevap: ' + (secenekler[dogru] ?? '—')) : 'Gönderildi'}</div>
+        ) : (
+          <button className="btn" disabled={sec == null} onClick={gonder}>Gönder</button>
+        ))}
       </div>
     </div>
   );
@@ -216,6 +248,22 @@ function DiyetKart({ cfg }: { cfg: any }) {
       })}
       {cfg?.makro && <div className="note" style={{ marginTop: 6 }}>Günlük hedef: {cfg.makro}</div>}
       {ogunler.length > 0 && <div className="note" style={{ marginTop: 4, fontSize: 11, opacity: .8 }}>İşaretler ve notlar yalnız sende kalır.</div>}
+    </div>
+  );
+}
+// Yemek tarifi kartı (bilgi kartına benzer düzen): malzemeler + yapılış + süre/porsiyon/kalori/görsel; "Denedim" → yapıldı.
+function TarifKart({ cfg, done, onDenedim }: { cfg: any; done: boolean; onDenedim: () => void }) {
+  const malzemeler: string[] = cfg?.malzemeler || [];
+  const meta = [cfg?.sure ? '⏱ ' + cfg.sure : '', cfg?.porsiyon ? '🍽 ' + cfg.porsiyon : '', cfg?.kalori ? cfg.kalori + ' kcal' : ''].filter(Boolean).join(' · ');
+  const bos = malzemeler.length === 0 && !cfg?.yapilis;
+  return (
+    <div className="bilgi">
+      {cfg?.resim && <img src={cfg.resim} alt="" style={{ width: '100%', maxHeight: 180, objectFit: 'cover', borderRadius: 8, margin: '0 0 8px', display: 'block' }} />}
+      {meta && <div className="note" style={{ marginTop: 0 }}>{meta}</div>}
+      {malzemeler.length > 0 && <div style={{ marginTop: 6 }}><div className="bilh2">Malzemeler</div><ul className="bilul">{malzemeler.map((m, i) => <li key={i}>{m}</li>)}</ul></div>}
+      {cfg?.yapilis && <div style={{ marginTop: 6 }}><div className="bilh2">Yapılış</div>{renderMetin(cfg.yapilis)}</div>}
+      {bos && <div className="note" style={{ marginTop: 0 }}>İçerik yok (taslak).</div>}
+      <div style={{ marginTop: 10 }}>{done ? <div className="note" style={{ color: 'var(--green)', fontWeight: 700 }}>✓ Denendi</div> : <button className="btn" onClick={onDenedim}>Denedim ✓</button>}</div>
     </div>
   );
 }
@@ -1170,9 +1218,9 @@ export default function Rite() {
     const total = ritTotal(rt.id);
     const tip = rt.kart_tipi || 'standart';
     const cfg = rt.kart_config || {};
-    const noDone = tip === 'anket' || tip === 'nefes' || tip === 'ruhhali' || tip === 'bilgi' || (tip === 'video' && cfg.done === false);
+    const noDone = tip === 'anket' || tip === 'coktan' || tip === 'nefes' || tip === 'ruhhali' || tip === 'bilgi' || tip === 'tarif' || (tip === 'video' && cfg.done === false);
     const vurl = tip === 'video' ? (cfg.url || rt.url) : rt.url;
-    const ipucu = tip === 'anket' ? ' · 📋 doldur' : tip === 'diyet' ? ' · 🍽 öğün' : tip === 'video' ? ' · 🎬 izle' : tip === 'nefes' ? ' · 🫁 nefes' : tip === 'ruhhali' ? ' · 🙂 check-in' : tip === 'workout' ? ' · 🏋️ egzersiz' : tip === 'bilgi' ? ' · 📄 oku' : '';
+    const ipucu = tip === 'anket' ? ' · 📋 doldur' : tip === 'coktan' ? ' · ❓ yanıtla' : tip === 'diyet' ? ' · 🍽 öğün' : tip === 'tarif' ? ' · 🍳 tarif' : tip === 'video' ? ' · 🎬 izle' : tip === 'nefes' ? ' · 🫁 nefes' : tip === 'ruhhali' ? ' · 🙂 check-in' : tip === 'workout' ? ' · 🏋️ egzersiz' : tip === 'bilgi' ? ' · 📄 oku' : '';
     return (
       <div>
         <div className="rit">
@@ -1722,7 +1770,9 @@ export default function Rite() {
               <div className="daterow" style={{ marginTop: 6 }}><input value={kartUrlInput} onChange={(e) => setKartUrlInput(e.target.value)} onBlur={() => { if (kartUrlInput.trim() !== ((o.kart_config && o.kart_config.url) || o.url || '')) setRitKartUrl(o.id, kartUrlInput); }} placeholder="Video linki (düzenle)…" style={{ flex: 1 }} /></div>
             </div>}
             {isRit && kTip === 'anket' && <AnketKart cfg={kCfg} done={ritDone(o.id)} onGonder={() => { if (!ritDone(o.id)) toggleRit(o.id); }} />}
+            {isRit && kTip === 'coktan' && <ChoktanKart cfg={kCfg} done={ritDone(o.id)} onGonder={() => { if (!ritDone(o.id)) toggleRit(o.id); }} />}
             {isRit && kTip === 'diyet' && <DiyetKart cfg={kCfg} />}
+            {isRit && kTip === 'tarif' && <TarifKart cfg={kCfg} done={ritDone(o.id)} onDenedim={() => { if (!ritDone(o.id)) toggleRit(o.id); }} />}
             {isRit && kTip === 'olcum' && <OlcumKart cfg={kCfg} sonDegerler={(() => { const r: Record<string, number> = {}; meas.forEach((m) => { r[m.anahtar] = Number(m.deger); }); return r; })()} onKaydet={(vals) => olcumKaydet(o.id, vals)} />}
             {isRit && kTip === 'nefes' && <NefesKart cfg={kCfg} done={ritDone(o.id)} onFinish={() => { if (!ritDone(o.id)) toggleRit(o.id); }} />}
             {isRit && kTip === 'ruhhali' && <MoodKart soru={kCfg.soru} bugun={(() => { const arr = meas.filter((m) => m.anahtar === 'ruh_hali' && m.tarih === today); return arr.length ? Number(arr[arr.length - 1].deger) : null; })()} onKaydet={(d) => moodKaydet(o.id, d)} />}
