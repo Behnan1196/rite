@@ -45,6 +45,11 @@ const GUNLER: [number, string][] = [[1, 'Pzt'], [2, 'Sal'], [3, 'Çar'], [4, 'Pe
 const KARTLAR: [string, string, string][] = [['standart', 'Standart', '•'], ['bilgi', 'Bilgi', '📄'], ['video', 'Video', '🎬'], ['anket', 'Anket', '📋'], ['coktan', 'Çoktan seçmeli', '❓'], ['diyet', 'Diyet', '🍽'], ['tarif', 'Tarif', '🍳'], ['olcum', 'Ölçüm', '📏'], ['nefes', 'Nefes', '🫁'], ['ruhhali', 'Ruh hali', '🙂'], ['workout', 'Egzersiz', '🏋️'], ['sukran', 'Şükran', '🙏'], ['topraklama', '5-4-3-2-1', '🖐'], ['pomodoro', 'Odak', '🍅'], ['beden', 'Beden taraması', '🧘'], ['uykuoncesi', 'Uyku hazırlığı', '🌙'], ['su', 'Su sayacı', '💧'], ['maruz', 'Maruz bırakma', '🎯'], ['niyet', 'Niyet', '🧭']];
 // Ölçüm anahtarları için okunur etiketler (Gelişim grafiği + kart). Bilinmeyen anahtar ham gösterilir.
 const OLCU_ETIKET: Record<string, string> = { kilo: 'Kilo', boy: 'Boy', bel: 'Bel', kalca: 'Kalça', gogus: 'Göğüs', kol: 'Kol', bacak: 'Bacak', vucut_yagi: 'Vücut yağı', kas: 'Kas kütlesi', bel_kalca: 'Bel/Kalça', vki: 'VKİ', ruh_hali: 'Ruh hali', odak_dk: 'Odak (dk)', su: 'Su (bardak)' };
+// Ölçüm anahtarı → varsayılan alan (statik tahmin; Meridyen'deki OLCU_INFO ile aynı). Kart_config.dikey varsa (bkz anahtarDikey) ONA öncelik verilir.
+const OLCU_ALAN: Record<string, string> = { kilo: 'Beslenme', bel: 'Beslenme', kalca: 'Beslenme', vucut_yagi: 'Beslenme', bel_kalca: 'Beslenme', vki: 'Beslenme', su: 'Beslenme', gogus: 'Fitness', kol: 'Fitness', bacak: 'Fitness', kas: 'Fitness', ruh_hali: 'Mental', odak_dk: 'Mental', boy: 'Genel' };
+const ALAN_SIRA = ['Beslenme', 'Fitness', 'Fizyo', 'Psikoloji', 'Mental', 'Genel', 'Diğer'];
+// Rite Studio'da kart_config.dikey olarak seçilen alan etiketi → okunur ad (bkz app-meridyen/app/atama/page.tsx DIKEY_OPTS).
+const DIKEY_LABEL: Record<string, string> = { beslenme: 'Beslenme', fitness: 'Fitness', fizyo: 'Fizyo', psikoloji: 'Psikoloji', mental: 'Mental', genel: 'Genel' };
 // 5-4-3-2-1 topraklama: sabit duyusal kategori listesi.
 const TOPRAK_ADIM: [string, string][] = [['5', '5 şey GÖR'], ['4', '4 şey DOKUN'], ['3', '3 şey DUY'], ['2', '2 şey KOKLA'], ['1', '1 şey TAT']];
 // Basit metin biçimlendirme: **kalın**
@@ -1392,6 +1397,16 @@ export default function Rite() {
   };
   const measByKey: Record<string, any[]> = {};
   meas.forEach((m) => { (measByKey[m.anahtar] = measByKey[m.anahtar] || []).push(m); });
+  // Kartlara atanan opsiyonel "alan" (dikey) etiketinden ölçüm anahtarı → dikey haritası çıkar (OLCU_ALAN'ın statik tahminine göre öncelikli).
+  const anahtarDikey: Record<string, string> = {};
+  rituals.forEach((r) => {
+    const dikey = r.kart_config?.dikey;
+    if (!dikey) return;
+    if (r.kart_tipi === 'olcum') (r.kart_config?.alanlar || []).forEach((a: any) => { if (a?.anahtar) anahtarDikey[a.anahtar] = dikey; });
+    else if (r.kart_tipi === 'ruhhali') anahtarDikey['ruh_hali'] = dikey;
+    else if (r.kart_tipi === 'pomodoro') anahtarDikey['odak_dk'] = dikey;
+    else if (r.kart_tipi === 'su') anahtarDikey['su'] = dikey;
+  });
   const days7 = lastDays(7);
   const last30 = lastDays(30);
   const weekArr = weekDays(day);
@@ -1427,6 +1442,7 @@ export default function Rite() {
             <div className="t">{rt.ad}
               {providerTag(rt.kaynak)}
               {ritAreas(rt).map((a) => <span key={a} className="tagp p-alan">{a}</span>)}
+              {cfg.dikey && DIKEY_LABEL[cfg.dikey] && <span className="tagp p-dikey">{DIKEY_LABEL[cfg.dikey]}</span>}
             </div>
             <div className="m">{rt.hatirlatma_saat ? '🔔 ' + rt.hatirlatma_saat + ' · ' : ''}{gunlerLabel(rt.gunler)}{rt.bitis ? ' · bitiş ' + kisaTarih(rt.bitis) : ''}{ipucu} · toplam {total}</div>
           </div>
@@ -1534,7 +1550,7 @@ export default function Rite() {
                                       return (
                                         <div key={rt.id} className="cstep">
                                           <div className={'cdot' + (done ? ' on' : '')} onClick={() => toggleRit(rt.id)}>{done ? '✓' : ''}</div>
-                                          <div className="cbody" style={{ cursor: 'pointer' }} onClick={() => openRit(rt)}><div className="t">{i === 0 && <span style={{ marginRight: 4 }}>🔗</span>}{rt.ad}{ritAreas(rt).map((a) => <span key={a} className="tagp p-alan">{a}</span>)}</div><div className="m">{rt.hatirlatma_saat ? '🔔 ' + rt.hatirlatma_saat + ' · ' : ''}toplam {ritTotal(rt.id)}</div></div>
+                                          <div className="cbody" style={{ cursor: 'pointer' }} onClick={() => openRit(rt)}><div className="t">{i === 0 && <span style={{ marginRight: 4 }}>🔗</span>}{rt.ad}{ritAreas(rt).map((a) => <span key={a} className="tagp p-alan">{a}</span>)}{rt.kart_config?.dikey && DIKEY_LABEL[rt.kart_config.dikey] && <span className="tagp p-dikey">{DIKEY_LABEL[rt.kart_config.dikey]}</span>}</div><div className="m">{rt.hatirlatma_saat ? '🔔 ' + rt.hatirlatma_saat + ' · ' : ''}toplam {ritTotal(rt.id)}</div></div>
                                           <div className="cact">
                                             {rt.url && <a href={rt.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} title="Aç">▶</a>}
                                             <button onClick={() => moveStep(it.rutin, i, -1)}>↑</button>
@@ -1764,11 +1780,25 @@ export default function Rite() {
               </table>
             </div>
             <div className="card"><h3>Ölçümler</h3>
-              {(() => { const keys = Object.keys(measByKey).filter((k) => k !== 'ruh_hali'); return keys.length === 0 ? <div className="note">Ölçüm kartıyla girdiğinde ya da koçun girince burada grafikleşir.</div> : keys.slice(0, 8).map((k) => {
-                const arr = measByKey[k]; const l = arr[arr.length - 1];
-                const son = arr.slice(-7).map((m: any) => Number(m.deger)); const mn = Math.min(...son), mx = Math.max(...son);
-                return <div key={k} className="mrow"><span>{OLCU_ETIKET[k] || k}<span className="msprk">{son.map((v: number, i: number) => <i key={i} style={{ height: (mx > mn ? ((v - mn) / (mx - mn)) * 100 : 50) + '%' }} />)}</span></span><b>{l.deger} {l.birim || ''}</b></div>;
-              }); })()}
+              {(() => {
+                const keys = Object.keys(measByKey).filter((k) => k !== 'ruh_hali');
+                if (keys.length === 0) return <div className="note">Ölçüm kartıyla girdiğinde ya da koçun girince burada grafikleşir.</div>;
+                const gruplar: Record<string, string[]> = {};
+                keys.forEach((k) => {
+                  const alan = (anahtarDikey[k] && DIKEY_LABEL[anahtarDikey[k]]) || OLCU_ALAN[k] || 'Diğer';
+                  (gruplar[alan] = gruplar[alan] || []).push(k);
+                });
+                return ALAN_SIRA.filter((a) => gruplar[a]).map((alan) => (
+                  <div key={alan} style={{ marginBottom: 6 }}>
+                    <div className="note" style={{ margin: '4px 0 2px', fontWeight: 800, textTransform: 'uppercase', fontSize: 10, letterSpacing: .3 }}>{alan}</div>
+                    {gruplar[alan].map((k) => {
+                      const arr = measByKey[k]; const l = arr[arr.length - 1];
+                      const son = arr.slice(-7).map((m: any) => Number(m.deger)); const mn = Math.min(...son), mx = Math.max(...son);
+                      return <div key={k} className="mrow"><span>{OLCU_ETIKET[k] || k}<span className="msprk">{son.map((v: number, i: number) => <i key={i} style={{ height: (mx > mn ? ((v - mn) / (mx - mn)) * 100 : 50) + '%' }} />)}</span></span><b>{l.deger} {l.birim || ''}</b></div>;
+                    })}
+                  </div>
+                ));
+              })()}
             </div>
             <div className="card"><h3>Alışkanlık uyumu (bu hafta)</h3>
               <div className="mrow" style={{ borderTop: 'none' }}><span>Tamamlanan</span><b>%{(() => { let act = 0, done = 0; days7.forEach((d) => uyumHabits.forEach((r) => { if (activeOn(r, d)) { act++; if (logs.some((l) => l.ritual_id === r.id && l.tarih === d && l.yapildi)) done++; } })); return act ? Math.round((done / act) * 100) : 0; })()}</b></div>
