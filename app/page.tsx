@@ -42,9 +42,11 @@ const SLOTBG: Record<string, string> = { sabah: '#fbf6ec', 'gün': '#f2f5ee', 'a
 // Haftagünü: getDay değeri (0=Paz..6=Cmt), Pazartesi-önce görüntü sırası
 const GUNLER: [number, string][] = [[1, 'Pzt'], [2, 'Sal'], [3, 'Çar'], [4, 'Per'], [5, 'Cum'], [6, 'Cmt'], [0, 'Paz']];
 // Akıllı kart tipleri: kod · etiket · ikon
-const KARTLAR: [string, string, string][] = [['standart', 'Standart', '•'], ['bilgi', 'Bilgi', '📄'], ['video', 'Video', '🎬'], ['anket', 'Anket', '📋'], ['coktan', 'Çoktan seçmeli', '❓'], ['diyet', 'Diyet', '🍽'], ['tarif', 'Tarif', '🍳'], ['olcum', 'Ölçüm', '📏'], ['nefes', 'Nefes', '🫁'], ['ruhhali', 'Ruh hali', '🙂'], ['workout', 'Egzersiz', '🏋️']];
+const KARTLAR: [string, string, string][] = [['standart', 'Standart', '•'], ['bilgi', 'Bilgi', '📄'], ['video', 'Video', '🎬'], ['anket', 'Anket', '📋'], ['coktan', 'Çoktan seçmeli', '❓'], ['diyet', 'Diyet', '🍽'], ['tarif', 'Tarif', '🍳'], ['olcum', 'Ölçüm', '📏'], ['nefes', 'Nefes', '🫁'], ['ruhhali', 'Ruh hali', '🙂'], ['workout', 'Egzersiz', '🏋️'], ['sukran', 'Şükran', '🙏'], ['topraklama', '5-4-3-2-1', '🖐'], ['pomodoro', 'Odak', '🍅'], ['beden', 'Beden taraması', '🧘'], ['uykuoncesi', 'Uyku hazırlığı', '🌙'], ['su', 'Su sayacı', '💧'], ['maruz', 'Maruz bırakma', '🎯'], ['niyet', 'Niyet', '🧭']];
 // Ölçüm anahtarları için okunur etiketler (Gelişim grafiği + kart). Bilinmeyen anahtar ham gösterilir.
-const OLCU_ETIKET: Record<string, string> = { kilo: 'Kilo', boy: 'Boy', bel: 'Bel', kalca: 'Kalça', gogus: 'Göğüs', kol: 'Kol', bacak: 'Bacak', vucut_yagi: 'Vücut yağı', kas: 'Kas kütlesi', bel_kalca: 'Bel/Kalça', vki: 'VKİ', ruh_hali: 'Ruh hali' };
+const OLCU_ETIKET: Record<string, string> = { kilo: 'Kilo', boy: 'Boy', bel: 'Bel', kalca: 'Kalça', gogus: 'Göğüs', kol: 'Kol', bacak: 'Bacak', vucut_yagi: 'Vücut yağı', kas: 'Kas kütlesi', bel_kalca: 'Bel/Kalça', vki: 'VKİ', ruh_hali: 'Ruh hali', odak_dk: 'Odak (dk)', su: 'Su (bardak)' };
+// 5-4-3-2-1 topraklama: sabit duyusal kategori listesi.
+const TOPRAK_ADIM: [string, string][] = [['5', '5 şey GÖR'], ['4', '4 şey DOKUN'], ['3', '3 şey DUY'], ['2', '2 şey KOKLA'], ['1', '1 şey TAT']];
 // Basit metin biçimlendirme: **kalın**
 function inlineMetin(s: string): ReactNode[] {
   return s.split(/(\*\*[^*]+\*\*)/g).map((p, i) => (p.startsWith('**') && p.endsWith('**') ? <strong key={i}>{p.slice(2, -2)}</strong> : <span key={i}>{p}</span>));
@@ -383,6 +385,190 @@ function WorkoutKart({ cfg, done, onBitir }: { cfg: any; done: boolean; onBitir:
       })}
       {hareketler.length > 0 && <div className="note" style={{ marginTop: 6 }}>{yapilan}/{total} set</div>}
       <div className="rowbtns" style={{ marginTop: 8 }}><button className="btn" disabled={done} onClick={onBitir}>{done ? '✓ Bitti' : 'Antrenmanı bitir'}</button></div>
+    </div>
+  );
+}
+// Şükran günlüğü: 3 iyi şey (+ opsiyonel özel soru); günlük not gibi ephemeral (kaydedilmez), Kaydet → yapıldı.
+function SukranKart({ cfg, done, onKaydet }: { cfg: any; done: boolean; onKaydet: () => void }) {
+  const [m1, setM1] = useState(''); const [m2, setM2] = useState(''); const [m3, setM3] = useState('');
+  return (
+    <div className="kv"><div className="k">🙏 {cfg?.soru || 'Bugün 3 iyi şey'}</div>
+      <div style={{ width: '100%' }}>
+        <input value={m1} onChange={(e) => setM1(e.target.value)} placeholder="1…" style={{ marginBottom: 6 }} />
+        <input value={m2} onChange={(e) => setM2(e.target.value)} placeholder="2…" style={{ marginBottom: 6 }} />
+        <input value={m3} onChange={(e) => setM3(e.target.value)} placeholder="3…" style={{ marginBottom: 6 }} />
+        {done ? <div className="note" style={{ marginTop: 4, color: 'var(--green)', fontWeight: 700 }}>✓ Kaydedildi</div> : <button className="btn" onClick={onKaydet}>Kaydet</button>}
+        <div className="note" style={{ fontSize: 11, opacity: .8, marginTop: 4 }}>Yalnız sende kalır, kaydedilmez.</div>
+      </div>
+    </div>
+  );
+}
+// 5-4-3-2-1 topraklama: sabit duyusal kategori checklist; hepsi işaretlenince Bitti.
+function TopraklamaKart({ done, onBitir }: { done: boolean; onBitir: () => void }) {
+  const [ok, setOk] = useState<boolean[]>([false, false, false, false, false]);
+  const tumu = ok.every(Boolean);
+  const toggle = (i: number) => setOk((a) => { const b = [...a]; b[i] = !b[i]; return b; });
+  return (
+    <div style={{ margin: '4px 0 8px' }}>
+      <div className="k" style={{ marginBottom: 6 }}>🖐 5-4-3-2-1 topraklama</div>
+      {TOPRAK_ADIM.map(([n, l], i) => (
+        <div key={n} className={'ogun' + (ok[i] ? ' done' : '')} onClick={() => toggle(i)} style={{ cursor: 'pointer' }}>
+          <button className={'ogcheck' + (ok[i] ? ' on' : '')}>{ok[i] ? '✓' : ''}</button>
+          <div style={{ flex: 1 }}><div className="ogunad">{l}</div></div>
+        </div>
+      ))}
+      <div className="rowbtns" style={{ marginTop: 8 }}><button className="btn" disabled={!tumu || done} onClick={onBitir}>{done ? '✓ Bitti' : 'Bitti'}</button></div>
+    </div>
+  );
+}
+// Odak/pomodoro sayacı: geri sayım; bitince dakika dog_measurements'a eklenir (gün toplamı birikir, anahtar='odak_dk').
+function PomodoroKart({ cfg, bugunDk, onFinish }: { cfg: any; bugunDk: number | null; onFinish: (dk: number) => void }) {
+  const dakika = cfg?.dakika > 0 ? cfg.dakika : 25;
+  const [running, setRunning] = useState(false);
+  const [remain, setRemain] = useState(dakika * 60);
+  const [bitti, setBitti] = useState(false);
+  const iv = useRef<any>(null);
+  useEffect(() => () => { if (iv.current) clearInterval(iv.current); }, []);
+  function basla() {
+    if (running) return;
+    setRunning(true);
+    iv.current = setInterval(() => {
+      setRemain((r) => {
+        if (r <= 1) { clearInterval(iv.current); iv.current = null; setRunning(false); setBitti(true); onFinish(dakika); return 0; }
+        return r - 1;
+      });
+    }, 1000);
+  }
+  function durakla() { if (iv.current) { clearInterval(iv.current); iv.current = null; } setRunning(false); }
+  function sifirla() { if (iv.current) { clearInterval(iv.current); iv.current = null; } setRunning(false); setBitti(false); setRemain(dakika * 60); }
+  const mm = String(Math.floor(remain / 60)).padStart(2, '0');
+  const ss = String(remain % 60).padStart(2, '0');
+  return (
+    <div style={{ margin: '4px 0 8px' }}>
+      <div className="nefstage">
+        <div className="nefcircle" style={{ transform: 'scale(1)', transitionDuration: '.4s' }}>
+          <div className="nefphase">{bitti ? 'Bitti' : (running ? 'Odaklan' : 'Hazır')}</div>
+          <div className="nefcount">{mm}:{ss}</div>
+        </div>
+      </div>
+      <div className="note" style={{ textAlign: 'center', margin: '4px 0 0' }}>{dakika} dk oturum{bugunDk != null ? ' · bugün toplam ' + bugunDk + ' dk' : ''}</div>
+      <div className="rowbtns" style={{ justifyContent: 'center', marginTop: 8 }}>
+        <button className="btn" onClick={running ? durakla : basla}>{running ? 'Duraklat' : (bitti ? 'Tekrar' : 'Başla')}</button>
+        <button className="btn ghost sm" onClick={sifirla}>Sıfırla</button>
+      </div>
+      {bitti && <div className="note" style={{ textAlign: 'center', color: 'var(--green)', fontWeight: 700 }}>✓ +{dakika} dk kaydedildi</div>}
+    </div>
+  );
+}
+// Beden taraması (PMR benzeri): sıralı adımlar (etiket+süre, config'den); nefes kartıyla aynı mekanik.
+function BedenKart({ cfg, done, onFinish }: { cfg: any; done: boolean; onFinish: () => void }) {
+  const adimlar: { etiket: string; saniye: number }[] = (cfg?.adimlar && cfg.adimlar.length) ? cfg.adimlar : [];
+  const [, setTick] = useState(0);
+  const st = useRef({ i: 0, remain: 0, bitti: false });
+  const iv = useRef<any>(null);
+  const rerender = () => setTick((t) => t + 1);
+  const stop = () => { if (iv.current) { clearInterval(iv.current); iv.current = null; } };
+  useEffect(() => () => stop(), []);
+  function enter() { st.current.remain = adimlar[st.current.i]?.saniye || 0; rerender(); }
+  function tickFn() {
+    st.current.remain--;
+    if (st.current.remain > 0) { rerender(); return; }
+    st.current.i++;
+    if (st.current.i >= adimlar.length) { stop(); st.current.bitti = true; rerender(); if (!done) onFinish(); return; }
+    enter();
+  }
+  function basla() {
+    if (adimlar.length === 0 || iv.current) return;
+    if (st.current.bitti) st.current = { i: 0, remain: 0, bitti: false };
+    enter(); iv.current = setInterval(tickFn, 1000);
+  }
+  function durakla() { stop(); rerender(); }
+  function sifirla() { stop(); st.current = { i: 0, remain: 0, bitti: false }; rerender(); }
+  if (adimlar.length === 0) return <div className="note" style={{ marginTop: 0 }}>Adım yok (taslak).</div>;
+  const running = !!iv.current;
+  const adim = adimlar[Math.min(st.current.i, adimlar.length - 1)];
+  return (
+    <div style={{ margin: '4px 0 8px' }}>
+      <div className="nefstage">
+        <div className="nefcircle" style={{ transform: 'scale(1)', transitionDuration: '.4s' }}>
+          <div className="nefphase">{st.current.bitti ? 'Bitti' : adim.etiket}</div>
+          <div className="nefcount">{st.current.bitti ? '✓' : (st.current.remain || adim.saniye)}</div>
+        </div>
+      </div>
+      <div className="note" style={{ textAlign: 'center', margin: '4px 0 0' }}>Adım {Math.min(st.current.i + 1, adimlar.length)}/{adimlar.length}</div>
+      <div className="rowbtns" style={{ justifyContent: 'center', marginTop: 8 }}>
+        <button className="btn" onClick={running ? durakla : basla}>{running ? 'Duraklat' : (st.current.bitti ? 'Tekrar' : 'Başla')}</button>
+        <button className="btn ghost sm" onClick={sifirla}>Sıfırla</button>
+      </div>
+      {st.current.bitti && <div className="note" style={{ textAlign: 'center', color: 'var(--green)', fontWeight: 700 }}>✓ Tamamlandı</div>}
+    </div>
+  );
+}
+// Uyku hazırlığı checklist: config.maddeler danışan tarafından işaretlenir; hepsi tamamsa Bitir.
+function UykuKart({ cfg, done, onBitir }: { cfg: any; done: boolean; onBitir: () => void }) {
+  const maddeler: string[] = cfg?.maddeler || [];
+  const [ok, setOk] = useState<boolean[]>([]);
+  const tumu = maddeler.length > 0 && maddeler.every((_, i) => ok[i]);
+  const toggle = (i: number) => setOk((a) => { const b = [...a]; b[i] = !b[i]; return b; });
+  return (
+    <div style={{ margin: '4px 0 8px' }}>
+      <div className="k" style={{ marginBottom: 6 }}>🌙 Uyku hazırlığı</div>
+      {maddeler.length === 0 ? <div className="note" style={{ marginTop: 0 }}>Madde yok (taslak).</div> : maddeler.map((m, i) => (
+        <div key={i} className={'ogun' + (ok[i] ? ' done' : '')} onClick={() => toggle(i)} style={{ cursor: 'pointer' }}>
+          <button className={'ogcheck' + (ok[i] ? ' on' : '')}>{ok[i] ? '✓' : ''}</button>
+          <div style={{ flex: 1 }}><div className="ogunad">{m}</div></div>
+        </div>
+      ))}
+      {maddeler.length > 0 && <div className="rowbtns" style={{ marginTop: 8 }}><button className="btn" disabled={!tumu || done} onClick={onBitir}>{done ? '✓ Hazır' : 'Bitti'}</button></div>}
+    </div>
+  );
+}
+// Su sayacı: dokun→+1 bardak; dog_measurements'a gün toplamı olarak birikir (anahtar='su').
+function SuKart({ cfg, bugun, onEkle }: { cfg: any; bugun: number | null; onEkle: (delta: number) => void }) {
+  const hedef = cfg?.hedef > 0 ? cfg.hedef : 8;
+  const mevcut = bugun || 0;
+  return (
+    <div style={{ margin: '4px 0 8px' }}>
+      <div className="k" style={{ marginBottom: 8 }}>💧 Su · {mevcut}/{hedef} bardak</div>
+      <div className="mbar"><div className="track"><div className="fill" style={{ width: Math.min(100, Math.round(mevcut / hedef * 100)) + '%' }} /></div></div>
+      <div className="rowbtns" style={{ marginTop: 10, justifyContent: 'center' }}>
+        <button className="btn ghost sm" disabled={mevcut <= 0} onClick={() => onEkle(-1)}>−1</button>
+        <button className="btn" onClick={() => onEkle(1)}>+1 bardak</button>
+      </div>
+      {mevcut >= hedef && <div className="note" style={{ textAlign: 'center', color: 'var(--green)', fontWeight: 700, marginTop: 6 }}>✓ Hedefe ulaşıldı</div>}
+    </div>
+  );
+}
+// CBT maruz bırakma: görev + öncesi/sonrası SUDS (0-10); ephemeral (günde tekrarlı olabileceği için tabloya yazılmaz).
+function MaruzKart({ cfg, done, onBitir }: { cfg: any; done: boolean; onBitir: () => void }) {
+  const [once, setOnce] = useState<number | ''>('');
+  const [sonra, setSonra] = useState<number | ''>('');
+  return (
+    <div className="kv"><div className="k">🎯 Maruz bırakma</div>
+      <div style={{ width: '100%' }}>
+        {cfg?.gorev && <div style={{ fontSize: 14, marginBottom: 8 }}>{cfg.gorev}</div>}
+        <label className="fldlbl" style={{ marginTop: 0 }}>Öncesi SUDS (0 rahat – 10 çok yüksek)</label>
+        <input type="number" min={0} max={10} value={once} onChange={(e) => setOnce(e.target.value === '' ? '' : Number(e.target.value))} />
+        <label className="fldlbl">Sonrası SUDS</label>
+        <input type="number" min={0} max={10} value={sonra} onChange={(e) => setSonra(e.target.value === '' ? '' : Number(e.target.value))} />
+        {done ? <div className="note" style={{ marginTop: 6, color: 'var(--green)', fontWeight: 700 }}>✓ Tamamlandı</div> : <button className="btn" style={{ marginTop: 8 }} onClick={onBitir}>Bitti</button>}
+        <div className="note" style={{ fontSize: 11, opacity: .8 }}>Puanlar kaydedilmez, yalnız senin takibin için.</div>
+      </div>
+    </div>
+  );
+}
+// Niyet/değer kartı: günün niyeti (serbest metin) + opsiyonel değer seçimi; ephemeral, Kaydet → yapıldı.
+function NiyetKart({ cfg, done, onKaydet }: { cfg: any; done: boolean; onKaydet: () => void }) {
+  const [metin, setMetin] = useState('');
+  const [sec, setSec] = useState<string | null>(null);
+  const degerler: string[] = cfg?.degerler || [];
+  return (
+    <div className="kv"><div className="k">🧭 {cfg?.soru || 'Bugünün niyeti'}</div>
+      <div style={{ width: '100%' }}>
+        <input value={metin} onChange={(e) => setMetin(e.target.value)} placeholder="Bugün neye odaklanmak istiyorsun?" />
+        {degerler.length > 0 && <div style={{ marginTop: 8 }}>{degerler.map((d) => <span key={d} className={'chip' + (sec === d ? ' on' : '')} onClick={() => setSec(sec === d ? null : d)}>{d}</span>)}</div>}
+        {done ? <div className="note" style={{ marginTop: 6, color: 'var(--green)', fontWeight: 700 }}>✓ Kaydedildi</div> : <button className="btn" style={{ marginTop: 8 }} onClick={onKaydet}>Kaydet</button>}
+      </div>
     </div>
   );
 }
@@ -998,6 +1184,18 @@ export default function Rite() {
     setMeas(m.data || []);
     if (!ritDone(ritId)) toggleRit(ritId);
   }
+  // Gün içinde birikimli ölçüm (su, odak dk): mevcut bugünkü değere delta ekler, upsert eder. Pomodoro/Su kartları kullanır.
+  async function biriktirKaydet(ritId: string, anahtar: string, delta: number, birim: string | null) {
+    if (!client) return;
+    const gunluk = meas.filter((m) => m.anahtar === anahtar && m.tarih === today);
+    const eski = gunluk.length ? Number(gunluk[gunluk.length - 1].deger) : 0;
+    const yeni = Math.max(0, eski + delta);
+    await supabase.from('dog_measurements').delete().eq('client_id', client.id).eq('anahtar', anahtar).eq('tarih', today);
+    await supabase.from('dog_measurements').insert({ client_id: client.id, anahtar, deger: yeni, birim, tarih: today });
+    const m = await supabase.from('dog_measurements').select('tarih,anahtar,deger,birim').eq('client_id', client.id).order('tarih', { ascending: true }).limit(80);
+    setMeas(m.data || []);
+    if (!ritDone(ritId)) toggleRit(ritId);
+  }
   async function programKaldir(pid: string, ad: string) {
     if (!client) return;
     if (!confirm('"' + ad + '" programının tüm ritüelleri ajandadan kaldırılsın mı?')) return;
@@ -1218,9 +1416,9 @@ export default function Rite() {
     const total = ritTotal(rt.id);
     const tip = rt.kart_tipi || 'standart';
     const cfg = rt.kart_config || {};
-    const noDone = tip === 'anket' || tip === 'coktan' || tip === 'nefes' || tip === 'ruhhali' || tip === 'bilgi' || tip === 'tarif' || (tip === 'video' && cfg.done === false);
+    const noDone = tip === 'anket' || tip === 'coktan' || tip === 'nefes' || tip === 'ruhhali' || tip === 'bilgi' || tip === 'tarif' || tip === 'sukran' || tip === 'topraklama' || tip === 'pomodoro' || tip === 'beden' || tip === 'uykuoncesi' || tip === 'su' || tip === 'maruz' || tip === 'niyet' || (tip === 'video' && cfg.done === false);
     const vurl = tip === 'video' ? (cfg.url || rt.url) : rt.url;
-    const ipucu = tip === 'anket' ? ' · 📋 doldur' : tip === 'coktan' ? ' · ❓ yanıtla' : tip === 'diyet' ? ' · 🍽 öğün' : tip === 'tarif' ? ' · 🍳 tarif' : tip === 'video' ? ' · 🎬 izle' : tip === 'nefes' ? ' · 🫁 nefes' : tip === 'ruhhali' ? ' · 🙂 check-in' : tip === 'workout' ? ' · 🏋️ egzersiz' : tip === 'bilgi' ? ' · 📄 oku' : '';
+    const ipucu = tip === 'anket' ? ' · 📋 doldur' : tip === 'coktan' ? ' · ❓ yanıtla' : tip === 'diyet' ? ' · 🍽 öğün' : tip === 'tarif' ? ' · 🍳 tarif' : tip === 'video' ? ' · 🎬 izle' : tip === 'nefes' ? ' · 🫁 nefes' : tip === 'ruhhali' ? ' · 🙂 check-in' : tip === 'workout' ? ' · 🏋️ egzersiz' : tip === 'bilgi' ? ' · 📄 oku' : tip === 'sukran' ? ' · 🙏 şükran' : tip === 'topraklama' ? ' · 🖐 topraklan' : tip === 'pomodoro' ? ' · 🍅 odaklan' : tip === 'beden' ? ' · 🧘 taransın' : tip === 'uykuoncesi' ? ' · 🌙 hazırlan' : tip === 'su' ? ' · 💧 iç' : tip === 'maruz' ? ' · 🎯 uygula' : tip === 'niyet' ? ' · 🧭 niyet belirle' : '';
     return (
       <div>
         <div className="rit">
@@ -1777,6 +1975,14 @@ export default function Rite() {
             {isRit && kTip === 'nefes' && <NefesKart cfg={kCfg} done={ritDone(o.id)} onFinish={() => { if (!ritDone(o.id)) toggleRit(o.id); }} />}
             {isRit && kTip === 'ruhhali' && <MoodKart soru={kCfg.soru} bugun={(() => { const arr = meas.filter((m) => m.anahtar === 'ruh_hali' && m.tarih === today); return arr.length ? Number(arr[arr.length - 1].deger) : null; })()} onKaydet={(d) => moodKaydet(o.id, d)} />}
             {isRit && kTip === 'workout' && <WorkoutKart cfg={kCfg} done={ritDone(o.id)} onBitir={() => { if (!ritDone(o.id)) toggleRit(o.id); }} />}
+            {isRit && kTip === 'sukran' && <SukranKart cfg={kCfg} done={ritDone(o.id)} onKaydet={() => { if (!ritDone(o.id)) toggleRit(o.id); }} />}
+            {isRit && kTip === 'topraklama' && <TopraklamaKart done={ritDone(o.id)} onBitir={() => { if (!ritDone(o.id)) toggleRit(o.id); }} />}
+            {isRit && kTip === 'pomodoro' && <PomodoroKart cfg={kCfg} bugunDk={(() => { const arr = meas.filter((m) => m.anahtar === 'odak_dk' && m.tarih === today); return arr.length ? Number(arr[arr.length - 1].deger) : null; })()} onFinish={(dk) => biriktirKaydet(o.id, 'odak_dk', dk, 'dk')} />}
+            {isRit && kTip === 'beden' && <BedenKart cfg={kCfg} done={ritDone(o.id)} onFinish={() => { if (!ritDone(o.id)) toggleRit(o.id); }} />}
+            {isRit && kTip === 'uykuoncesi' && <UykuKart cfg={kCfg} done={ritDone(o.id)} onBitir={() => { if (!ritDone(o.id)) toggleRit(o.id); }} />}
+            {isRit && kTip === 'su' && <SuKart cfg={kCfg} bugun={(() => { const arr = meas.filter((m) => m.anahtar === 'su' && m.tarih === today); return arr.length ? Number(arr[arr.length - 1].deger) : null; })()} onEkle={(delta) => biriktirKaydet(o.id, 'su', delta, 'bardak')} />}
+            {isRit && kTip === 'maruz' && <MaruzKart cfg={kCfg} done={ritDone(o.id)} onBitir={() => { if (!ritDone(o.id)) toggleRit(o.id); }} />}
+            {isRit && kTip === 'niyet' && <NiyetKart cfg={kCfg} done={ritDone(o.id)} onKaydet={() => { if (!ritDone(o.id)) toggleRit(o.id); }} />}
 
             {isRit && zamanOpen && (
               <div className="modal top2" onClick={() => setZamanOpen(false)}>
