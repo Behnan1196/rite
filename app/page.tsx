@@ -42,7 +42,7 @@ const SLOTBG: Record<string, string> = { sabah: '#fbf6ec', 'gün': '#f2f5ee', 'a
 // Haftagünü: getDay değeri (0=Paz..6=Cmt), Pazartesi-önce görüntü sırası
 const GUNLER: [number, string][] = [[1, 'Pzt'], [2, 'Sal'], [3, 'Çar'], [4, 'Per'], [5, 'Cum'], [6, 'Cmt'], [0, 'Paz']];
 // Akıllı kart tipleri: kod · etiket · ikon
-const KARTLAR: [string, string, string][] = [['standart', 'Standart', '•'], ['bilgi', 'Bilgi', '📄'], ['video', 'Video', '🎬'], ['anket', 'Anket', '📋'], ['coktan', 'Çoktan seçmeli', '❓'], ['diyet', 'Diyet', '🍽'], ['tarif', 'Tarif', '🍳'], ['olcum', 'Ölçüm', '📏'], ['nefes', 'Nefes', '🫁'], ['ruhhali', 'Ruh hali', '🙂'], ['workout', 'Egzersiz', '🏋️'], ['sukran', 'Şükran', '🙏'], ['topraklama', '5-4-3-2-1', '🖐'], ['pomodoro', 'Odak', '🍅'], ['beden', 'Beden taraması', '🧘'], ['uykuoncesi', 'Uyku hazırlığı', '🌙'], ['su', 'Su sayacı', '💧'], ['maruz', 'Maruz bırakma', '🎯'], ['niyet', 'Niyet', '🧭']];
+const KARTLAR: [string, string, string][] = [['standart', 'Standart', '•'], ['bilgi', 'Bilgi', '📄'], ['video', 'Video', '🎬'], ['anket', 'Anket', '📋'], ['coktan', 'Çoktan seçmeli', '❓'], ['diyet', 'Diyet', '🍽'], ['tarif', 'Tarif', '🍳'], ['olcum', 'Ölçüm', '📏'], ['nefes', 'Nefes', '🫁'], ['ruhhali', 'Ruh hali', '🙂'], ['workout', 'Egzersiz', '🏋️'], ['sukran', 'Şükran', '🙏'], ['topraklama', '5-4-3-2-1', '🖐'], ['pomodoro', 'Odak', '🍅'], ['beden', 'Beden taraması', '🧘'], ['uykuoncesi', 'Uyku hazırlığı', '🌙'], ['su', 'Su sayacı', '💧'], ['maruz', 'Maruz bırakma', '🎯'], ['niyet', 'Niyet', '🧭'], ['randevu', 'Randevu', '📅']];
 // Ölçüm anahtarları için okunur etiketler (Gelişim grafiği + kart). Bilinmeyen anahtar ham gösterilir.
 const OLCU_ETIKET: Record<string, string> = { kilo: 'Kilo', boy: 'Boy', bel: 'Bel', kalca: 'Kalça', gogus: 'Göğüs', kol: 'Kol', bacak: 'Bacak', vucut_yagi: 'Vücut yağı', kas: 'Kas kütlesi', bel_kalca: 'Bel/Kalça', vki: 'VKİ', ruh_hali: 'Ruh hali', odak_dk: 'Odak (dk)', su: 'Su (bardak)' };
 // Ölçüm anahtarı → varsayılan alan (statik tahmin; Meridyen'deki OLCU_INFO ile aynı). Kart_config.dikey varsa (bkz anahtarDikey) ONA öncelik verilir.
@@ -404,6 +404,24 @@ function SukranKart({ cfg, done, onKaydet }: { cfg: any; done: boolean; onKaydet
         <input value={m3} onChange={(e) => setM3(e.target.value)} placeholder="3…" style={{ marginBottom: 6 }} />
         {done ? <div className="note" style={{ marginTop: 4, color: 'var(--green)', fontWeight: 700 }}>✓ Kaydedildi</div> : <button className="btn" onClick={onKaydet}>Kaydet</button>}
         <div className="note" style={{ fontSize: 11, opacity: .8, marginTop: 4 }}>Yalnız sende kalır, kaydedilmez.</div>
+      </div>
+    </div>
+  );
+}
+// Randevu kartı: danışmanın (Meridyen) oluşturduğu görüşme randevusu — saat/format/yer bilgisini gösterir.
+// Tarih zaten "Ne zaman?"dan geliyor; done dış checkbox ile işaretlenir (video gibi, ayrı buton gerekmez).
+function RandevuKart({ cfg }: { cfg: any }) {
+  const online = (cfg?.format || 'online') === 'online';
+  return (
+    <div className="kv" style={{ margin: '4px 0 8px' }}>
+      <div className="k">📅 Görüşme randevusu</div>
+      <div style={{ width: '100%' }}>
+        {cfg?.saat && <div className="note" style={{ marginTop: 0 }}>🕐 Saat: <b style={{ color: 'var(--ink)' }}>{cfg.saat}</b></div>}
+        <div className="note">{online ? '💻 Online görüşme' : '📍 Yüz yüze görüşme'}</div>
+        {cfg?.yer && (online
+          ? <a className="btn" href={cfg.yer} target="_blank" rel="noreferrer" style={{ display: 'inline-block', marginTop: 6 }}>▶ Görüşmeye katıl</a>
+          : <div className="note">Adres: {cfg.yer}</div>)}
+        {cfg?.not && <div className="note" style={{ marginTop: 6 }}>{cfg.not}</div>}
       </div>
     </div>
   );
@@ -1431,12 +1449,13 @@ export default function Rite() {
     const total = ritTotal(rt.id);
     const tip = rt.kart_tipi || 'standart';
     const cfg = rt.kart_config || {};
-    const noDone = tip === 'anket' || tip === 'coktan' || tip === 'nefes' || tip === 'ruhhali' || tip === 'bilgi' || tip === 'tarif' || tip === 'sukran' || tip === 'topraklama' || tip === 'pomodoro' || tip === 'beden' || tip === 'uykuoncesi' || tip === 'su' || tip === 'maruz' || tip === 'niyet' || (tip === 'video' && cfg.done === false);
+    const noDone = tip === 'anket' || tip === 'coktan' || tip === 'nefes' || tip === 'ruhhali' || tip === 'bilgi' || tip === 'tarif' || tip === 'sukran' || tip === 'topraklama' || tip === 'pomodoro' || tip === 'beden' || tip === 'uykuoncesi' || tip === 'su' || tip === 'maruz' || tip === 'niyet' || (tip === 'video' && cfg.done === false) || (tip === 'randevu' && cfg.done === false);
     const vurl = tip === 'video' ? (cfg.url || rt.url) : rt.url;
-    const ipucu = tip === 'anket' ? ' · 📋 doldur' : tip === 'coktan' ? ' · ❓ yanıtla' : tip === 'diyet' ? ' · 🍽 öğün' : tip === 'tarif' ? ' · 🍳 tarif' : tip === 'video' ? ' · 🎬 izle' : tip === 'nefes' ? ' · 🫁 nefes' : tip === 'ruhhali' ? ' · 🙂 check-in' : tip === 'workout' ? ' · 🏋️ egzersiz' : tip === 'bilgi' ? ' · 📄 oku' : tip === 'sukran' ? ' · 🙏 şükran' : tip === 'topraklama' ? ' · 🖐 topraklan' : tip === 'pomodoro' ? ' · 🍅 odaklan' : tip === 'beden' ? ' · 🧘 taransın' : tip === 'uykuoncesi' ? ' · 🌙 hazırlan' : tip === 'su' ? ' · 💧 iç' : tip === 'maruz' ? ' · 🎯 uygula' : tip === 'niyet' ? ' · 🧭 niyet belirle' : '';
+    const ipucu = tip === 'anket' ? ' · 📋 doldur' : tip === 'coktan' ? ' · ❓ yanıtla' : tip === 'diyet' ? ' · 🍽 öğün' : tip === 'tarif' ? ' · 🍳 tarif' : tip === 'video' ? ' · 🎬 izle' : tip === 'nefes' ? ' · 🫁 nefes' : tip === 'ruhhali' ? ' · 🙂 check-in' : tip === 'workout' ? ' · 🏋️ egzersiz' : tip === 'bilgi' ? ' · 📄 oku' : tip === 'sukran' ? ' · 🙏 şükran' : tip === 'topraklama' ? ' · 🖐 topraklan' : tip === 'pomodoro' ? ' · 🍅 odaklan' : tip === 'beden' ? ' · 🧘 taransın' : tip === 'uykuoncesi' ? ' · 🌙 hazırlan' : tip === 'su' ? ' · 💧 iç' : tip === 'maruz' ? ' · 🎯 uygula' : tip === 'niyet' ? ' · 🧭 niyet belirle' : tip === 'randevu' ? ' · 📅 randevu' : '';
+    const meridyen = rt.kaynak === 'Meridyen'; // sağlayıcı-kaynaklı kart — kişisel kartlardan çerçeveyle ayrıştır
     return (
       <div>
-        <div className="rit">
+        <div className={'rit' + (meridyen ? ' rit-mer' : '')}>
           <div className={'chk' + (done ? ' on' : '')} onClick={() => (noDone ? openRit(rt) : toggleRit(rt.id))} title={noDone ? 'Aç' : 'Yaptım'}>{done ? '✓' : (noDone ? kartIkon(tip) : '')}</div>
           <div style={{ flex: 1, cursor: 'pointer' }} onClick={() => openRit(rt)}>
             <div className="t">{rt.ad}
@@ -2013,6 +2032,7 @@ export default function Rite() {
             {isRit && kTip === 'su' && <SuKart cfg={kCfg} bugun={(() => { const arr = meas.filter((m) => m.anahtar === 'su' && m.tarih === today); return arr.length ? Number(arr[arr.length - 1].deger) : null; })()} onEkle={(delta) => biriktirKaydet(o.id, 'su', delta, 'bardak')} />}
             {isRit && kTip === 'maruz' && <MaruzKart cfg={kCfg} done={ritDone(o.id)} onBitir={() => { if (!ritDone(o.id)) toggleRit(o.id); }} />}
             {isRit && kTip === 'niyet' && <NiyetKart cfg={kCfg} done={ritDone(o.id)} onKaydet={() => { if (!ritDone(o.id)) toggleRit(o.id); }} />}
+            {isRit && kTip === 'randevu' && <RandevuKart cfg={kCfg} />}
 
             {isRit && zamanOpen && (
               <div className="modal top2" onClick={() => setZamanOpen(false)}>
