@@ -212,3 +212,14 @@ input{width:100%;font-size:15px;padding:11px 12px;border:1px solid var(--line);b
 .nezaman{margin:2px 0 10px;padding:8px 10px;background:var(--card2,#f6f4ee);border:1px solid var(--line);border-radius:10px}
 .nezaman>.k{font-size:12px;font-weight:700;color:#6b6459;margin-bottom:5px;letter-spacing:.2px}
 .nezaman input[type=date]{vertical-align:middle}
+
+/* Diyet kartı — öğün işaretleme + not */
+.ogcheck{flex:0 0 auto;width:22px;height:22px;border-radius:50%;border:1.5px solid var(--line);background:#fff;color:var(--green,#3f7d55);font-size:13px;font-weight:800;cursor:pointer;align-self:flex-start;margin-top:2px;line-height:1}
+.ogcheck.on{background:var(--green,#3f7d55);border-color:var(--green,#3f7d55);color:#fff}
+.ogun.done{opacity:.58}
+.minlink{background:none;border:none;color:#7a7365;font-size:12px;padding:0;cursor:pointer;text-decoration:underline}
+/* Ölçüm kartı satırı */
+.olcrow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid var(--line)}
+.olcrow:first-of-type{border-top:none}
+.olcrow label{font-size:13px;color:#3a362e;flex:1}
+.olcrow input{width:96px;text-align:right}

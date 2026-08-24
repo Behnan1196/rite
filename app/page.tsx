@@ -42,7 +42,9 @@ const SLOTBG: Record<string, string> = { sabah: '#fbf6ec', 'gün': '#f2f5ee', 'a
 // Haftagünü: getDay değeri (0=Paz..6=Cmt), Pazartesi-önce görüntü sırası
 const GUNLER: [number, string][] = [[1, 'Pzt'], [2, 'Sal'], [3, 'Çar'], [4, 'Per'], [5, 'Cum'], [6, 'Cmt'], [0, 'Paz']];
 // Akıllı kart tipleri: kod · etiket · ikon
-const KARTLAR: [string, string, string][] = [['standart', 'Standart', '•'], ['bilgi', 'Bilgi', '📄'], ['video', 'Video', '🎬'], ['anket', 'Anket', '📋'], ['diyet', 'Diyet', '🍽'], ['nefes', 'Nefes', '🫁'], ['ruhhali', 'Ruh hali', '🙂'], ['workout', 'Egzersiz', '🏋️']];
+const KARTLAR: [string, string, string][] = [['standart', 'Standart', '•'], ['bilgi', 'Bilgi', '📄'], ['video', 'Video', '🎬'], ['anket', 'Anket', '📋'], ['diyet', 'Diyet', '🍽'], ['olcum', 'Ölçüm', '📏'], ['nefes', 'Nefes', '🫁'], ['ruhhali', 'Ruh hali', '🙂'], ['workout', 'Egzersiz', '🏋️']];
+// Ölçüm anahtarları için okunur etiketler (Gelişim grafiği + kart). Bilinmeyen anahtar ham gösterilir.
+const OLCU_ETIKET: Record<string, string> = { kilo: 'Kilo', boy: 'Boy', bel: 'Bel', kalca: 'Kalça', gogus: 'Göğüs', kol: 'Kol', bacak: 'Bacak', vucut_yagi: 'Vücut yağı', kas: 'Kas kütlesi', bel_kalca: 'Bel/Kalça', vki: 'VKİ', ruh_hali: 'Ruh hali' };
 // Basit metin biçimlendirme: **kalın**
 function inlineMetin(s: string): ReactNode[] {
   return s.split(/(\*\*[^*]+\*\*)/g).map((p, i) => (p.startsWith('**') && p.endsWith('**') ? <strong key={i}>{p.slice(2, -2)}</strong> : <span key={i}>{p}</span>));
@@ -182,24 +184,63 @@ function AnketKart({ cfg, done, onGonder }: { cfg: any; done: boolean; onGonder:
     </div>
   );
 }
-// Diyet kartı (akıllı tabak): öğün + alternatifler; kalori/makro/hazırlanış/resim (varsa).
+// Diyet kartı (akıllı tabak): tüm öğünler; miktar + alternatifler + kalori/makro/hazırlanış/resim.
+// Öğünü "yedim" işaretleme + opsiyonel kısa not (farklı miktar). İşaretler/notlar yalnız danışanda kalır (kaydedilmez).
 function DiyetKart({ cfg }: { cfg: any }) {
   const ogunler: any[] = cfg?.ogunler || [];
+  const [yenildi, setYenildi] = useState<boolean[]>([]);
+  const [notAcik, setNotAcik] = useState<number | null>(null);
+  const [notlar, setNotlar] = useState<Record<number, string>>({});
+  const toggle = (i: number) => setYenildi((a) => { const b = [...a]; b[i] = !b[i]; return b; });
+  const yenenSay = yenildi.filter(Boolean).length;
   return (
     <div style={{ margin: '4px 0 8px' }}>
-      <div className="k" style={{ marginBottom: 4 }}>🍽 Öğünler</div>
-      {ogunler.length === 0 ? <div className="note" style={{ marginTop: 0 }}>Öğün yok (taslak).</div> : ogunler.map((og: any, i: number) => (
-        <div key={i} className="ogun">
-          {og.resim && <img src={og.resim} alt="" className="ogunimg" />}
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="ogunad">{og.ad}</div>
-            {(og.kalori || og.makro) && <div className="note" style={{ margin: '2px 0 0' }}>{og.kalori ? og.kalori + ' kcal' : ''}{og.kalori && og.makro ? ' · ' : ''}{og.makro || ''}</div>}
-            {(og.alternatifler || []).length > 0 && <div className="note" style={{ margin: '2px 0 0' }}>Alternatif: {(og.alternatifler || []).join(' · ')}</div>}
-            {og.hazirlanis && <div className="note" style={{ margin: '2px 0 0' }}>Hazırlanış: {og.hazirlanis}</div>}
+      <div className="k" style={{ marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}><span>🍽 Günün öğünleri</span>{ogunler.length > 0 && <span className="note" style={{ margin: 0 }}>{yenenSay}/{ogunler.length}</span>}</div>
+      {ogunler.length === 0 ? <div className="note" style={{ marginTop: 0 }}>Öğün yok (taslak).</div> : ogunler.map((og: any, i: number) => {
+        const on = !!yenildi[i];
+        const alts: string[] = og.alternatifler || [];
+        return (
+          <div key={i} className={'ogun' + (on ? ' done' : '')}>
+            <button className={'ogcheck' + (on ? ' on' : '')} onClick={() => toggle(i)} title="yedim">{on ? '✓' : ''}</button>
+            {og.resim && <img src={og.resim} alt="" className="ogunimg" />}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="ogunad">{og.ad}{og.miktar ? <span className="note" style={{ margin: 0, fontWeight: 400 }}> · {og.miktar}</span> : ''}</div>
+              {(og.kalori || og.makro) && <div className="note" style={{ margin: '2px 0 0' }}>{og.kalori ? og.kalori + ' kcal' : ''}{og.kalori && og.makro ? ' · ' : ''}{og.makro || ''}</div>}
+              {alts.length > 0 && <div className="note" style={{ margin: '2px 0 0' }}>Alternatif: {alts.join(' · ')}</div>}
+              {og.hazirlanis && <div className="note" style={{ margin: '2px 0 0' }}>Hazırlanış: {og.hazirlanis}</div>}
+              <div style={{ marginTop: 4 }}><button className="minlink" onClick={() => setNotAcik(notAcik === i ? null : i)}>{notlar[i] ? '✎ ' + notlar[i] : '+ farklı miktar / not'}</button></div>
+              {notAcik === i && <input autoFocus value={notlar[i] || ''} onChange={(e) => setNotlar((m) => ({ ...m, [i]: e.target.value }))} onBlur={() => setNotAcik(null)} placeholder="ör. yarısını yedim, ekmeksiz…" style={{ width: '100%', marginTop: 4 }} />}
+            </div>
           </div>
+        );
+      })}
+      {cfg?.makro && <div className="note" style={{ marginTop: 6 }}>Günlük hedef: {cfg.makro}</div>}
+      {ogunler.length > 0 && <div className="note" style={{ marginTop: 4, fontSize: 11, opacity: .8 }}>İşaretler ve notlar yalnız sende kalır.</div>}
+    </div>
+  );
+}
+// Ölçüm kartı: config.alanlar = [{anahtar,label,birim}]. Değerleri dog_measurements'a yazar (parent onKaydet) → Gelişim grafiğinde çıkar.
+function OlcumKart({ cfg, sonDegerler, onKaydet }: { cfg: any; sonDegerler: Record<string, number>; onKaydet: (vals: { anahtar: string; deger: number; birim: string | null }[]) => void }) {
+  const alanlar: any[] = (cfg?.alanlar && cfg.alanlar.length ? cfg.alanlar : []);
+  const [val, setVal] = useState<Record<string, string>>({});
+  const [ok, setOk] = useState(false);
+  const girilen = alanlar.filter((a) => (val[a.anahtar] ?? '').trim() !== '' && !isNaN(Number(val[a.anahtar])));
+  function kaydet() {
+    if (girilen.length === 0) return;
+    onKaydet(girilen.map((a) => ({ anahtar: a.anahtar, deger: Number(val[a.anahtar]), birim: a.birim || null })));
+    setOk(true); setTimeout(() => setOk(false), 2500);
+  }
+  return (
+    <div style={{ margin: '4px 0 8px' }}>
+      <div className="k" style={{ marginBottom: 6 }}>📏 Ölçüm</div>
+      {cfg?.not && <div className="note" style={{ marginTop: 0 }}>{cfg.not}</div>}
+      {alanlar.length === 0 ? <div className="note" style={{ marginTop: 0 }}>Alan tanımlı değil (taslak).</div> : alanlar.map((a: any) => (
+        <div key={a.anahtar} className="olcrow">
+          <label>{a.label || a.anahtar}{a.birim ? ' (' + a.birim + ')' : ''}{sonDegerler[a.anahtar] != null ? <span className="note" style={{ margin: 0 }}> · son: {sonDegerler[a.anahtar]}</span> : ''}</label>
+          <input type="number" inputMode="decimal" step="any" value={val[a.anahtar] ?? ''} onChange={(e) => setVal((m) => ({ ...m, [a.anahtar]: e.target.value }))} placeholder={sonDegerler[a.anahtar] != null ? String(sonDegerler[a.anahtar]) : '—'} />
         </div>
       ))}
-      {cfg?.makro && <div className="note" style={{ marginTop: 4 }}>Günlük makro hedefi: {cfg.makro}</div>}
+      {alanlar.length > 0 && <div className="rowbtns" style={{ marginTop: 8 }}><button className="btn" disabled={girilen.length === 0} onClick={kaydet}>Kaydet</button>{ok && <span className="note" style={{ margin: 0, color: 'var(--green)', fontWeight: 700 }}>✓ Kaydedildi</span>}</div>}
     </div>
   );
 }
@@ -898,6 +939,17 @@ export default function Rite() {
     setMeas(m.data || []);
     if (!ritDone(ritId)) toggleRit(ritId);
   }
+  // Ölçüm kartından gelen değerleri dog_measurements'a yaz (gün bazında upsert) → Gelişim grafiğine düşer.
+  async function olcumKaydet(ritId: string, vals: { anahtar: string; deger: number; birim: string | null }[]) {
+    if (!client || !vals.length) return;
+    for (const v of vals) {
+      await supabase.from('dog_measurements').delete().eq('client_id', client.id).eq('anahtar', v.anahtar).eq('tarih', today);
+      await supabase.from('dog_measurements').insert({ client_id: client.id, anahtar: v.anahtar, deger: v.deger, birim: v.birim, tarih: today });
+    }
+    const m = await supabase.from('dog_measurements').select('tarih,anahtar,deger,birim').eq('client_id', client.id).order('tarih', { ascending: true }).limit(80);
+    setMeas(m.data || []);
+    if (!ritDone(ritId)) toggleRit(ritId);
+  }
   async function programKaldir(pid: string, ad: string) {
     if (!client) return;
     if (!confirm('"' + ad + '" programının tüm ritüelleri ajandadan kaldırılsın mı?')) return;
@@ -1466,10 +1518,10 @@ export default function Rite() {
               </table>
             </div>
             <div className="card"><h3>Ölçümler</h3>
-              {(() => { const keys = Object.keys(measByKey).filter((k) => k !== 'ruh_hali'); return keys.length === 0 ? <div className="note">Koçun ölçüm girince görünür.</div> : keys.slice(0, 6).map((k) => {
+              {(() => { const keys = Object.keys(measByKey).filter((k) => k !== 'ruh_hali'); return keys.length === 0 ? <div className="note">Ölçüm kartıyla girdiğinde ya da koçun girince burada grafikleşir.</div> : keys.slice(0, 8).map((k) => {
                 const arr = measByKey[k]; const l = arr[arr.length - 1];
                 const son = arr.slice(-7).map((m: any) => Number(m.deger)); const mn = Math.min(...son), mx = Math.max(...son);
-                return <div key={k} className="mrow"><span>{k}<span className="msprk">{son.map((v: number, i: number) => <i key={i} style={{ height: (mx > mn ? ((v - mn) / (mx - mn)) * 100 : 50) + '%' }} />)}</span></span><b>{l.deger} {l.birim || ''}</b></div>;
+                return <div key={k} className="mrow"><span>{OLCU_ETIKET[k] || k}<span className="msprk">{son.map((v: number, i: number) => <i key={i} style={{ height: (mx > mn ? ((v - mn) / (mx - mn)) * 100 : 50) + '%' }} />)}</span></span><b>{l.deger} {l.birim || ''}</b></div>;
               }); })()}
             </div>
             <div className="card"><h3>Alışkanlık uyumu (bu hafta)</h3>
@@ -1671,6 +1723,7 @@ export default function Rite() {
             </div>}
             {isRit && kTip === 'anket' && <AnketKart cfg={kCfg} done={ritDone(o.id)} onGonder={() => { if (!ritDone(o.id)) toggleRit(o.id); }} />}
             {isRit && kTip === 'diyet' && <DiyetKart cfg={kCfg} />}
+            {isRit && kTip === 'olcum' && <OlcumKart cfg={kCfg} sonDegerler={(() => { const r: Record<string, number> = {}; meas.forEach((m) => { r[m.anahtar] = Number(m.deger); }); return r; })()} onKaydet={(vals) => olcumKaydet(o.id, vals)} />}
             {isRit && kTip === 'nefes' && <NefesKart cfg={kCfg} done={ritDone(o.id)} onFinish={() => { if (!ritDone(o.id)) toggleRit(o.id); }} />}
             {isRit && kTip === 'ruhhali' && <MoodKart soru={kCfg.soru} bugun={(() => { const arr = meas.filter((m) => m.anahtar === 'ruh_hali' && m.tarih === today); return arr.length ? Number(arr[arr.length - 1].deger) : null; })()} onKaydet={(d) => moodKaydet(o.id, d)} />}
             {isRit && kTip === 'workout' && <WorkoutKart cfg={kCfg} done={ritDone(o.id)} onBitir={() => { if (!ritDone(o.id)) toggleRit(o.id); }} />}
