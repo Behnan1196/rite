@@ -733,8 +733,37 @@ export default function Rite() {
     if (!client) return;
     const u = url.trim() || null;
     const cfg = { ...(detay?.obj?.kart_config || {}), url: u };
-    await supabase.from('dog_rituals').update({ kart_config: cfg, url: u }).eq('id', id);
-    patchDetay({ kart_config: cfg, url: u });
+    const patch: any = { kart_config: cfg, url: u };
+    if (u && (detay?.obj?.kart_tipi || 'standart') === 'standart') patch.kart_tipi = 'video'; // link girilince video kartı olur
+    await supabase.from('dog_rituals').update(patch).eq('id', id);
+    patchDetay(patch);
+    loadData(client.id);
+  }
+  // Boş tarihsiz kart oluştur (Inbox) ve detay editörünü aç.
+  async function kartYarat() {
+    if (!client) return;
+    const { data } = await supabase.from('dog_rituals').insert({ client_id: client.id, ad: 'Yeni kart', kaynak: 'Kendi', tip: 'aliskanlik', kart_tipi: 'standart', aliskanlik: false, aktif: true, mezun: false, blok_sira: Date.now() }).select().single();
+    if (data) { setInboxOpen(false); await loadData(client.id); openDetay(data, 'ritual'); }
+  }
+  // Ne zaman? — kartı bir güne koy (tek seferlik), süregelen yap, ya da Inbox'a (tarihsiz) geri al.
+  async function setRitTarih(id: string, ds: string) {
+    if (!client || !ds) return;
+    await supabase.from('dog_rituals').update({ baslangic: ds, bitis: ds }).eq('id', id);
+    patchDetay({ baslangic: ds, bitis: ds });
+    loadData(client.id);
+  }
+  async function setRitSuregelen(id: string) {
+    if (!client) return;
+    const rt = rituals.find((r) => r.id === id);
+    const bas = (rt && rt.baslangic && rt.baslangic >= today) ? rt.baslangic : today;
+    await supabase.from('dog_rituals').update({ baslangic: bas, bitis: null }).eq('id', id);
+    patchDetay({ baslangic: bas, bitis: null });
+    loadData(client.id);
+  }
+  async function setRitTarihsiz(id: string) {
+    if (!client) return;
+    await supabase.from('dog_rituals').update({ baslangic: null, bitis: null }).eq('id', id);
+    patchDetay({ baslangic: null, bitis: null });
     loadData(client.id);
   }
   // gun: null = süregelen (bitiş kaldır); >0 = başlangıçtan itibaren N gün
@@ -1044,7 +1073,9 @@ export default function Rite() {
   }
 
   const wday = (d: string) => new Date(d + 'T00:00:00').getDay();
-  const activeOn = (r: any, d: string) => (!r.baslangic || r.baslangic <= d) && (!r.bitis || d <= r.bitis) && (!r.gunler || r.gunler.length === 0 || r.gunler.includes(wday(d)));
+  // Tarihsiz (baslangic yok) ritüel = Inbox kartı; ajandada görünmez.
+  const activeOn = (r: any, d: string) => !!r.baslangic && r.baslangic <= d && (!r.bitis || d <= r.bitis) && (!r.gunler || r.gunler.length === 0 || r.gunler.includes(wday(d)));
+  const tarihsizler = rituals.filter((r) => !r.baslangic && !r.mezun);
   const habits = rituals.filter((r) => !r.mezun && activeOn(r, day));
   const mezunlar = rituals.filter((r) => r.mezun);
   // Çalışan programlar: program kimliğine göre grupla (ilerleme + süre kontrolü için).
@@ -1270,6 +1301,25 @@ export default function Rite() {
               );
             })()}
 
+            {ajView === 'ay' && (() => {
+              const randevular = rituals.filter((r) => !r.mezun && r.baslangic && r.baslangic === r.bitis && r.baslangic >= today).sort((a, b) => (a.baslangic < b.baslangic ? -1 : 1));
+              if (randevular.length === 0) return null;
+              return (
+                <div style={{ marginTop: 10 }}>
+                  <div className="tod">📅 Yaklaşan randevular</div>
+                  {randevular.map((r) => (
+                    <div key={r.id} className="actcard" onClick={() => openRit(r)}>
+                      <div style={{ flex: 1 }}>
+                        <div className="n">{kartIkon(r.kart_tipi) || '📅'} {r.ad}</div>
+                        <div className="o">{dayLabel(r.baslangic)}{r.hatirlatma_saat ? ' · 🔔 ' + r.hatirlatma_saat : ''}</div>
+                      </div>
+                      <span className="go">›</span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+
           </div>
         )}
 
@@ -1449,30 +1499,15 @@ export default function Rite() {
             <button className="x" onClick={() => setInboxOpen(false)}>×</button>
             <h2 style={{ marginTop: 2 }}>📥 Inbox</h2>
             <div className="note" style={{ marginTop: 0 }}>Aklına takılan her şeyin ilk durağı; sonra bir güne yerleştir. <button className="btn ghost sm" style={{ marginLeft: 6 }} onClick={() => client && loadInbox(client.id)}>🔄 Yenile</button></div>
-            <input ref={fotoRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={onFoto} />
-            {!yeniAcik ? (
-              <button className="btn" style={{ width: '100%', marginTop: 8 }} onClick={() => { yakalaKapat(); setYeniAcik(true); }}>＋ Ekle</button>
-            ) : (
-              <div className="card">
-                <textarea autoFocus value={ib.t} onChange={(e) => setIb((s) => ({ ...s, t: e.target.value }))} placeholder="Yaz ya da yapıştır… (fikir, not, link, reçete no…)" style={{ width: '100%', minHeight: 52 }} rows={2} />
-                {/^https?:\/\//i.test(ib.t.trim()) && <div style={{ marginTop: 6 }}>
-                  <div className="note" style={{ marginTop: 0 }}>🎬 Video linki algılandı — bir başlık ver:</div>
-                  <input value={ibBaslik} onChange={(e) => setIbBaslik(e.target.value)} placeholder="Video başlığı…" style={{ width: '100%', marginTop: 4 }} />
-                </div>}
-                {ibImg && <div style={{ position: 'relative', marginTop: 6 }}><img src={ibImg} alt="" style={{ maxWidth: '100%', borderRadius: 8, display: 'block' }} /><button className="rmx" style={{ position: 'absolute', top: 6, right: 6 }} onClick={() => setIbImg(null)}>✕</button></div>}
-                {randevuMod && <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}><span style={{ fontSize: 13 }}>📅 Tarih:</span><input type="date" min={today} value={rdvTarih} onChange={(e) => setRdvTarih(e.target.value)} style={{ width: 'auto' }} /></div>}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
-                  <button className="ekcircle" onClick={() => setEkMenu((m) => !m)} title="ekle">＋</button>
-                  {ekMenu && <button className="btn ghost sm" onClick={() => { fotoRef.current?.click(); setEkMenu(false); }}>📷 Foto Ekle</button>}
-                  <button className={'btn ghost sm' + (randevuMod ? ' on' : '')} style={randevuMod ? { background: 'var(--green2,#eaf5ee)', borderColor: 'var(--green)' } : undefined} onClick={() => setRandevuMod((r) => !r)}>📅 Randevu</button>
-                </div>
-                <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                  <button className="btn ghost sm" style={{ flex: '0 0 30%' }} onClick={yakalaKapat}>Vazgeç</button>
-                  <button className="btn" style={{ flex: 1 }} onClick={inboxYakala}>Kaydet</button>
-                </div>
+            <button className="btn" style={{ width: '100%', marginTop: 8 }} onClick={kartYarat}>＋ Yeni kart</button>
+            {tarihsizler.length === 0 && inbox.length === 0 && <div className="note" style={{ textAlign: 'center', marginTop: 10 }}>Inbox boş. ＋ Yeni kart ile bir not, video ya da fikir yakala; sonra bir güne yerleştir.</div>}
+            {tarihsizler.map((r) => (
+              <div key={r.id} className="actcard" onClick={() => { setInboxOpen(false); openDetay(r, 'ritual'); }}>
+                <div style={{ fontWeight: 700, fontSize: 14 }}>{(KARTLAR.find((k) => k[0] === (r.kart_tipi || 'standart'))?.[2] || '•')} {r.ad}</div>
+                {r.aciklama && <div className="note" style={{ margin: '2px 0 0', whiteSpace: 'pre-wrap' }}>{r.aciklama}</div>}
+                {(r.kart_config?.url || r.url) && <div className="note" style={{ margin: '2px 0 0' }}>🎬 video</div>}
               </div>
-            )}
-            {inbox.length === 0 && <div className="note" style={{ textAlign: 'center', marginTop: 10 }}>Inbox boş.</div>}
+            ))}
             {inbox.map((v) => v.tur !== 'aktivite' ? (
               <InboxNot key={v.id} v={v} onOpen={() => openIbDetay(v)} />
             ) : (
@@ -1613,6 +1648,20 @@ export default function Rite() {
             {areas.length > 0 && <div style={{ margin: '6px 0' }}>{areas.map((a) => <span key={a} className="tagp p-alan">{a}</span>)}</div>}
 
             {isRit && <textarea value={aciklamaInput} onChange={(e) => setAciklamaInput(e.target.value)} onBlur={() => { if (aciklamaInput.trim() !== (o.aciklama || '')) setRitAciklama(o.id, aciklamaInput); }} placeholder="Açıklama / not ekle…" style={{ width: '100%', minHeight: 44, margin: '2px 0 8px' }} />}
+
+            {isRit && (
+              <div className="nezaman">
+                <div className="k">Ne zaman?</div>
+                <div>
+                  <span className={'chip' + (!o.baslangic ? ' on' : '')} onClick={() => setRitTarihsiz(o.id)}>📥 Inbox</span>
+                  <span className={'chip' + (o.baslangic && o.baslangic === o.bitis && o.baslangic === today ? ' on' : '')} onClick={() => setRitTarih(o.id, today)}>Bugün</span>
+                  <span className="chip" onClick={() => { const d = parseD(today); d.setDate(d.getDate() + 1); setRitTarih(o.id, iso(d)); }}>Yarın</span>
+                  <span className={'chip' + (o.baslangic && !o.bitis ? ' on' : '')} onClick={() => setRitSuregelen(o.id)}>Süregelen</span>
+                  <input type="date" value={o.baslangic && o.baslangic === o.bitis ? o.baslangic : ''} onChange={(e) => e.target.value && setRitTarih(o.id, e.target.value)} style={{ width: 'auto', marginLeft: 4 }} />
+                </div>
+                <div className="note">{!o.baslangic ? "Inbox'ta bekliyor — bir gün seç, ajandaya düşsün." : (o.baslangic === o.bitis ? '📅 ' + kisaTarih(o.baslangic) : (o.bitis ? kisaTarih(o.baslangic) + ' → ' + kisaTarih(o.bitis) : 'süregelen · ' + kisaTarih(o.baslangic) + "'den")) }</div>
+              </div>
+            )}
 
             {isRit && kTip === 'standart' && o.kart_config?.resim &&<img src={o.kart_config.resim} alt="" style={{ maxWidth: '100%', borderRadius: 8, margin: '4px 0 8px', display: 'block' }} />}
             {isRit && kTip === 'bilgi' && <BilgiKart cfg={kCfg} done={ritDone(o.id)} onOkudum={() => { if (!ritDone(o.id)) toggleRit(o.id); }} />}
