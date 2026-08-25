@@ -1987,9 +1987,12 @@ export default function Rite() {
         const schedSummary = [gunlerLabel(o.gunler), o.bitis ? 'bitiş ' + kisaTarih(o.bitis) : 'süregelen', SLOTS.find((t) => t[0] === (o.zaman || 'gün'))?.[1], o.hatirlatma_saat ? '🔔 ' + o.hatirlatma_saat : ''].filter(Boolean).join(' · ');
         const kTip = (isRit ? o.kart_tipi : act?.kart_tipi) || 'standart';
         const kCfg = (isRit ? o.kart_config : act?.kart_config) || {};
+        const noDone = kTip === 'anket' || kTip === 'coktan' || kTip === 'nefes' || kTip === 'ruhhali' || kTip === 'bilgi' || kTip === 'tarif' || kTip === 'sukran' || kTip === 'topraklama' || kTip === 'pomodoro' || kTip === 'beden' || kTip === 'uykuoncesi' || kTip === 'su' || kTip === 'maruz' || kTip === 'niyet' || (kTip === 'video' && kCfg.done === false) || (kTip === 'randevu' && kCfg.done === false);
+        const gunOzet = !o.baslangic ? "📥 Inbox'ta bekliyor" : (o.baslangic === o.bitis ? '📅 ' + kisaTarih(o.baslangic) : (o.bitis ? kisaTarih(o.baslangic) + ' → ' + kisaTarih(o.bitis) : 'süregelen · ' + kisaTarih(o.baslangic) + "'den"));
         return (
         <div className="modal full" onClick={() => setDetay(null)}>
           <div className="sheet fullsheet" onClick={(e) => e.stopPropagation()}>
+            <div className="draghandle" onClick={() => setDetay(null)} />
             <button className="x" onClick={() => setDetay(null)}>×</button>
             {isRit ? (
               <input className="detbaslik" value={adInput} onChange={(e) => setAdInput(e.target.value)} onBlur={() => { if (adInput.trim() && adInput.trim() !== (o.ad || '')) setRitAd(o.id, adInput); }} />
@@ -1997,19 +2000,14 @@ export default function Rite() {
             <div className="m">{(isRit ? o.kaynak : o.grup) || ''}{act?.kanit_duzeyi && <span className="evi">kanıt: {act.kanit_duzeyi}</span>}</div>
             {areas.length > 0 && <div style={{ margin: '6px 0' }}>{areas.map((a) => <span key={a} className="tagp p-alan">{a}</span>)}</div>}
 
-            {isRit && <textarea value={aciklamaInput} onChange={(e) => setAciklamaInput(e.target.value)} onBlur={() => { if (aciklamaInput.trim() !== (o.aciklama || '')) setRitAciklama(o.id, aciklamaInput); }} placeholder="Açıklama / not ekle…" style={{ width: '100%', minHeight: 44, margin: '2px 0 8px' }} />}
+            {isRit && (o.kaynak === 'Kendi' ? (
+              <textarea value={aciklamaInput} onChange={(e) => setAciklamaInput(e.target.value)} onBlur={() => { if (aciklamaInput.trim() !== (o.aciklama || '')) setRitAciklama(o.id, aciklamaInput); }} placeholder="Açıklama / not ekle…" style={{ width: '100%', minHeight: 44, margin: '2px 0 8px' }} />
+            ) : (
+              o.aciklama && <div className="howto"><div className="k">📋 Nasıl yapılır</div><div className="v">{o.aciklama}</div></div>
+            ))}
 
             {isRit && (
-              <div className="nezaman">
-                <div className="k">Ne zaman?</div>
-                <div>
-                  <span className={'chip' + (o.baslangic && o.baslangic === o.bitis && o.baslangic === today ? ' on' : '')} onClick={() => setRitTarih(o.id, today)}>Bugün</span>
-                  <span className="chip" onClick={() => { const d = parseD(today); d.setDate(d.getDate() + 1); setRitTarih(o.id, iso(d)); }}>Yarın</span>
-                  <span className={'chip' + (o.baslangic && !o.bitis ? ' on' : '')} onClick={() => setRitSuregelen(o.id)}>Süregelen</span>
-                  <input type="date" value={o.baslangic && o.baslangic === o.bitis ? o.baslangic : ''} onChange={(e) => e.target.value && setRitTarih(o.id, e.target.value)} style={{ width: 'auto', marginLeft: 4 }} />
-                </div>
-                <div className="note">{!o.baslangic ? "Inbox'ta bekliyor — bir gün seç, ajandaya düşsün." : (o.baslangic === o.bitis ? '📅 ' + kisaTarih(o.baslangic) : (o.bitis ? kisaTarih(o.baslangic) + ' → ' + kisaTarih(o.bitis) : 'süregelen · ' + kisaTarih(o.baslangic) + "'den")) }</div>
-              </div>
+              <div className="note" style={{ margin: '2px 0 10px', cursor: 'pointer' }} onClick={() => setZamanOpen(true)}>{gunOzet} · değiştir ✎</div>
             )}
 
             {isRit && kTip === 'standart' && o.kart_config?.resim &&<img src={o.kart_config.resim} alt="" style={{ maxWidth: '100%', borderRadius: 8, margin: '4px 0 8px', display: 'block' }} />}
@@ -2036,11 +2034,24 @@ export default function Rite() {
             {isRit && kTip === 'niyet' && <NiyetKart cfg={kCfg} done={ritDone(o.id)} onKaydet={() => { if (!ritDone(o.id)) toggleRit(o.id); }} />}
             {isRit && kTip === 'randevu' && <RandevuKart cfg={kCfg} />}
 
+            {isRit && !noDone && (
+              <button className={'btn' + (ritDone(o.id) ? ' ghost' : '')} style={{ width: '100%', margin: '2px 0 8px' }} onClick={() => toggleRit(o.id)}>{ritDone(o.id) ? '✓ Yaptım — geri al' : '✓ Yaptım'}</button>
+            )}
+
             {isRit && zamanOpen && (
               <div className="modal top2" onClick={() => setZamanOpen(false)}>
               <div className="sheet" onClick={(e) => e.stopPropagation()}>
                 <button className="x" onClick={() => setZamanOpen(false)}>×</button>
                 <h3 style={{ marginBottom: 6 }}>🕐 Zamanlama</h3>
+                <div className="kv"><div className="k">Hangi gün</div>
+                  <div>
+                    <span className={'chip' + (o.baslangic && o.baslangic === o.bitis && o.baslangic === today ? ' on' : '')} onClick={() => setRitTarih(o.id, today)}>Bugün</span>
+                    <span className="chip" onClick={() => { const d = parseD(today); d.setDate(d.getDate() + 1); setRitTarih(o.id, iso(d)); }}>Yarın</span>
+                    <span className={'chip' + (o.baslangic && !o.bitis ? ' on' : '')} onClick={() => setRitSuregelen(o.id)}>Süregelen</span>
+                    <input type="date" value={o.baslangic && o.baslangic === o.bitis ? o.baslangic : ''} onChange={(e) => e.target.value && setRitTarih(o.id, e.target.value)} style={{ width: 'auto', marginLeft: 4 }} />
+                  </div>
+                  <div className="note">{gunOzet}</div>
+                </div>
                 <div className="kv"><div className="k">Süre</div>
                   <div>
                     <span className={'chip' + (!o.bitis ? ' on' : '')} onClick={() => setRitSure(o.id, null)}>Süregelen</span>
