@@ -1391,7 +1391,7 @@ export default function Rite() {
     const cfg = rt.kart_config || {};
     const noDone = tip === 'anket' || tip === 'coktan' || tip === 'nefes' || tip === 'ruhhali' || tip === 'bilgi' || tip === 'tarif' || tip === 'sukran' || tip === 'topraklama' || tip === 'pomodoro' || tip === 'beden' || tip === 'uykuoncesi' || tip === 'su' || tip === 'maruz' || tip === 'niyet' || (tip === 'video' && cfg.done === false) || (tip === 'randevu' && cfg.done === false);
     const vurl = tip === 'video' ? (cfg.url || rt.url) : rt.url;
-    const ipucu = tip === 'anket' ? ' · 📋 doldur' : tip === 'coktan' ? ' · ❓ yanıtla' : tip === 'diyet' ? ' · 🍽 öğün' : tip === 'tarif' ? ' · 🍳 tarif' : tip === 'video' ? ' · 🎬 izle' : tip === 'nefes' ? ' · 🫁 nefes' : tip === 'ruhhali' ? ' · 🙂 check-in' : tip === 'workout' ? ' · 🏋️ egzersiz' : tip === 'bilgi' ? ' · 📄 oku' : tip === 'sukran' ? ' · 🙏 şükran' : tip === 'topraklama' ? ' · 🖐 topraklan' : tip === 'pomodoro' ? ' · 🍅 odaklan' : tip === 'beden' ? ' · 🧘 taransın' : tip === 'uykuoncesi' ? ' · 🌙 hazırlan' : tip === 'su' ? ' · 💧 iç' : tip === 'maruz' ? ' · 🎯 uygula' : tip === 'niyet' ? ' · 🧭 niyet belirle' : tip === 'randevu' ? ' · 📅 randevu' : '';
+    const ipucu = tip === 'anket' ? '📋 doldur' : tip === 'coktan' ? '❓ yanıtla' : tip === 'diyet' ? '🍽 öğün' : tip === 'tarif' ? '🍳 tarif' : tip === 'video' ? '🎬 izle' : tip === 'nefes' ? '🫁 nefes' : tip === 'ruhhali' ? '🙂 check-in' : tip === 'workout' ? '🏋️ egzersiz' : tip === 'bilgi' ? '📄 oku' : tip === 'sukran' ? '🙏 şükran' : tip === 'topraklama' ? '🖐 topraklan' : tip === 'pomodoro' ? '🍅 odaklan' : tip === 'beden' ? '🧘 taransın' : tip === 'uykuoncesi' ? '🌙 hazırlan' : tip === 'su' ? '💧 iç' : tip === 'maruz' ? '🎯 uygula' : tip === 'niyet' ? '🧭 niyet belirle' : tip === 'randevu' ? '📅 randevu' : '';
     const meridyen = rt.kaynak === 'Meridyen'; // sağlayıcı-kaynaklı kart — kişisel kartlardan çerçeveyle ayrıştır
     return (
       <div>
@@ -1403,7 +1403,7 @@ export default function Rite() {
               {ritAreas(rt).map((a) => <span key={a} className="tagp p-alan">{a}</span>)}
               {cfg.dikey && DIKEY_LABEL[cfg.dikey] && <span className="tagp p-dikey">{DIKEY_LABEL[cfg.dikey]}</span>}
             </div>
-            <div className="m">{rt.hatirlatma_saat ? '🔔 ' + rt.hatirlatma_saat + ' · ' : ''}{gunlerLabel(rt.gunler)}{rt.bitis ? ' · bitiş ' + kisaTarih(rt.bitis) : ''}{ipucu} · toplam {total}</div>
+            <div className="m">{[rt.hatirlatma_saat && '🔔 ' + rt.hatirlatma_saat, rt.bitis && 'bitiş ' + kisaTarih(rt.bitis), ipucu].filter(Boolean).join(' · ')}</div>
           </div>
           {vurl && <a className="playbtn" href={vurl} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} title="Aç">▶</a>}
           <button className="rmx" onClick={() => ritSil(rt.id)} title="Kaldır">✕</button>
@@ -1438,6 +1438,31 @@ export default function Rite() {
               <div className="dlabel" onClick={() => setSelDate(today)}>{ajView === 'ay' ? ayLabel(day) : dayLabel(day)}</div>
               <button className="arrow" onClick={() => (ajView === 'ay' ? shiftMonth(1) : shiftDay(1))}>›</button>
             </div>
+
+            {ajView === 'gun' && (
+              <div className="weekstrip">
+                {weekDays(day).map((d) => {
+                  const dt = parseD(d);
+                  return (
+                    <div key={d} className={'wday' + (d === day ? ' on' : '') + (d === today ? ' today' : '')} onClick={() => setSelDate(d)}>
+                      <div className="wl">{WD[wday(d)]}</div>
+                      <div className="wn">{dt.getDate()}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {ajView === 'gun' && habits.length > 0 && (() => {
+              const doneCount = habits.filter((r) => ritDone(r.id)).length;
+              const pct = Math.round((doneCount / habits.length) * 100);
+              return (
+                <div className="dayprog">
+                  <div className="bar"><i style={{ width: pct + '%' }} /></div>
+                  <span className="lbl">{doneCount}/{habits.length} tamamlandı</span>
+                </div>
+              );
+            })()}
 
             {programGruplari.length > 0 && <div style={{ marginBottom: 4 }}>{programGruplari.map((g) => {
               const gunNo = Math.max(1, Math.round((parseD(today).getTime() - parseD(g.bas).getTime()) / 86400000) + 1);
@@ -1493,8 +1518,9 @@ export default function Rite() {
                   const items = Array.from(map.values());
                   for (const it of items) it.members.sort((a: any, b: any) => (a.sira || 0) - (b.sira || 0));
                   items.sort((a, b) => (Number(a.members[0].blok_sira) || 0) - (Number(b.members[0].blok_sira) || 0));
+                  const zamansiz = z === ZAMANSIZ;
                   return (
-                    <div key={z} style={{ background: SLOTCLR, borderRadius: 12, padding: '2px 8px 6px', margin: '10px 0' }}>
+                    <div key={z} style={zamansiz ? { borderTop: '1px dashed var(--line)', padding: '10px 8px 6px', margin: '16px 0 0' } : { background: SLOTCLR, borderRadius: 12, padding: '2px 8px 6px', margin: '10px 0' }}>
                       <div className="slothead">
                         <div className="tod" style={gosterLbl ? { margin: '6px 4px 2px' } : { margin: 0 }}>{gosterLbl}</div>
                         <button className="slotadd" onClick={() => setSlotAddOpen(z)} aria-label="ekle">+</button>
