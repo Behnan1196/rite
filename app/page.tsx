@@ -50,6 +50,7 @@ const OLCU_ALAN: Record<string, string> = { kilo: 'Beslenme', bel: 'Beslenme', k
 const ALAN_SIRA = ['Beslenme', 'Fitness', 'Fizyo', 'Psikoloji', 'Mental', 'Genel', 'Diğer'];
 // Rite Studio'da kart_config.dikey olarak seçilen alan etiketi → okunur ad (bkz app-meridyen/app/atama/page.tsx DIKEY_OPTS).
 const DIKEY_LABEL: Record<string, string> = { beslenme: 'Beslenme', fitness: 'Fitness', fizyo: 'Fizyo', psikoloji: 'Psikoloji', mental: 'Mental', genel: 'Genel' };
+const RANDEVU_FORMAT: [string, string][] = [['online', '💻 Online'], ['yuz_yuze', '📍 Yüz yüze']];
 // 5-4-3-2-1 topraklama: sabit duyusal kategori listesi.
 const TOPRAK_ADIM: [string, string][] = [['5', '5 şey GÖR'], ['4', '4 şey DOKUN'], ['3', '3 şey DUY'], ['2', '2 şey KOKLA'], ['1', '1 şey TAT']];
 // Basit metin biçimlendirme: **kalın**
@@ -648,20 +649,21 @@ export default function Rite() {
   const [yeniRit, setYeniRit] = useState('');
   const [dayNote, setDayNote] = useState('');
   const [inbox, setInbox] = useState<any[]>([]);
-  const [ib, setIb] = useState({ t: '', u: '' });
-  const [yeniAcik, setYeniAcik] = useState(false);
-  const [ibImg, setIbImg] = useState<string | null>(null);
-  const [ibBaslik, setIbBaslik] = useState('');
   const [ibDetay, setIbDetay] = useState<any>(null);
   const [ibdAd, setIbdAd] = useState('');
   const [ibdAcik, setIbdAcik] = useState('');
   const [ibdUrl, setIbdUrl] = useState('');
   const [ibdTarih, setIbdTarih] = useState('');
-  const [ekMenu, setEkMenu] = useState(false);
-  const [randevuMod, setRandevuMod] = useState(false);
-  const [rdvTarih, setRdvTarih] = useState('');
-  const fotoRef = useRef<HTMLInputElement>(null);
   const [addSlot, setAddSlot] = useState<string | null>(null);
+  // Zaman dilimindeki + ile hızlı ekleme (havuzdan seç ya da anında not/randevu oluştur).
+  const [slotAddOpen, setSlotAddOpen] = useState<string | null>(null);
+  const [hzAd, setHzAd] = useState('');
+  const [hzLink, setHzLink] = useState('');
+  const [hzRandevu, setHzRandevu] = useState(false);
+  const [hzSaat, setHzSaat] = useState('');
+  const [hzFormat, setHzFormat] = useState('online');
+  const [hzYer, setHzYer] = useState('');
+  const [hzNot, setHzNot] = useState('');
   const [msg, setMsg] = useState('');
   const [pushOn, setPushOn] = useState(false);
   const [pushMsg, setPushMsg] = useState('');
@@ -1037,13 +1039,18 @@ export default function Rite() {
     patchDetay(patch);
     loadData(client.id);
   }
-  // Boş tarihsiz kart oluştur (Inbox) ve detay editörünü aç.
-  async function kartYarat() {
-    if (!client) return;
-    const { data } = await supabase.from('dog_rituals').insert({ client_id: client.id, ad: 'Yeni kart', kaynak: 'Kendi', tip: 'aliskanlik', kart_tipi: 'standart', aliskanlik: false, aktif: true, mezun: false, blok_sira: Date.now() }).select().single();
-    if (data) { setInboxOpen(false); await loadData(client.id); openDetay(data, 'ritual'); }
+  // Zaman diliminin + butonundan hızlı ekleme — not/video/randevu, doğrudan o güne ve o dilime.
+  function hzReset() { setHzAd(''); setHzLink(''); setHzRandevu(false); setHzSaat(''); setHzFormat('online'); setHzYer(''); setHzNot(''); }
+  async function hizliEkle() {
+    if (!client || !slotAddOpen || !hzAd.trim()) return;
+    const linkVar = !hzRandevu && hzLink.trim();
+    const kartTipi = hzRandevu ? 'randevu' : (linkVar ? 'video' : 'standart');
+    const kartConfig = hzRandevu ? { saat: hzSaat.trim() || null, format: hzFormat, yer: hzYer.trim() || null, not: hzNot.trim() || null, done: true } : (linkVar ? { url: hzLink.trim(), done: true } : null);
+    await supabase.from('dog_rituals').insert({ client_id: client.id, ad: hzAd.trim(), zaman: slotAddOpen, kaynak: 'Kendi', tip: 'aliskanlik', url: linkVar ? hzLink.trim() : null, kart_tipi: kartTipi, kart_config: kartConfig, aliskanlik: false, aktif: true, mezun: false, baslangic: day, bitis: day, blok_sira: Date.now() });
+    hzReset(); setSlotAddOpen(null);
+    loadData(client.id);
   }
-  // Ne zaman? — kartı bir güne koy (tek seferlik), süregelen yap, ya da Inbox'a (tarihsiz) geri al.
+  // Ne zaman? — kartı bir güne koy (tek seferlik) ya da süregelen yap.
   async function setRitTarih(id: string, ds: string) {
     if (!client || !ds) return;
     await supabase.from('dog_rituals').update({ baslangic: ds, bitis: ds }).eq('id', id);
@@ -1056,12 +1063,6 @@ export default function Rite() {
     const bas = (rt && rt.baslangic && rt.baslangic >= today) ? rt.baslangic : today;
     await supabase.from('dog_rituals').update({ baslangic: bas, bitis: null }).eq('id', id);
     patchDetay({ baslangic: bas, bitis: null });
-    loadData(client.id);
-  }
-  async function setRitTarihsiz(id: string) {
-    if (!client) return;
-    await supabase.from('dog_rituals').update({ baslangic: null, bitis: null }).eq('id', id);
-    patchDetay({ baslangic: null, bitis: null });
     loadData(client.id);
   }
   // gun: null = süregelen (bitiş kaldır); >0 = başlangıçtan itibaren N gün
@@ -1235,58 +1236,6 @@ export default function Rite() {
     setDayNote(v);
     if (client) localStorage.setItem('rite_note_' + client.id + '_' + day, v);
   }
-  function yakalaKapat() { setIb({ t: '', u: '' }); setIbImg(null); setIbBaslik(''); setEkMenu(false); setRandevuMod(false); setRdvTarih(''); setYeniAcik(false); }
-  async function inboxYakala() {
-    const t = ib.t.trim();
-    if (!client || (!t && !ibImg)) return;
-    const linkVar = /^https?:\/\//i.test(t);
-    const baslik = linkVar ? (ibBaslik.trim() || 'Video') : (t || '📷 Fotoğraf');
-    // Link yapıştırıldıysa video kartı; foto varsa resim; ikisi de yoksa düz not.
-    const payload: any = {};
-    if (ibImg) payload.resim = ibImg;
-    if (linkVar) { payload.kartTipi = 'video'; payload.kartConfig = { url: t, done: false }; }
-    if (randevuMod && rdvTarih) {
-      await supabase.from('dog_rituals').insert({ client_id: client.id, ad: baslik, zaman: 'gün', kaynak: 'Randevu', tip: 'aliskanlik', url: linkVar ? t : null, kart_tipi: linkVar ? 'video' : null, kart_config: linkVar ? { url: t, done: false } : (ibImg ? { resim: ibImg } : null), baslangic: rdvTarih, bitis: rdvTarih, aliskanlik: false, aktif: true, mezun: false, blok_sira: Date.now() });
-      loadData(client.id); yakalaKapat(); return;
-    }
-    await supabase.from('dog_inbox').insert({ client_id: client.id, tur: 'not', baslik, url: linkVar ? t : null, payload: Object.keys(payload).length ? payload : null, durum: 'yeni' });
-    yakalaKapat();
-    loadInbox(client.id);
-  }
-  // Kamera/galeri fotoğrafını küçültüp base64 olarak yakala.
-  function onFoto(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files && e.target.files[0]; if (!f) return;
-    const rd = new FileReader();
-    rd.onload = () => {
-      const img = new window.Image();
-      img.onload = () => {
-        const max = 900; let w = img.width, h = img.height; const sc = Math.min(1, max / Math.max(w, h)); w = Math.round(w * sc); h = Math.round(h * sc);
-        const c = document.createElement('canvas'); c.width = w; c.height = h; const ctx = c.getContext('2d'); if (ctx) ctx.drawImage(img, 0, 0, w, h);
-        setIbImg(c.toDataURL('image/jpeg', 0.55)); setYeniAcik(true);
-      };
-      img.src = rd.result as string;
-    };
-    rd.readAsDataURL(f); e.target.value = '';
-  }
-  // Inbox notunu belirli bir tarihe randevu olarak koy (tarihli tek-seferlik, alışkanlık değil).
-  async function inboxToRandevu(item: any, ds: string) {
-    if (!client || !ds) return;
-    await supabase.from('dog_rituals').insert({ client_id: client.id, ad: item.baslik || 'Randevu', zaman: 'gün', kaynak: 'Randevu', tip: 'aliskanlik', url: item.url || null, kart_tipi: item.payload?.kartTipi || null, kart_config: item.payload?.kartConfig || (item.payload?.resim ? { resim: item.payload.resim } : null), baslangic: ds, bitis: ds, aliskanlik: false, aktif: true, mezun: false, blok_sira: Date.now() });
-    await supabase.from('dog_inbox').delete().eq('id', item.id);
-    loadInbox(client.id); loadData(client.id);
-  }
-  async function panodanEkle() {
-    try {
-      const txt = (await navigator.clipboard.readText())?.trim();
-      if (!txt) return setKMsg('');
-      const isUrl = /^https?:\/\//i.test(txt);
-      setIb({ t: isUrl ? '' : txt.slice(0, 80), u: isUrl ? txt : '' });
-    } catch (_) { /* izin verilmedi */ }
-  }
-  async function inboxSlot(id: string, slot: string) {
-    await supabase.from('dog_inbox').update({ slot, durum: 'alindi' }).eq('id', id);
-    if (client) loadInbox(client.id);
-  }
   async function inboxSil(id: string) {
     await supabase.from('dog_inbox').delete().eq('id', id);
     if (client) loadInbox(client.id);
@@ -1396,7 +1345,6 @@ export default function Rite() {
   const wday = (d: string) => new Date(d + 'T00:00:00').getDay();
   // Tarihsiz (baslangic yok) ritüel = Inbox kartı; ajandada görünmez.
   const activeOn = (r: any, d: string) => !!r.baslangic && r.baslangic <= d && (!r.bitis || d <= r.bitis) && (!r.gunler || r.gunler.length === 0 || r.gunler.includes(wday(d)));
-  const tarihsizler = rituals.filter((r) => !r.baslangic && !r.mezun);
   const habits = rituals.filter((r) => !r.mezun && activeOn(r, day));
   const mezunlar = rituals.filter((r) => r.mezun);
   // Çalışan programlar: program kimliğine göre grupla (ilerleme + süre kontrolü için).
@@ -1554,7 +1502,7 @@ export default function Rite() {
                     <div key={z} style={{ background: SLOTBG[z], borderRadius: 12, padding: '2px 8px 6px', margin: '10px 0' }}>
                       <div className="slothead">
                         <div className="tod" style={{ margin: '6px 4px 2px' }}>{lbl}</div>
-                        <button className="slotadd" onClick={() => { setAddSlot(z); setScreen('havuz'); }} aria-label="ekle">+</button>
+                        <button className="slotadd" onClick={() => setSlotAddOpen(z)} aria-label="ekle">+</button>
                       </div>
                       {items.length === 0 ? <div className="note" style={{ padding: '2px 4px 6px' }}>Boş — sağdaki + ile ekle.</div> : (
                       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => onDragEndSlot(items, e)}>
@@ -1845,16 +1793,8 @@ export default function Rite() {
           <div className="sheet topsheet" onClick={(e) => e.stopPropagation()}>
             <button className="x" onClick={() => setInboxOpen(false)}>×</button>
             <h2 style={{ marginTop: 2 }}>📥 Inbox</h2>
-            <div className="note" style={{ marginTop: 0 }}>Aklına takılan her şeyin ilk durağı; sonra bir güne yerleştir. <button className="btn ghost sm" style={{ marginLeft: 6 }} onClick={() => client && loadInbox(client.id)}>🔄 Yenile</button></div>
-            <button className="btn" style={{ width: '100%', marginTop: 8 }} onClick={kartYarat}>＋ Yeni kart</button>
-            {tarihsizler.length === 0 && inbox.length === 0 && <div className="note" style={{ textAlign: 'center', marginTop: 10 }}>Inbox boş. ＋ Yeni kart ile bir not, video ya da fikir yakala; sonra bir güne yerleştir.</div>}
-            {tarihsizler.map((r) => (
-              <div key={r.id} className="actcard" onClick={() => { setInboxOpen(false); openDetay(r, 'ritual'); }}>
-                <div style={{ fontWeight: 700, fontSize: 14 }}>{(KARTLAR.find((k) => k[0] === (r.kart_tipi || 'standart'))?.[2] || '•')} {r.ad}</div>
-                {r.aciklama && <div className="note" style={{ margin: '2px 0 0', whiteSpace: 'pre-wrap' }}>{r.aciklama}</div>}
-                {(r.kart_config?.url || r.url) && <div className="note" style={{ margin: '2px 0 0' }}>🎬 video</div>}
-              </div>
-            ))}
+            <div className="note" style={{ marginTop: 0 }}>Başkalarının seninle paylaştığı kartlar burada birikir. <button className="btn ghost sm" style={{ marginLeft: 6 }} onClick={() => client && loadInbox(client.id)}>🔄 Yenile</button></div>
+            {inbox.length === 0 && <div className="note" style={{ textAlign: 'center', marginTop: 10 }}>Inbox boş. Sana bir şey paylaşıldığında burada göreceksin. Kendi notunu/randevunu eklemek için zaman dilimindeki + butonunu kullan.</div>}
             {inbox.map((v) => v.tur !== 'aktivite' ? (
               <InboxNot key={v.id} v={v} onOpen={() => openIbDetay(v)} />
             ) : (
@@ -1908,6 +1848,41 @@ export default function Rite() {
             </div>
             <div style={{ textAlign: 'center', marginTop: 10 }}><button className="btn ghost sm" style={{ color: 'var(--red)', borderColor: '#e6c4bd' }} onClick={() => { inboxSil(ibDetay.id); setIbDetay(null); }}>Sil</button></div>
           </div>
+          </div>
+        )}
+
+        {/* ---------- HIZLI EKLE (zaman dilimi +) ---------- */}
+        {slotAddOpen && (
+          <div className="modal" onClick={() => { hzReset(); setSlotAddOpen(null); }}>
+            <div className="sheet" onClick={(e) => e.stopPropagation()}>
+              <button className="x" onClick={() => { hzReset(); setSlotAddOpen(null); }}>×</button>
+              <h2 style={{ marginTop: 2 }}>{TODS.find((t) => t[0] === slotAddOpen)?.[1]}&apos;a ekle</h2>
+              <button className="btn ghost" style={{ width: '100%', marginTop: 6 }} onClick={() => { const z = slotAddOpen; hzReset(); setAddSlot(z); setSlotAddOpen(null); setScreen('havuz'); }}>📚 Havuzdan seç</button>
+              <div className="note" style={{ textAlign: 'center', margin: '8px 0' }}>— ya da hızlı ekle —</div>
+              <label className="fldlbl" style={{ marginTop: 0 }}>Başlık</label>
+              <input value={hzAd} onChange={(e) => setHzAd(e.target.value)} placeholder="ör. Su iç, Doktor görüşmesi…" />
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginTop: 8 }}><input type="checkbox" style={{ width: 'auto' }} checked={hzRandevu} onChange={(e) => setHzRandevu(e.target.checked)} /> Bu bir görüşme randevusu</label>
+              {hzRandevu ? (
+                <>
+                  <label className="fldlbl">Saat (ops.)</label>
+                  <input type="time" value={hzSaat} onChange={(e) => setHzSaat(e.target.value)} style={{ width: 'auto' }} />
+                  <div style={{ margin: '6px 0' }}>{RANDEVU_FORMAT.map(([f, l]) => <span key={f} className={'chip' + (hzFormat === f ? ' on' : '')} onClick={() => setHzFormat(f)}>{l}</span>)}</div>
+                  <label className="fldlbl">{hzFormat === 'online' ? 'Görüşme linki (ops.)' : 'Adres (ops.)'}</label>
+                  <input value={hzYer} onChange={(e) => setHzYer(e.target.value)} placeholder={hzFormat === 'online' ? 'https://…' : 'Adres'} />
+                  <label className="fldlbl">Not (ops.)</label>
+                  <textarea value={hzNot} onChange={(e) => setHzNot(e.target.value)} style={{ width: '100%', minHeight: 44 }} />
+                </>
+              ) : (
+                <>
+                  <label className="fldlbl">Video linki (ops.)</label>
+                  <input value={hzLink} onChange={(e) => setHzLink(e.target.value)} placeholder="https://…" />
+                </>
+              )}
+              <div className="rowbtns" style={{ marginTop: 10 }}>
+                <button className="btn" onClick={hizliEkle} disabled={!hzAd.trim()}>Ekle</button>
+                <button className="btn ghost sm" onClick={() => { hzReset(); setSlotAddOpen(null); }}>Vazgeç</button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -2000,7 +1975,6 @@ export default function Rite() {
               <div className="nezaman">
                 <div className="k">Ne zaman?</div>
                 <div>
-                  <span className={'chip' + (!o.baslangic ? ' on' : '')} onClick={() => setRitTarihsiz(o.id)}>📥 Inbox</span>
                   <span className={'chip' + (o.baslangic && o.baslangic === o.bitis && o.baslangic === today ? ' on' : '')} onClick={() => setRitTarih(o.id, today)}>Bugün</span>
                   <span className="chip" onClick={() => { const d = parseD(today); d.setDate(d.getDate() + 1); setRitTarih(o.id, iso(d)); }}>Yarın</span>
                   <span className={'chip' + (o.baslangic && !o.bitis ? ' on' : '')} onClick={() => setRitSuregelen(o.id)}>Süregelen</span>
