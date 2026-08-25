@@ -757,6 +757,17 @@ export default function Rite() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Rite Studio'dan (Meridyen) atanan kartlar başka bir oturumdan geldiği için canlı yayın yok —
+  // uygulama öne gelince/sekme aktif olunca sessizce tazele, elle yenilemeye gerek kalmasın.
+  useEffect(() => {
+    if (!client) return;
+    const tazele = () => { loadData(client.id); loadInbox(client.id); };
+    const onVis = () => { if (document.visibilityState === 'visible') tazele(); };
+    window.addEventListener('focus', tazele);
+    document.addEventListener('visibilitychange', onVis);
+    return () => { window.removeEventListener('focus', tazele); document.removeEventListener('visibilitychange', onVis); };
+  }, [client]);
+
   async function loadInbox(cid: string) {
     const r = await supabase.from('dog_inbox').select('*').eq('client_id', cid).order('created_at', { ascending: false });
     setInbox(r.data || []);
@@ -1435,7 +1446,10 @@ export default function Rite() {
             </div>
             <div className="datenav">
               <button className="arrow" onClick={() => (ajView === 'ay' ? shiftMonth(-1) : shiftDay(-1))}>‹</button>
-              <div className="dlabel" onClick={() => setSelDate(today)}>{ajView === 'ay' ? ayLabel(day) : dayLabel(day)}</div>
+              <div className="dlabel" onClick={() => setSelDate(today)}>
+                {ajView === 'ay' ? ayLabel(day) : dayLabel(day)}
+                {day !== today && <div className="totoday">↺ bugüne dön</div>}
+              </div>
               <button className="arrow" onClick={() => (ajView === 'ay' ? shiftMonth(1) : shiftDay(1))}>›</button>
             </div>
 
@@ -1507,7 +1521,6 @@ export default function Rite() {
             ) : (
               <div>
                 {SLOTS.map(([z, lbl]) => {
-                  const gosterLbl = z === ZAMANSIZ ? '' : lbl; // Ajanda'da dördüncü bölüm isimsiz görünür
                   const slotRits = habits.filter((r) => (r.zaman || 'gün') === z);
                   const map = new Map<string, any>();
                   for (const r of slotRits) {
@@ -1518,11 +1531,10 @@ export default function Rite() {
                   const items = Array.from(map.values());
                   for (const it of items) it.members.sort((a: any, b: any) => (a.sira || 0) - (b.sira || 0));
                   items.sort((a, b) => (Number(a.members[0].blok_sira) || 0) - (Number(b.members[0].blok_sira) || 0));
-                  const zamansiz = z === ZAMANSIZ;
                   return (
-                    <div key={z} style={zamansiz ? { borderTop: '1px dashed var(--line)', padding: '10px 8px 6px', margin: '16px 0 0' } : { background: SLOTCLR, borderRadius: 12, padding: '2px 8px 6px', margin: '10px 0' }}>
+                    <div key={z} style={{ background: SLOTCLR, border: '1px solid var(--line)', borderRadius: 12, padding: '2px 8px 6px', margin: '10px 0' }}>
                       <div className="slothead">
-                        <div className="tod" style={gosterLbl ? { margin: '6px 4px 2px' } : { margin: 0 }}>{gosterLbl}</div>
+                        <div className="tod" style={{ margin: '6px 4px 2px' }}>{lbl}</div>
                         <button className="slotadd" onClick={() => setSlotAddOpen(z)} aria-label="ekle">+</button>
                       </div>
                       {items.length > 0 && (

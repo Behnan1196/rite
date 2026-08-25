@@ -63,8 +63,8 @@ input{width:100%;font-size:15px;padding:11px 12px;border:1px solid var(--line);b
 .wday.on .wl,.wday.on .wn{color:#efe9dd;}
 .tod{font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;margin:16px 2px 4px;}
 .slothead{display:flex;align-items:center;justify-content:space-between;}
-.slotadd{background:#fff;border:1px solid var(--line);border-radius:50%;width:28px;height:28px;font-size:18px;line-height:1;color:var(--green);cursor:pointer;flex:0 0 auto;}
-.slotadd:active{background:var(--green2);}
+.slotadd{background:transparent;border:1px solid var(--line);border-radius:50%;width:26px;height:26px;font-size:16px;line-height:1;color:var(--muted);cursor:pointer;flex:0 0 auto;}
+.slotadd:active{background:var(--green2);color:var(--green);border-color:var(--green2);}
 .playbtn{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;background:#fdecea;color:var(--red);text-decoration:none;font-size:13px;margin-right:4px;flex:0 0 auto;}
 .playbtn:active{background:#f9dbd6;}
 .msprk{display:inline-flex;align-items:flex-end;gap:1px;height:14px;margin-left:8px;vertical-align:middle;}
@@ -184,6 +184,7 @@ input{width:100%;font-size:15px;padding:11px 12px;border:1px solid var(--line);b
 @keyframes up{from{transform:translateY(20px);opacity:.6}to{transform:none;opacity:1}}
 .datenav{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:6px 0 10px;}
 .datenav .dlabel{flex:1;text-align:center;font-weight:700;font-size:14px;color:var(--ink,#2a2620);cursor:pointer;}
+.datenav .totoday{font-size:10.5px;font-weight:700;color:var(--green);margin-top:1px;}
 .datenav .arrow{flex:0 0 auto;background:#efe8da;border:none;border-radius:10px;min-width:52px;height:38px;font-size:20px;cursor:pointer;color:#6b6250;}
 .datenav .arrow:active{background:#e4dcc9;}
 .modal.top{align-items:flex-start;}
