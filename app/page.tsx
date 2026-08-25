@@ -38,7 +38,9 @@ const POOL: Record<string, { ad: string; dsc: string; zaman: string; flag?: stri
 };
 const POOL_KAYNAK: Record<string, string> = { def: 'Rite', afh: 'AfH', mer: 'Meridyen' };
 const TODS: [string, string][] = [['sabah', 'Sabah'], ['gün', 'Gün içi'], ['akşam', 'Akşam']];
-const SLOTBG: Record<string, string> = { sabah: '#fbf6ec', 'gün': '#f2f5ee', 'akşam': '#eef1f7' };
+const ZAMANSIZ = 'esnek'; // zaman dilimine bağlı olmayan, isimsiz dördüncü bölüm
+const SLOTS: [string, string][] = [...TODS, [ZAMANSIZ, 'Serbest']]; // seçim gerektiren yerlerde (chip/başlık) etiketli
+const SLOTCLR = '#f3efe4'; // tüm zaman dilimi bloklarında tek, nötr renk
 // Haftagünü: getDay değeri (0=Paz..6=Cmt), Pazartesi-önce görüntü sırası
 const GUNLER: [number, string][] = [[1, 'Pzt'], [2, 'Sal'], [3, 'Çar'], [4, 'Per'], [5, 'Cum'], [6, 'Cmt'], [0, 'Paz']];
 // Akıllı kart tipleri: kod · etiket · ikon
@@ -647,7 +649,6 @@ export default function Rite() {
   const [meas, setMeas] = useState<any[]>([]);
   const [cNot, setCNot] = useState<string>('');
   const [yeniRit, setYeniRit] = useState('');
-  const [dayNote, setDayNote] = useState('');
   const [inbox, setInbox] = useState<any[]>([]);
   const [ibDetay, setIbDetay] = useState<any>(null);
   const [ibdAd, setIbdAd] = useState('');
@@ -746,11 +747,6 @@ export default function Rite() {
     const a = parseD(w[0]), b = parseD(w[6]);
     return `${a.getDate()} ${MONTHS[a.getMonth()]} – ${b.getDate()} ${MONTHS[b.getMonth()]}`;
   }
-
-  useEffect(() => {
-    if (client && day) { try { setDayNote(localStorage.getItem('rite_note_' + client.id + '_' + day) || ''); } catch (_) {} }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [day, client]);
 
   useEffect(() => {
     setSelDate(iso(new Date()));
@@ -1232,10 +1228,6 @@ export default function Rite() {
     loadData(client.id);
   }
 
-  function saveNote(v: string) {
-    setDayNote(v);
-    if (client) localStorage.setItem('rite_note_' + client.id + '_' + day, v);
-  }
   async function inboxSil(id: string) {
     await supabase.from('dog_inbox').delete().eq('id', id);
     if (client) loadInbox(client.id);
@@ -1434,10 +1426,12 @@ export default function Rite() {
         {/* ---------- AJANDA ---------- */}
         {screen === 'ajanda' && (
           <div>
-            <h2>Ajanda</h2>
-            <div className="vswitch">
-              <div className={'vseg' + (ajView === 'gun' ? ' on' : '')} onClick={() => setAjView('gun')}>Gün</div>
-              <div className={'vseg' + (ajView === 'ay' ? ' on' : '')} onClick={() => setAjView('ay')}>📅 Ay</div>
+            <div className="ajhead">
+              <h2>Ajanda</h2>
+              <div className="vswitch">
+                <div className={'vseg' + (ajView === 'gun' ? ' on' : '')} onClick={() => setAjView('gun')}>Gün</div>
+                <div className={'vseg' + (ajView === 'ay' ? ' on' : '')} onClick={() => setAjView('ay')}>📅 Ay</div>
+              </div>
             </div>
             <div className="datenav">
               <button className="arrow" onClick={() => (ajView === 'ay' ? shiftMonth(-1) : shiftDay(-1))}>‹</button>
@@ -1487,7 +1481,8 @@ export default function Rite() {
               </div>
             ) : (
               <div>
-                {TODS.map(([z, lbl]) => {
+                {SLOTS.map(([z, lbl]) => {
+                  const gosterLbl = z === ZAMANSIZ ? '' : lbl; // Ajanda'da dördüncü bölüm isimsiz görünür
                   const slotRits = habits.filter((r) => (r.zaman || 'gün') === z);
                   const map = new Map<string, any>();
                   for (const r of slotRits) {
@@ -1499,12 +1494,12 @@ export default function Rite() {
                   for (const it of items) it.members.sort((a: any, b: any) => (a.sira || 0) - (b.sira || 0));
                   items.sort((a, b) => (Number(a.members[0].blok_sira) || 0) - (Number(b.members[0].blok_sira) || 0));
                   return (
-                    <div key={z} style={{ background: SLOTBG[z], borderRadius: 12, padding: '2px 8px 6px', margin: '10px 0' }}>
+                    <div key={z} style={{ background: SLOTCLR, borderRadius: 12, padding: '2px 8px 6px', margin: '10px 0' }}>
                       <div className="slothead">
-                        <div className="tod" style={{ margin: '6px 4px 2px' }}>{lbl}</div>
+                        <div className="tod" style={gosterLbl ? { margin: '6px 4px 2px' } : { margin: 0 }}>{gosterLbl}</div>
                         <button className="slotadd" onClick={() => setSlotAddOpen(z)} aria-label="ekle">+</button>
                       </div>
-                      {items.length === 0 ? <div className="note" style={{ padding: '2px 4px 6px' }}>Boş — sağdaki + ile ekle.</div> : (
+                      {items.length > 0 && (
                       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => onDragEndSlot(items, e)}>
                         <SortableContext items={items.map((i) => i.key)} strategy={verticalListSortingStrategy}>
                           {items.map((it) => (
@@ -1541,11 +1536,6 @@ export default function Rite() {
                     </div>
                   );
                 })}
-
-                <div className="tod">Bugüne not</div>
-                <div className="card">
-                  <input value={dayNote} onChange={(e) => saveNote(e.target.value)} placeholder="Serbest not — izlenmez, sadece bugün burada durur." />
-                </div>
 
                 {pushMsg && <div className="msg">{pushMsg}</div>}
               </div>
@@ -1612,7 +1602,7 @@ export default function Rite() {
               <button className="btn sm" onClick={openStudioNew}>＋ Yeni</button>
             </div>
             <p className="sub">Kendi aktiviteni <b>＋ Yeni</b> ile oluştur ya da hazır gruplardan seç.</p>
-            {addSlot && <div className="banner">➕ <div><b>{TODS.find((t) => t[0] === addSlot)?.[1]}</b>&apos;a ekleniyor — bir aktivite seç.</div><button className="bb" onClick={() => setAddSlot(null)}>İptal</button></div>}
+            {addSlot && <div className="banner">➕ <div><b>{SLOTS.find((t) => t[0] === addSlot)?.[1]}</b>&apos;a ekleniyor — bir aktivite seç.</div><button className="bb" onClick={() => setAddSlot(null)}>İptal</button></div>}
             <div className="tabs">
               <div className={'tab' + (actGroup === '__kisisel' ? ' on' : '')} onClick={() => setActGroup('__kisisel')}>Kişisel</div>
               {actGroups.map((g) => <div key={g} className={'tab' + (actGroup === g ? ' on' : '')} onClick={() => setActGroup(g)}>{g}</div>)}
@@ -1856,7 +1846,7 @@ export default function Rite() {
           <div className="modal" onClick={() => { hzReset(); setSlotAddOpen(null); }}>
             <div className="sheet" onClick={(e) => e.stopPropagation()}>
               <button className="x" onClick={() => { hzReset(); setSlotAddOpen(null); }}>×</button>
-              <h2 style={{ marginTop: 2 }}>{TODS.find((t) => t[0] === slotAddOpen)?.[1]}&apos;a ekle</h2>
+              <h2 style={{ marginTop: 2 }}>{SLOTS.find((t) => t[0] === slotAddOpen)?.[1]}&apos;a ekle</h2>
               <button className="btn ghost" style={{ width: '100%', marginTop: 6 }} onClick={() => { const z = slotAddOpen; hzReset(); setAddSlot(z); setSlotAddOpen(null); setScreen('havuz'); }}>📚 Havuzdan seç</button>
               <div className="note" style={{ textAlign: 'center', margin: '8px 0' }}>— ya da hızlı ekle —</div>
               <label className="fldlbl" style={{ marginTop: 0 }}>Başlık</label>
@@ -1956,7 +1946,7 @@ export default function Rite() {
         const hasBilgi = act && (act.ozet || act.aciklama || act.nasil || (act.videolar || []).length || (act.alternatifler || []).length || act.dikkat || act.kaynak);
         const personal = act && act.client_id;
         const isProg = !isRit && o.tur === 'program';
-        const schedSummary = [gunlerLabel(o.gunler), o.bitis ? 'bitiş ' + kisaTarih(o.bitis) : 'süregelen', TODS.find((t) => t[0] === (o.zaman || 'gün'))?.[1], o.hatirlatma_saat ? '🔔 ' + o.hatirlatma_saat : ''].filter(Boolean).join(' · ');
+        const schedSummary = [gunlerLabel(o.gunler), o.bitis ? 'bitiş ' + kisaTarih(o.bitis) : 'süregelen', SLOTS.find((t) => t[0] === (o.zaman || 'gün'))?.[1], o.hatirlatma_saat ? '🔔 ' + o.hatirlatma_saat : ''].filter(Boolean).join(' · ');
         const kTip = (isRit ? o.kart_tipi : act?.kart_tipi) || 'standart';
         const kCfg = (isRit ? o.kart_config : act?.kart_config) || {};
         return (
@@ -2034,7 +2024,7 @@ export default function Rite() {
                   </div>
                 </div>
                 <div className="kv"><div className="k">Zaman dilimi</div>
-                  <div>{TODS.map(([z, l]) => <span key={z} className={'chip' + ((o.zaman || 'gün') === z ? ' on' : '')} onClick={() => setRitZaman(o.id, z)}>{l}</span>)}</div>
+                  <div>{SLOTS.map(([z, l]) => <span key={z} className={'chip' + ((o.zaman || 'gün') === z ? ' on' : '')} onClick={() => setRitZaman(o.id, z)}>{l}</span>)}</div>
                 </div>
                 <div className="kv"><div className="k">Takip</div>
                   <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}><input type="checkbox" style={{ width: 'auto' }} checked={!!o.aliskanlik} onChange={(e) => setRitAliskanlik(o.id, e.target.checked)} /> Alışkanlık olarak haftalık takipte göster</label>
@@ -2100,7 +2090,7 @@ export default function Rite() {
             )}
 
             {isProg && <button className="btn" style={{ width: '100%', marginTop: 14 }} onClick={() => { programBaslat(o); setDetay(null); setScreen('ajanda'); }}>Ajandama başlat{o.sure_gun ? ' (' + o.sure_gun + ' gün)' : ''}</button>}
-            {!isRit && !isProg && <button className="btn" style={{ width: '100%', marginTop: 14 }} onClick={() => { aktiviteEkleSlotlar(o, addSlot || undefined); setDetay(null); setAddSlot(null); setScreen('ajanda'); }}>Ajandama ekle{addSlot ? ' (' + (TODS.find((t) => t[0] === addSlot)?.[1]) + ')' : ''}</button>}
+            {!isRit && !isProg && <button className="btn" style={{ width: '100%', marginTop: 14 }} onClick={() => { aktiviteEkleSlotlar(o, addSlot || undefined); setDetay(null); setAddSlot(null); setScreen('ajanda'); }}>Ajandama ekle{addSlot ? ' (' + (SLOTS.find((t) => t[0] === addSlot)?.[1]) + ')' : ''}</button>}
 
             <div className="dettoolbar">
               {isRit && <button className="tbtn" onClick={() => setZamanOpen(true)}><span className="tbic">🕐</span>Zamanlama</button>}
