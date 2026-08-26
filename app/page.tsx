@@ -1461,7 +1461,6 @@ export default function Rite() {
 
   return (
     <div className="app">
-      <datalist id="kisisel-gruplar">{personalGroups.map((g) => <option key={g} value={g} />)}</datalist>
       <div className="hd">
         <div className="b">Rite <span>· {client.ad}</span></div>
         <button className="ibtn" onClick={() => { setInboxOpen(true); if (client) loadInbox(client.id); }}>📥{ibBadge > 0 && <span className="bdg">{ibBadge}</span>}</button>
@@ -1883,7 +1882,8 @@ export default function Rite() {
                     {ibGrupSec === v.id && (
                       <div style={{ margin: '6px 0' }}>
                         <label className="fldlbl" style={{ marginTop: 0 }}>Hangi grupta saklansın?</label>
-                        <input value={ibGrupVal} onChange={(e) => setIbGrupVal(e.target.value)} placeholder="ör. Genel, Beslenme…" list="kisisel-gruplar" />
+                        {personalGroups.length > 0 && <div style={{ margin: '2px 0 6px' }}>{personalGroups.map((g) => <span key={g} className={'chip' + (ibGrupVal === g ? ' on' : '')} onClick={() => setIbGrupVal(g)}>{g}</span>)}</div>}
+                        <input value={ibGrupVal} onChange={(e) => setIbGrupVal(e.target.value)} placeholder="ör. Genel, Beslenme… (yeni grup için yaz)" />
                         <div className="rowbtns" style={{ marginTop: 6 }}>
                           <button className="btn sm" onClick={() => inboxAktiviteEkle(v, ibGrupVal)}>Kaydet</button>
                           <button className="btn ghost sm" onClick={() => { setIbGrupSec(null); setIbGrupVal('Genel'); }}>Vazgeç</button>
@@ -2063,10 +2063,13 @@ export default function Rite() {
               {act?.kanit_duzeyi && <span className="evi">kanıt: {act.kanit_duzeyi}</span>}
             </div>
             {!isRit && personal && grupEditOpen && (
-              <div style={{ margin: '2px 0 10px', display: 'flex', gap: 6 }}>
-                <input value={grupEditVal} onChange={(e) => setGrupEditVal(e.target.value)} list="kisisel-gruplar" style={{ flex: 1 }} />
-                <button className="btn sm" onClick={() => setAktGrup(o.id, grupEditVal)}>Kaydet</button>
-                <button className="btn ghost sm" onClick={() => setGrupEditOpen(false)}>Vazgeç</button>
+              <div style={{ margin: '2px 0 10px' }}>
+                {personalGroups.length > 0 && <div style={{ margin: '0 0 6px' }}>{personalGroups.map((g) => <span key={g} className={'chip' + (grupEditVal === g ? ' on' : '')} onClick={() => setGrupEditVal(g)}>{g}</span>)}</div>}
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input value={grupEditVal} onChange={(e) => setGrupEditVal(e.target.value)} placeholder="yeni grup için yaz" style={{ flex: 1 }} />
+                  <button className="btn sm" onClick={() => setAktGrup(o.id, grupEditVal)}>Kaydet</button>
+                  <button className="btn ghost sm" onClick={() => setGrupEditOpen(false)}>Vazgeç</button>
+                </div>
               </div>
             )}
             {areas.length > 0 && <div style={{ margin: '6px 0' }}>{areas.map((a) => <span key={a} className="tagp p-alan">{a}</span>)}</div>}
@@ -2252,7 +2255,8 @@ export default function Rite() {
             <label>Ad</label>
             <input value={kAd} onChange={(e) => setKAd(e.target.value)} placeholder="ör. Badem'le sabah parkı" />
             <label className="fldlbl">Grup (havuzunda gruplamak için — var olanı seç ya da yeni yaz)</label>
-            <input value={kGrup} onChange={(e) => setKGrup(e.target.value)} placeholder="ör. Genel, Ev, Sabah rutini…" list="kisisel-gruplar" />
+            {personalGroups.length > 0 && <div style={{ margin: '2px 0 6px' }}>{personalGroups.map((g) => <span key={g} className={'chip' + (kGrup === g ? ' on' : '')} onClick={() => setKGrup(g)}>{g}</span>)}</div>}
+            <input value={kGrup} onChange={(e) => setKGrup(e.target.value)} placeholder="ör. Genel, Ev, Sabah rutini… (yeni grup için yaz)" />
             <label className="fldlbl">Notların (ops.)</label>
             <textarea value={kAcik} onChange={(e) => setKAcik(e.target.value)} placeholder="Nasıl yapılır, ipuçları, hatırlatmalar…" />
             <label className="fldlbl">Bağlantı (ops.)</label>
