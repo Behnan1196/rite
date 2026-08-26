@@ -154,26 +154,37 @@ function Acc({ title, summary, defaultOpen, children }: { title: string; summary
   );
 }
 // Video linkini tanı: YouTube / Instagram (public) → gömülü oynatıcı; değilse dış link.
-function embedInfo(url?: string | null): { tur: 'yt' | 'ig'; src: string } | null {
+function embedInfo(url?: string | null, bas?: number | null, bit?: number | null): { tur: 'yt' | 'ig'; src: string } | null {
   if (!url) return null;
   let m = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|shorts\/|embed\/|live\/))([\w-]{6,})/);
-  if (m) return { tur: 'yt', src: 'https://www.youtube.com/embed/' + m[1] };
+  if (m) {
+    const q: string[] = [];
+    if (bas && bas > 0) q.push('start=' + Math.floor(bas));
+    if (bit && bit > 0) q.push('end=' + Math.floor(bit));
+    return { tur: 'yt', src: 'https://www.youtube.com/embed/' + m[1] + (q.length ? '?' + q.join('&') : '') };
+  }
   m = url.match(/instagram\.com\/(reel|reels|p|tv)\/([\w-]+)/);
   if (m) { const t = m[1] === 'reels' ? 'reel' : m[1]; return { tur: 'ig', src: 'https://www.instagram.com/' + t + '/' + m[2] + '/embed' }; }
   return null;
 }
-function EmbedVideo({ url }: { url?: string | null }) {
-  const info = embedInfo(url);
+function EmbedVideo({ url, bas, bit }: { url?: string | null; bas?: number | null; bit?: number | null }) {
+  const info = embedInfo(url, bas, bit);
   if (!info) return url ? <a className="btn ghost sm" href={url} target="_blank" rel="noreferrer">▶ Aç</a> : null;
   if (info.tur === 'yt') return <div className="ytwrap"><iframe src={info.src} title="video" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen /></div>;
   return <iframe className="igframe" src={info.src} title="video" scrolling="no" allowFullScreen />;
 }
-// Bilgi/makale kartı: biçimli metin + kaynaklar (+ opsiyonel video, varsa üstte gösterilir); "Okudum" → yapıldı.
+// Bilgi/makale kartı: biçimli metin + kaynaklar (+ opsiyonel video(lar), varsa üstte sırayla gösterilir); "Okudum" → yapıldı.
 function BilgiKart({ cfg, done, onOkudum }: { cfg: any; done: boolean; onOkudum: () => void }) {
   const kaynaklar: string[] = cfg?.kaynaklar || [];
+  const videolar: { baslik?: string; url: string; bas?: number; bit?: number }[] = cfg?.videolar && cfg.videolar.length ? cfg.videolar : (cfg?.video ? [{ url: cfg.video }] : []);
   return (
     <div className="bilgi">
-      {cfg?.video && <div style={{ margin: '0 0 8px' }}><EmbedVideo url={cfg.video} /></div>}
+      {videolar.map((v, i) => (
+        <div key={i} style={{ margin: '0 0 8px' }}>
+          {v.baslik && <div className="fldlbl" style={{ marginTop: 0 }}>{v.baslik}</div>}
+          <EmbedVideo url={v.url} bas={v.bas} bit={v.bit} />
+        </div>
+      ))}
       {cfg?.icerik ? renderMetin(cfg.icerik) : <div className="note" style={{ marginTop: 0 }}>İçerik yok (taslak).</div>}
       {kaynaklar.length > 0 && <div className="kv" style={{ marginTop: 4 }}><div className="k">Kaynaklar</div><div className="v">{kaynaklar.map((k, i) => <div key={i} className="note" style={{ margin: '2px 0' }}>{k}</div>)}</div></div>}
       <div style={{ marginTop: 10 }}>{done ? <div className="note" style={{ color: 'var(--green)', fontWeight: 700 }}>✓ Okundu</div> : <button className="btn" onClick={onOkudum}>Okudum ✓</button>}</div>
