@@ -648,6 +648,8 @@ export default function Rite() {
   const [code, setCode] = useState('');
   const [screen, setScreen] = useState('ajanda');
   const [inboxOpen, setInboxOpen] = useState(false);
+  const [ibGrupSec, setIbGrupSec] = useState<string | null>(null); // havuza eklerken grup seçimi açık olan inbox öğesi
+  const [ibGrupVal, setIbGrupVal] = useState('Genel');
   const [ajView, setAjView] = useState<'gun' | 'ay'>('gun');
   const [selDate, setSelDate] = useState('');
   const [activities, setActivities] = useState<any[]>([]);
@@ -686,6 +688,8 @@ export default function Rite() {
   const [detay, setDetay] = useState<any>(null);
   const [detayAct, setDetayAct] = useState<any>(null);
   const [zamanOpen, setZamanOpen] = useState(false);
+  const [grupEditOpen, setGrupEditOpen] = useState(false);
+  const [grupEditVal, setGrupEditVal] = useState('');
   const [paylasOpen, setPaylasOpen] = useState(false);
   const [mezunModal, setMezunModal] = useState<any>(null);
   const [mezunPuan, setMezunPuan] = useState(0);
@@ -1022,7 +1026,7 @@ export default function Rite() {
   const patchDetay = (patch: any) => setDetay((d: any) => (d ? { ...d, obj: { ...d.obj, ...patch } } : d));
   // Tek detay kartı: hem ritüel (Ajanda) hem aktivite (Havuz) buradan açılır.
   async function openDetay(obj: any, tur: string) {
-    setDetay({ obj, tur });
+    setDetay({ obj, tur }); setGrupEditOpen(false); setGrupEditVal('');
     if (tur === 'ritual') {
       setAdInput(obj.ad || ''); setRemInput(obj.hatirlatma_saat || ''); setUrlInput(obj.url || ''); setAciklamaInput(obj.aciklama || ''); setKartUrlInput((obj.kart_config && obj.kart_config.url) || obj.url || '');
       const n = sureGun(obj); setSureInput(n > 0 ? String(n) : '21');
@@ -1031,6 +1035,16 @@ export default function Rite() {
     } else { setDetayAct(obj); }
   }
   function openRit(rt: any) { openDetay(rt, 'ritual'); }
+  // Havuzdaki (kişisel) bir aktivite/programın grubunu değiştir — aktivite ve program için ortak.
+  async function setAktGrup(id: string, grup: string) {
+    if (!client) return;
+    const g = grup.trim() || 'Genel';
+    await supabase.from('dog_activities').update({ grup: g }).eq('id', id);
+    setDetay((d: any) => (d ? { ...d, obj: { ...d.obj, grup: g } } : d));
+    setDetayAct((a: any) => (a ? { ...a, grup: g } : a));
+    setGrupEditOpen(false);
+    loadActivities();
+  }
   async function setRitUrl(id: string, url: string) {
     if (!client) return;
     const u = url.trim() || null;
@@ -1289,16 +1303,18 @@ export default function Rite() {
     await supabase.from('dog_inbox').delete().eq('id', item.id);
     loadInbox(client.id); loadData(client.id);
   }
-  async function inboxAktiviteEkle(item: any) {
+  async function inboxAktiviteEkle(item: any, grup?: string) {
     if (!client) return;
     const p = item.payload || {};
+    const g = (grup || '').trim();
     if (p.tur === 'program') {
-      await supabase.from('dog_activities').insert({ client_id: client.id, tur: 'program', ad: p.ad, grup: 'Program', adimlar: p.adimlar || [], sure_gun: p.sure_gun || null, faydalar: [], kaynak_etiket: 'Paylaşılan', aktif: true });
+      await supabase.from('dog_activities').insert({ client_id: client.id, tur: 'program', ad: p.ad, grup: g || 'Genel', adimlar: p.adimlar || [], sure_gun: p.sure_gun || null, faydalar: [], kaynak_etiket: 'Paylaşılan', aktif: true });
     } else {
       const alan0 = (p.faydalar && p.faydalar.length) ? (faydaList.find((f) => f.kod === p.faydalar[0])?.alan || null) : null;
-      await supabase.from('dog_activities').insert({ client_id: client.id, tur: 'aktivite', ad: p.ad, grup: alan0 || 'Kişisel', faydalar: p.faydalar || [], aciklama: p.aciklama || null, videolar: p.videolar || null, zaman: p.zaman || 'gün', zamanlar: p.zamanlar || null, gunler: p.gunler || null, sure_gun: p.sure_gun || null, kart_tipi: p.kartTipi || null, kart_config: p.kartConfig || null, kaynak_etiket: 'Paylaşılan', aktif: true });
+      await supabase.from('dog_activities').insert({ client_id: client.id, tur: 'aktivite', ad: p.ad, grup: g || alan0 || 'Genel', faydalar: p.faydalar || [], aciklama: p.aciklama || null, videolar: p.videolar || null, zaman: p.zaman || 'gün', zamanlar: p.zamanlar || null, gunler: p.gunler || null, sure_gun: p.sure_gun || null, kart_tipi: p.kartTipi || null, kart_config: p.kartConfig || null, kaynak_etiket: 'Paylaşılan', aktif: true });
     }
     await supabase.from('dog_inbox').delete().eq('id', item.id);
+    setIbGrupSec(null); setIbGrupVal('Genel');
     loadActivities(); loadInbox(client.id);
   }
   // Paylaşılanı doğrudan ajandaya al (gönderenin varsayılan zamanlaması / program adımlarıyla).
@@ -1445,6 +1461,7 @@ export default function Rite() {
 
   return (
     <div className="app">
+      <datalist id="kisisel-gruplar">{personalGroups.map((g) => <option key={g} value={g} />)}</datalist>
       <div className="hd">
         <div className="b">Rite <span>· {client.ad}</span></div>
         <button className="ibtn" onClick={() => { setInboxOpen(true); if (client) loadInbox(client.id); }}>📥{ibBadge > 0 && <span className="bdg">{ibBadge}</span>}</button>
@@ -1863,12 +1880,22 @@ export default function Rite() {
                     <div className="note" style={{ margin: '2px 0' }}>{v.payload?.from_ad ? 'Kimden: ' + v.payload.from_ad : 'Paylaşım'}{v.from_code ? ' · ' + v.from_code : ''}</div>
                     {(v.payload?.faydalar || []).length > 0 && <div>{Array.from(new Set((v.payload.faydalar || []).map((k: string) => faydaMap[k]?.alan).filter(Boolean))).map((a: any) => <span key={a} className="tagp p-alan">{a}</span>)}</div>}
                     {v.payload?.aciklama && <div className="note" style={{ marginTop: 4 }}>{v.payload.aciklama}</div>}
+                    {ibGrupSec === v.id && (
+                      <div style={{ margin: '6px 0' }}>
+                        <label className="fldlbl" style={{ marginTop: 0 }}>Hangi grupta saklansın?</label>
+                        <input value={ibGrupVal} onChange={(e) => setIbGrupVal(e.target.value)} placeholder="ör. Genel, Beslenme…" list="kisisel-gruplar" />
+                        <div className="rowbtns" style={{ marginTop: 6 }}>
+                          <button className="btn sm" onClick={() => inboxAktiviteEkle(v, ibGrupVal)}>Kaydet</button>
+                          <button className="btn ghost sm" onClick={() => { setIbGrupSec(null); setIbGrupVal('Genel'); }}>Vazgeç</button>
+                        </div>
+                      </div>
+                    )}
                     <div className="rowbtns">
                       {v.durum === 'alindi'
                         ? <span className="note" style={{ margin: 0, color: 'var(--green)', fontWeight: 700 }}>✓ Alındı</span>
-                        : <>
+                        : ibGrupSec !== v.id && <>
                             <button className="btn ghost sm" onClick={() => inboxAktiviteAjanda(v)}>Ajandama ekle</button>
-                            <button className="btn ghost sm" onClick={() => inboxAktiviteEkle(v)}>Havuzuma ekle</button>
+                            <button className="btn ghost sm" onClick={() => { setIbGrupSec(v.id); setIbGrupVal('Genel'); }}>Havuzuma ekle</button>
                           </>}
                       <button className="btn ghost sm" style={{ color: 'var(--red)', borderColor: '#e6c4bd' }} onClick={() => inboxSil(v.id)}>Sil</button>
                     </div>
@@ -2027,7 +2054,21 @@ export default function Rite() {
             {isRit ? (
               <input className="detbaslik" value={adInput} onChange={(e) => setAdInput(e.target.value)} onBlur={() => { if (adInput.trim() && adInput.trim() !== (o.ad || '')) setRitAd(o.id, adInput); }} />
             ) : <h2 style={{ paddingRight: 34 }}>{o.ad}</h2>}
-            <div className="m">{(isRit ? o.kaynak : o.grup) || ''}{act?.kanit_duzeyi && <span className="evi">kanıt: {act.kanit_duzeyi}</span>}</div>
+            <div className="m">
+              {isRit ? (o.kaynak || '') : (
+                personal ? (
+                  <span style={{ cursor: 'pointer' }} onClick={() => { setGrupEditVal(personalGroupOf(o)); setGrupEditOpen(true); }}>{personalGroupOf(o)} · değiştir ✎</span>
+                ) : (o.grup || '')
+              )}
+              {act?.kanit_duzeyi && <span className="evi">kanıt: {act.kanit_duzeyi}</span>}
+            </div>
+            {!isRit && personal && grupEditOpen && (
+              <div style={{ margin: '2px 0 10px', display: 'flex', gap: 6 }}>
+                <input value={grupEditVal} onChange={(e) => setGrupEditVal(e.target.value)} list="kisisel-gruplar" style={{ flex: 1 }} />
+                <button className="btn sm" onClick={() => setAktGrup(o.id, grupEditVal)}>Kaydet</button>
+                <button className="btn ghost sm" onClick={() => setGrupEditOpen(false)}>Vazgeç</button>
+              </div>
+            )}
             {areas.length > 0 && <div style={{ margin: '6px 0' }}>{areas.map((a) => <span key={a} className="tagp p-alan">{a}</span>)}</div>}
 
             {isRit && (o.kaynak === 'Kendi' ? (
@@ -2212,7 +2253,6 @@ export default function Rite() {
             <input value={kAd} onChange={(e) => setKAd(e.target.value)} placeholder="ör. Badem'le sabah parkı" />
             <label className="fldlbl">Grup (havuzunda gruplamak için — var olanı seç ya da yeni yaz)</label>
             <input value={kGrup} onChange={(e) => setKGrup(e.target.value)} placeholder="ör. Genel, Ev, Sabah rutini…" list="kisisel-gruplar" />
-            <datalist id="kisisel-gruplar">{personalGroups.map((g) => <option key={g} value={g} />)}</datalist>
             <label className="fldlbl">Notların (ops.)</label>
             <textarea value={kAcik} onChange={(e) => setKAcik(e.target.value)} placeholder="Nasıl yapılır, ipuçları, hatırlatmalar…" />
             <label className="fldlbl">Bağlantı (ops.)</label>
