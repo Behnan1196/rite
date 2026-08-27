@@ -184,18 +184,26 @@ function EmbedVideo({ url, bas, bit }: { url?: string | null; bas?: number | nul
   return <iframe className="igframe" src={info.src} title="video" scrolling="no" allowFullScreen />;
 }
 // Bilgi/makale kartı: video(lar) üstte, altında biçimli metin + kaynaklar; tek bir stilli kutu içinde. "Yaptım" işaretlemesi kart satırından/başlıktaki checkbox'tan yapılır.
+// Birden fazla video = alternatifler (ör. seviye/versiyon) — sekme ile tek tek gösterilir, dikey yer sabit kalır.
 function BilgiKart({ cfg }: { cfg: any }) {
   const kaynaklar: string[] = cfg?.kaynaklar || [];
   const videolar: { baslik?: string; url: string; bas?: number; bit?: number }[] = cfg?.videolar && cfg.videolar.length ? cfg.videolar : (cfg?.video ? [{ url: cfg.video }] : []);
+  const [vidSec, setVidSec] = useState(0);
+  const secili = videolar[Math.min(vidSec, videolar.length - 1)];
   return (
     <div className="howto">
       <div className="bilgi">
-        {videolar.map((v, i) => (
-          <div key={i} style={{ margin: '0 0 8px' }}>
-            {v.baslik && <div className="fldlbl" style={{ marginTop: 0 }}>{v.baslik}</div>}
-            <EmbedVideo url={v.url} bas={v.bas} bit={v.bit} />
+        {videolar.length > 1 && (
+          <div style={{ margin: '0 0 6px' }}>
+            {videolar.map((v, i) => <span key={i} className={'chip' + (i === vidSec ? ' on' : '')} onClick={() => setVidSec(i)}>{v.baslik || ('Video ' + (i + 1))}</span>)}
           </div>
-        ))}
+        )}
+        {secili && (
+          <div style={{ margin: '0 0 8px' }}>
+            {videolar.length === 1 && secili.baslik && <div className="fldlbl" style={{ marginTop: 0 }}>{secili.baslik}</div>}
+            <EmbedVideo url={secili.url} bas={secili.bas} bit={secili.bit} />
+          </div>
+        )}
         {cfg?.icerik ? renderMetin(cfg.icerik) : <div className="note" style={{ marginTop: 0 }}>İçerik yok (taslak).</div>}
         {kaynaklar.length > 0 && <div className="kv" style={{ marginTop: 4 }}><div className="k">Kaynaklar</div><div className="v">{kaynaklar.map((k, i) => <div key={i} className="note" style={{ margin: '2px 0' }}>{k}</div>)}</div></div>}
       </div>
