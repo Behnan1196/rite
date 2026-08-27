@@ -23,8 +23,8 @@ input{width:100%;font-size:15px;padding:11px 12px;border:1px solid var(--line);b
 .rit:first-child{border-top:none;}
 /* Sağlayıcıdan (Meridyen) gelen kartlar — ayrı bir kutu/rozet yerine sol kenarda ince bir mavi şerit ile ayrışır. */
 .rit.rit-mer{border-left:3px solid #7f93d6;padding-left:9px;}
-.rit .chk{width:26px;height:26px;border-radius:50%;border:2px solid var(--line);flex:0 0 26px;display:flex;align-items:center;justify-content:center;font-size:14px;color:#fff;cursor:pointer;}
-.rit .chk.on{background:var(--green);border-color:var(--green);}
+.chk{width:26px;height:26px;border-radius:50%;border:2px solid var(--line);flex:0 0 26px;display:flex;align-items:center;justify-content:center;font-size:14px;color:#fff;cursor:pointer;}
+.chk.on{background:var(--green);border-color:var(--green);}
 .rit .t{font-size:14px;font-weight:600;}
 .rit .m{font-size:11px;color:var(--muted);}
 .tag{display:inline-block;font-size:10px;font-weight:700;background:var(--green2);color:#3f6b2f;border-radius:20px;padding:3px 9px;margin:2px;}

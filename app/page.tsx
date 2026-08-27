@@ -171,21 +171,22 @@ function EmbedVideo({ url, bas, bit }: { url?: string | null; bas?: number | nul
   if (info.tur === 'yt') return <div className="ytwrap"><iframe src={info.src} title="video" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen /></div>;
   return <iframe className="igframe" src={info.src} title="video" scrolling="no" allowFullScreen />;
 }
-// Bilgi/makale kartı: biçimli metin + kaynaklar (+ opsiyonel video(lar), varsa üstte sırayla gösterilir); "Okudum" → yapıldı.
-function BilgiKart({ cfg, done, onOkudum }: { cfg: any; done: boolean; onOkudum: () => void }) {
+// Bilgi/makale kartı: video(lar) üstte, altında biçimli metin + kaynaklar; tek bir stilli kutu içinde. "Yaptım" işaretlemesi kart satırından/başlıktaki checkbox'tan yapılır.
+function BilgiKart({ cfg }: { cfg: any }) {
   const kaynaklar: string[] = cfg?.kaynaklar || [];
   const videolar: { baslik?: string; url: string; bas?: number; bit?: number }[] = cfg?.videolar && cfg.videolar.length ? cfg.videolar : (cfg?.video ? [{ url: cfg.video }] : []);
   return (
-    <div className="bilgi">
-      {videolar.map((v, i) => (
-        <div key={i} style={{ margin: '0 0 8px' }}>
-          {v.baslik && <div className="fldlbl" style={{ marginTop: 0 }}>{v.baslik}</div>}
-          <EmbedVideo url={v.url} bas={v.bas} bit={v.bit} />
-        </div>
-      ))}
-      {cfg?.icerik ? renderMetin(cfg.icerik) : <div className="note" style={{ marginTop: 0 }}>İçerik yok (taslak).</div>}
-      {kaynaklar.length > 0 && <div className="kv" style={{ marginTop: 4 }}><div className="k">Kaynaklar</div><div className="v">{kaynaklar.map((k, i) => <div key={i} className="note" style={{ margin: '2px 0' }}>{k}</div>)}</div></div>}
-      <div style={{ marginTop: 10 }}>{done ? <div className="note" style={{ color: 'var(--green)', fontWeight: 700 }}>✓ Okundu</div> : <button className="btn" onClick={onOkudum}>Okudum ✓</button>}</div>
+    <div className="howto">
+      <div className="bilgi">
+        {videolar.map((v, i) => (
+          <div key={i} style={{ margin: '0 0 8px' }}>
+            {v.baslik && <div className="fldlbl" style={{ marginTop: 0 }}>{v.baslik}</div>}
+            <EmbedVideo url={v.url} bas={v.bas} bit={v.bit} />
+          </div>
+        ))}
+        {cfg?.icerik ? renderMetin(cfg.icerik) : <div className="note" style={{ marginTop: 0 }}>İçerik yok (taslak).</div>}
+        {kaynaklar.length > 0 && <div className="kv" style={{ marginTop: 4 }}><div className="k">Kaynaklar</div><div className="v">{kaynaklar.map((k, i) => <div key={i} className="note" style={{ margin: '2px 0' }}>{k}</div>)}</div></div>}
+      </div>
     </div>
   );
 }
@@ -1445,7 +1446,7 @@ export default function Rite() {
     const total = ritTotal(rt.id);
     const tip = rt.kart_tipi || 'standart';
     const cfg = rt.kart_config || {};
-    const noDone = tip === 'anket' || tip === 'coktan' || tip === 'nefes' || tip === 'ruhhali' || tip === 'bilgi' || tip === 'tarif' || tip === 'sukran' || tip === 'topraklama' || tip === 'pomodoro' || tip === 'beden' || tip === 'uykuoncesi' || tip === 'su' || tip === 'maruz' || tip === 'niyet' || (tip === 'video' && cfg.done === false) || (tip === 'randevu' && cfg.done === false);
+    const noDone = tip === 'anket' || tip === 'coktan' || tip === 'nefes' || tip === 'ruhhali' || tip === 'tarif' || tip === 'sukran' || tip === 'topraklama' || tip === 'pomodoro' || tip === 'beden' || tip === 'uykuoncesi' || tip === 'su' || tip === 'maruz' || tip === 'niyet' || (tip === 'video' && cfg.done === false) || (tip === 'randevu' && cfg.done === false);
     const vurl = tip === 'video' ? (cfg.url || rt.url) : rt.url;
     const ipucu = tip === 'anket' ? '📋 doldur' : tip === 'coktan' ? '❓ yanıtla' : tip === 'diyet' ? '🍽 öğün' : tip === 'tarif' ? '🍳 tarif' : tip === 'video' ? '🎬 izle' : tip === 'nefes' ? '🫁 nefes' : tip === 'ruhhali' ? '🙂 check-in' : tip === 'workout' ? '🏋️ egzersiz' : tip === 'bilgi' ? '📄 oku' : tip === 'sukran' ? '🙏 şükran' : tip === 'topraklama' ? '🖐 topraklan' : tip === 'pomodoro' ? '🍅 odaklan' : tip === 'beden' ? '🧘 taransın' : tip === 'uykuoncesi' ? '🌙 hazırlan' : tip === 'su' ? '💧 iç' : tip === 'maruz' ? '🎯 uygula' : tip === 'niyet' ? '🧭 niyet belirle' : tip === 'randevu' ? '📅 randevu' : '';
     const meridyen = rt.kaynak === 'Meridyen'; // sağlayıcı-kaynaklı kart — kişisel kartlardan çerçeveyle ayrıştır
@@ -2064,7 +2065,7 @@ export default function Rite() {
         const isProg = !isRit && o.tur === 'program';
         const kTip = (isRit ? o.kart_tipi : act?.kart_tipi) || 'standart';
         const kCfg = (isRit ? o.kart_config : act?.kart_config) || {};
-        const noDone = kTip === 'anket' || kTip === 'coktan' || kTip === 'nefes' || kTip === 'ruhhali' || kTip === 'bilgi' || kTip === 'tarif' || kTip === 'sukran' || kTip === 'topraklama' || kTip === 'pomodoro' || kTip === 'beden' || kTip === 'uykuoncesi' || kTip === 'su' || kTip === 'maruz' || kTip === 'niyet' || (kTip === 'video' && kCfg.done === false) || (kTip === 'randevu' && kCfg.done === false);
+        const noDone = kTip === 'anket' || kTip === 'coktan' || kTip === 'nefes' || kTip === 'ruhhali' || kTip === 'tarif' || kTip === 'sukran' || kTip === 'topraklama' || kTip === 'pomodoro' || kTip === 'beden' || kTip === 'uykuoncesi' || kTip === 'su' || kTip === 'maruz' || kTip === 'niyet' || (kTip === 'video' && kCfg.done === false) || (kTip === 'randevu' && kCfg.done === false);
         const gunOzet = !o.baslangic ? "📥 Inbox'ta bekliyor" : (o.baslangic === o.bitis ? '📅 ' + kisaTarih(o.baslangic) : (o.bitis ? kisaTarih(o.baslangic) + ' → ' + kisaTarih(o.bitis) : 'süregelen · ' + kisaTarih(o.baslangic) + "'den"));
         const yarin = (() => { const d = parseD(today); d.setDate(d.getDate() + 1); return iso(d); })();
         return (
@@ -2073,7 +2074,10 @@ export default function Rite() {
             <div className="sheetgrip" onClick={() => setDetay(null)} />
             <button className="x" onClick={() => setDetay(null)}>×</button>
             {isRit ? (
-              <input className="detbaslik" value={adInput} onChange={(e) => setAdInput(e.target.value)} onBlur={() => { if (adInput.trim() && adInput.trim() !== (o.ad || '')) setRitAd(o.id, adInput); }} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {kTip === 'bilgi' && <div className={'chk' + (ritDone(o.id) ? ' on' : '')} onClick={() => toggleRit(o.id)} title="Yaptım">{ritDone(o.id) ? '✓' : ''}</div>}
+                <input className="detbaslik" value={adInput} onChange={(e) => setAdInput(e.target.value)} onBlur={() => { if (adInput.trim() && adInput.trim() !== (o.ad || '')) setRitAd(o.id, adInput); }} style={{ flex: 1 }} />
+              </div>
             ) : <h2 style={{ paddingRight: 34 }}>{o.ad}</h2>}
             <div className="m">
               {isRit ? (o.kaynak || '') : (
@@ -2095,7 +2099,7 @@ export default function Rite() {
             )}
             {areas.length > 0 && <div style={{ margin: '6px 0' }}>{areas.map((a) => <span key={a} className="tagp p-alan">{a}</span>)}</div>}
 
-            {isRit && (o.kaynak === 'Kendi' ? (
+            {isRit && kTip !== 'bilgi' && (o.kaynak === 'Kendi' ? (
               <textarea value={aciklamaInput} onChange={(e) => setAciklamaInput(e.target.value)} onBlur={() => { if (aciklamaInput.trim() !== (o.aciklama || '')) setRitAciklama(o.id, aciklamaInput); }} placeholder="Açıklama / not ekle…" style={{ width: '100%', minHeight: 44, margin: '2px 0 8px' }} />
             ) : (
               o.aciklama && <div className="howto"><div className="k">📋 Nasıl yapılır</div><div className="v">{o.aciklama}</div></div>
@@ -2106,7 +2110,7 @@ export default function Rite() {
             )}
 
             {isRit && kTip === 'standart' && o.kart_config?.resim &&<img src={o.kart_config.resim} alt="" style={{ maxWidth: '100%', borderRadius: 8, margin: '4px 0 8px', display: 'block' }} />}
-            {isRit && kTip === 'bilgi' && <BilgiKart cfg={kCfg} done={ritDone(o.id)} onOkudum={() => { if (!ritDone(o.id)) toggleRit(o.id); }} />}
+            {isRit && kTip === 'bilgi' && <BilgiKart cfg={kCfg} />}
             {isRit && kTip === 'video' && <div style={{ margin: '4px 0 8px' }}>
               {(kCfg.url || o.url) && <EmbedVideo url={kCfg.url || o.url} />}
               <div className="daterow" style={{ marginTop: 6 }}><input value={kartUrlInput} onChange={(e) => setKartUrlInput(e.target.value)} onBlur={() => { if (kartUrlInput.trim() !== ((o.kart_config && o.kart_config.url) || o.url || '')) setRitKartUrl(o.id, kartUrlInput); }} placeholder="Video linki (düzenle)…" style={{ flex: 1 }} /></div>
@@ -2129,7 +2133,7 @@ export default function Rite() {
             {isRit && kTip === 'niyet' && <NiyetKart cfg={kCfg} done={ritDone(o.id)} onKaydet={() => { if (!ritDone(o.id)) toggleRit(o.id); }} />}
             {isRit && kTip === 'randevu' && <RandevuKart cfg={kCfg} />}
 
-            {isRit && !noDone && (
+            {isRit && !noDone && kTip !== 'bilgi' && (
               <button className={'btn' + (ritDone(o.id) ? ' ghost' : '')} style={{ width: '100%', margin: '2px 0 8px' }} onClick={() => toggleRit(o.id)}>{ritDone(o.id) ? '✓ Yaptım — geri al' : '✓ Yaptım'}</button>
             )}
 
