@@ -1199,7 +1199,7 @@ export default function Rite() {
       if (r.kind === 'divider') { curZ = r.z; return; }
       (groups[curZ] = groups[curZ] || []).push(r);
     });
-    const updates: Promise<any>[] = [];
+    const updates: any[] = [];
     Object.entries(groups).forEach(([z, arr]) => {
       arr.forEach((it, idx) => {
         it.members.forEach((m: any) => {
