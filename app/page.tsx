@@ -1087,18 +1087,24 @@ export default function Rite() {
     loadData(client.id);
   }
   // Ne zaman? — kartı bir güne koy (tek seferlik) ya da süregelen yap.
-  async function setRitTarih(id: string, ds: string) {
-    if (!client || !ds) return;
-    await supabase.from('dog_rituals').update({ baslangic: ds, bitis: ds }).eq('id', id);
-    patchDetay({ baslangic: ds, bitis: ds });
-    loadData(client.id);
-  }
-  async function setRitSuregelen(id: string) {
-    if (!client) return;
+  // Zamanlama sekmesinin ana eylemi: kartı başka bir güne "taşı". Tek günlük bir kart (baslangic===bitis)
+  // için hedef gün hem başlangıç hem bitiş olur; süreli bir kart (bitis dolu, farklı) süresini KORUYARAK kayar
+  // (bas→bit arasındaki gün farkı hedefe de uygulanır); süregelen (bitis=null) süregelen kalır. Eskiden bu üç
+  // durum ayrım gözetmeden baslangic=bitis=hedef yapıyordu — bu da süreli/süregelen bir kartı yanlışlıkla tek
+  // güne sıkıştırıyordu (karışıklığın asıl kaynağı buydu).
+  async function ritTasi(id: string, hedefBas: string) {
+    if (!client || !hedefBas) return;
     const rt = rituals.find((r) => r.id === id);
-    const bas = (rt && rt.baslangic && rt.baslangic >= today) ? rt.baslangic : today;
-    await supabase.from('dog_rituals').update({ baslangic: bas, bitis: null }).eq('id', id);
-    patchDetay({ baslangic: bas, bitis: null });
+    const oldBas = (rt && rt.baslangic) || today;
+    const oldBit = rt && rt.bitis;
+    let yeniBit: string | null = null;
+    if (oldBit) {
+      const delta = Math.round((parseD(oldBit).getTime() - parseD(oldBas).getTime()) / 86400000);
+      const e = parseD(hedefBas); e.setDate(e.getDate() + delta);
+      yeniBit = iso(e);
+    }
+    await supabase.from('dog_rituals').update({ baslangic: hedefBas, bitis: yeniBit }).eq('id', id);
+    patchDetay({ baslangic: hedefBas, bitis: yeniBit });
     loadData(client.id);
   }
   // gun: null = süregelen (bitiş kaldır); >0 = başlangıçtan itibaren N gün
@@ -1123,14 +1129,6 @@ export default function Rite() {
     if (!client) return;
     await supabase.from('dog_rituals').update({ aliskanlik: val }).eq('id', id);
     patchDetay({ aliskanlik: val });
-    loadData(client.id);
-  }
-  async function setRitZaman(id: string, z: string) {
-    if (!client) return;
-    const rt = rituals.find((r) => r.id === id);
-    if (rt?.rutin) await supabase.from('dog_rituals').update({ zaman: z }).eq('rutin', rt.rutin); // zincirse tüm üyeler
-    else await supabase.from('dog_rituals').update({ zaman: z }).eq('id', id);
-    patchDetay({ zaman: z });
     loadData(client.id);
   }
   async function setRitReminder(id: string, saat: string) {
@@ -2064,11 +2062,11 @@ export default function Rite() {
         const hasBilgi = act && (act.ozet || act.aciklama || act.nasil || (act.videolar || []).length || (act.alternatifler || []).length || act.dikkat || act.kaynak);
         const personal = act && act.client_id;
         const isProg = !isRit && o.tur === 'program';
-        const schedSummary = [gunlerLabel(o.gunler), o.bitis ? 'bitiş ' + kisaTarih(o.bitis) : 'süregelen', SLOTS.find((t) => t[0] === (o.zaman || 'gün'))?.[1], o.hatirlatma_saat ? '🔔 ' + o.hatirlatma_saat : ''].filter(Boolean).join(' · ');
         const kTip = (isRit ? o.kart_tipi : act?.kart_tipi) || 'standart';
         const kCfg = (isRit ? o.kart_config : act?.kart_config) || {};
         const noDone = kTip === 'anket' || kTip === 'coktan' || kTip === 'nefes' || kTip === 'ruhhali' || kTip === 'bilgi' || kTip === 'tarif' || kTip === 'sukran' || kTip === 'topraklama' || kTip === 'pomodoro' || kTip === 'beden' || kTip === 'uykuoncesi' || kTip === 'su' || kTip === 'maruz' || kTip === 'niyet' || (kTip === 'video' && kCfg.done === false) || (kTip === 'randevu' && kCfg.done === false);
         const gunOzet = !o.baslangic ? "📥 Inbox'ta bekliyor" : (o.baslangic === o.bitis ? '📅 ' + kisaTarih(o.baslangic) : (o.bitis ? kisaTarih(o.baslangic) + ' → ' + kisaTarih(o.bitis) : 'süregelen · ' + kisaTarih(o.baslangic) + "'den"));
+        const yarin = (() => { const d = parseD(today); d.setDate(d.getDate() + 1); return iso(d); })();
         return (
         <div className="modal full" onClick={() => setDetay(null)}>
           <div className="sheet fullsheet" onClick={(e) => e.stopPropagation()}>
@@ -2140,14 +2138,13 @@ export default function Rite() {
               <div className="sheet" onClick={(e) => e.stopPropagation()}>
                 <button className="x" onClick={() => setZamanOpen(false)}>×</button>
                 <h3 style={{ marginBottom: 6 }}>🕐 Zamanlama</h3>
-                <div className="kv"><div className="k">Hangi gün</div>
+                <div className="kv"><div className="k">Hangi güne taşı</div>
                   <div>
-                    <span className={'chip' + (o.baslangic && o.baslangic === o.bitis && o.baslangic === today ? ' on' : '')} onClick={() => setRitTarih(o.id, today)}>Bugün</span>
-                    <span className="chip" onClick={() => { const d = parseD(today); d.setDate(d.getDate() + 1); setRitTarih(o.id, iso(d)); }}>Yarın</span>
-                    <span className={'chip' + (o.baslangic && !o.bitis ? ' on' : '')} onClick={() => setRitSuregelen(o.id)}>Süregelen</span>
-                    <input type="date" value={o.baslangic && o.baslangic === o.bitis ? o.baslangic : ''} onChange={(e) => e.target.value && setRitTarih(o.id, e.target.value)} style={{ width: 'auto', marginLeft: 4 }} />
+                    <span className={'chip' + (o.baslangic === today ? ' on' : '')} onClick={() => ritTasi(o.id, today)}>Bugün</span>
+                    <span className={'chip' + (o.baslangic === yarin ? ' on' : '')} onClick={() => ritTasi(o.id, yarin)}>Yarın</span>
+                    <input type="date" value={o.baslangic || ''} onChange={(e) => e.target.value && ritTasi(o.id, e.target.value)} style={{ width: 'auto', marginLeft: 4 }} />
                   </div>
-                  <div className="note">{gunOzet}</div>
+                  <div className="note">{gunOzet}{o.bitis && o.bitis !== o.baslangic ? ' — süresi korunarak taşınır' : ''}</div>
                 </div>
                 <div className="kv"><div className="k">Süre</div>
                   <div>
@@ -2168,9 +2165,6 @@ export default function Rite() {
                       return <span key={n} className={'chip' + (sel ? ' on' : '')} onClick={() => { const cur: number[] = o.gunler ? [...o.gunler] : []; const nx = cur.includes(n) ? cur.filter((x) => x !== n) : [...cur, n]; setRitGunler(o.id, nx); }}>{l}</span>;
                     })}
                   </div>
-                </div>
-                <div className="kv"><div className="k">Zaman dilimi</div>
-                  <div>{SLOTS.map(([z, l]) => <span key={z} className={'chip' + ((o.zaman || 'gün') === z ? ' on' : '')} onClick={() => setRitZaman(o.id, z)}>{l}</span>)}</div>
                 </div>
                 <div className="kv"><div className="k">Takip</div>
                   <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}><input type="checkbox" style={{ width: 'auto' }} checked={!!o.aliskanlik} onChange={(e) => setRitAliskanlik(o.id, e.target.checked)} /> Alışkanlık olarak haftalık takipte göster</label>
