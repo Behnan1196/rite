@@ -1466,7 +1466,7 @@ export default function Rite() {
     const total = ritTotal(rt.id);
     const tip = rt.kart_tipi || 'standart';
     const cfg = rt.kart_config || {};
-    const noDone = tip === 'anket' || tip === 'coktan' || tip === 'nefes' || tip === 'ruhhali' || tip === 'tarif' || tip === 'sukran' || tip === 'topraklama' || tip === 'pomodoro' || tip === 'beden' || tip === 'uykuoncesi' || tip === 'su' || tip === 'maruz' || tip === 'niyet' || (tip === 'video' && cfg.done === false) || (tip === 'randevu' && cfg.done === false);
+    const noDone = tip === 'anket' || tip === 'coktan' || tip === 'nefes' || tip === 'ruhhali' || tip === 'tarif' || tip === 'sukran' || tip === 'topraklama' || tip === 'pomodoro' || tip === 'beden' || tip === 'uykuoncesi' || tip === 'su' || tip === 'maruz' || tip === 'niyet' || tip === 'workout' || (tip === 'video' && cfg.done === false) || (tip === 'randevu' && cfg.done === false);
     const vurl = tip === 'video' ? (cfg.url || rt.url) : rt.url;
     const ipucu = tip === 'anket' ? '📋 doldur' : tip === 'coktan' ? '❓ yanıtla' : tip === 'diyet' ? '🍽 öğün' : tip === 'tarif' ? '🍳 tarif' : tip === 'video' ? '🎬 izle' : tip === 'nefes' ? '🫁 nefes' : tip === 'ruhhali' ? '🙂 check-in' : tip === 'workout' ? '🏋️ egzersiz' : tip === 'bilgi' ? '📄 oku' : tip === 'sukran' ? '🙏 şükran' : tip === 'topraklama' ? '🖐 topraklan' : tip === 'pomodoro' ? '🍅 odaklan' : tip === 'beden' ? '🧘 taransın' : tip === 'uykuoncesi' ? '🌙 hazırlan' : tip === 'su' ? '💧 iç' : tip === 'maruz' ? '🎯 uygula' : tip === 'niyet' ? '🧭 niyet belirle' : tip === 'randevu' ? '📅 randevu' : '';
     const meridyen = rt.kaynak === 'Meridyen'; // sağlayıcı-kaynaklı kart — kişisel kartlardan çerçeveyle ayrıştır
@@ -2085,7 +2085,7 @@ export default function Rite() {
         const isProg = !isRit && o.tur === 'program';
         const kTip = (isRit ? o.kart_tipi : act?.kart_tipi) || 'standart';
         const kCfg = (isRit ? o.kart_config : act?.kart_config) || {};
-        const noDone = kTip === 'anket' || kTip === 'coktan' || kTip === 'nefes' || kTip === 'ruhhali' || kTip === 'tarif' || kTip === 'sukran' || kTip === 'topraklama' || kTip === 'pomodoro' || kTip === 'beden' || kTip === 'uykuoncesi' || kTip === 'su' || kTip === 'maruz' || kTip === 'niyet' || (kTip === 'video' && kCfg.done === false) || (kTip === 'randevu' && kCfg.done === false);
+        const noDone = kTip === 'anket' || kTip === 'coktan' || kTip === 'nefes' || kTip === 'ruhhali' || kTip === 'tarif' || kTip === 'sukran' || kTip === 'topraklama' || kTip === 'pomodoro' || kTip === 'beden' || kTip === 'uykuoncesi' || kTip === 'su' || kTip === 'maruz' || kTip === 'niyet' || kTip === 'workout' || (kTip === 'video' && kCfg.done === false) || (kTip === 'randevu' && kCfg.done === false);
         const gunOzet = !o.baslangic ? "📥 Inbox'ta bekliyor" : (o.baslangic === o.bitis ? '📅 ' + kisaTarih(o.baslangic) : (o.bitis ? kisaTarih(o.baslangic) + ' → ' + kisaTarih(o.bitis) : 'süregelen · ' + kisaTarih(o.baslangic) + "'den"));
         const yarin = (() => { const d = parseD(today); d.setDate(d.getDate() + 1); return iso(d); })();
         return (
@@ -2119,7 +2119,7 @@ export default function Rite() {
             )}
             {areas.length > 0 && <div style={{ margin: '6px 0' }}>{areas.map((a) => <span key={a} className="tagp p-alan">{a}</span>)}</div>}
 
-            {isRit && kTip !== 'bilgi' && (o.kaynak === 'Kendi' ? (
+            {isRit && kTip !== 'bilgi' && kTip !== 'tarif' && (o.kaynak === 'Kendi' ? (
               <textarea value={aciklamaInput} onChange={(e) => setAciklamaInput(e.target.value)} onBlur={() => { if (aciklamaInput.trim() !== (o.aciklama || '')) setRitAciklama(o.id, aciklamaInput); }} placeholder="Açıklama / not ekle…" style={{ width: '100%', minHeight: 44, margin: '2px 0 8px' }} />
             ) : (
               o.aciklama && <div className="howto"><div className="k">📋 Nasıl yapılır</div><div className="v">{o.aciklama}</div></div>
