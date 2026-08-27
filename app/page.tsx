@@ -57,15 +57,27 @@ const TOPRAK_ADIM: [string, string][] = [['5', '5 şey GÖR'], ['4', '4 şey DOK
 function inlineMetin(s: string): ReactNode[] {
   return s.split(/(\*\*[^*]+\*\*)/g).map((p, i) => (p.startsWith('**') && p.endsWith('**') ? <strong key={i}>{p.slice(2, -2)}</strong> : <span key={i}>{p}</span>));
 }
-// # başlık, ## alt başlık, - madde, boş satır = paragraf ayırıcı
+// "> " ile başlayan satırlar renkli kutucuk (callout) olur; baştaki emojiye göre renk seçilir (uyarı/bilgi/olumlu, yoksa nötr).
+const CALL_WARN = ['⚠️', '⚠', '🚨', '❗️', '❗', '❌'];
+const CALL_INFO = ['💡', 'ℹ️', 'ℹ', '📌', '📝'];
+const CALL_OK = ['✅', '👍', '🎉', '💪'];
+function calloutClass(text: string): string {
+  if (CALL_WARN.some((e) => text.startsWith(e))) return 'call-warn';
+  if (CALL_INFO.some((e) => text.startsWith(e))) return 'call-info';
+  if (CALL_OK.some((e) => text.startsWith(e))) return 'call-ok';
+  return 'call-note';
+}
+// # başlık, ## / ### alt başlık, - madde, > uyarı/bilgi kutusu, boş satır = paragraf ayırıcı
 function renderFlow(lines: string[]): ReactNode[] {
   const out: ReactNode[] = []; let bullets: string[] = [];
   const flush = () => { if (bullets.length) { out.push(<ul key={'u' + out.length} className="bilul">{bullets.map((b, i) => <li key={i}>{inlineMetin(b)}</li>)}</ul>); bullets = []; } };
   lines.forEach((ln, idx) => {
     const s = ln.trim();
     if (!s) { flush(); return; }
-    if (s.startsWith('## ')) { flush(); out.push(<div key={idx} className="bilh2">{inlineMetin(s.slice(3))}</div>); }
+    if (s.startsWith('### ')) { flush(); out.push(<div key={idx} className="bilh3">{inlineMetin(s.slice(4))}</div>); }
+    else if (s.startsWith('## ')) { flush(); out.push(<div key={idx} className="bilh2">{inlineMetin(s.slice(3))}</div>); }
     else if (s.startsWith('# ')) { flush(); out.push(<div key={idx} className="bilh1">{inlineMetin(s.slice(2))}</div>); }
+    else if (s.startsWith('> ')) { flush(); const txt = s.slice(2); out.push(<div key={idx} className={'call ' + calloutClass(txt)}>{inlineMetin(txt)}</div>); }
     else if (s.startsWith('- ')) { bullets.push(s.slice(2)); }
     else { flush(); out.push(<p key={idx} className="bilp">{inlineMetin(s)}</p>); }
   });
@@ -2237,7 +2249,6 @@ export default function Rite() {
             {!isRit && !isProg && <button className="btn" style={{ width: '100%', marginTop: 14 }} onClick={() => { aktiviteEkleSlotlar(o, addSlot || undefined); setDetay(null); setAddSlot(null); setScreen('ajanda'); }}>Ajandama ekle{addSlot ? ' (' + (SLOTS.find((t) => t[0] === addSlot)?.[1]) + ')' : ''}</button>}
 
             <div className="dettoolbar">
-              {isRit && <button className="tbtn" onClick={() => setZamanOpen(true)}><span className="tbic">🕐</span>Zamanlama</button>}
               <button className="tbtn" onClick={() => { setPaylasOpen(true); setKMsg(''); }}><span className="tbic">📤</span>Paylaş</button>
               {personal && !isProg && <button className="tbtn" onClick={() => { setDetay(null); openStudioEdit(act); }}><span className="tbic">✎</span>Düzenle</button>}
               {isRit && <button className="tbtn danger" onClick={() => { const id = o.id; setDetay(null); ritSil(id); }}><span className="tbic">🗑</span>Kaldır</button>}
