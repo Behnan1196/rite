@@ -5,15 +5,14 @@ import { DndContext, PointerSensor, closestCenter, useSensor, useSensors } from 
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
-function SortableItem({ id, children }: { id: string; children: ReactNode }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
-  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.55 : 1 };
-  return (
-    <div ref={setNodeRef} style={style} className="sortrow">
-      <button className="draghandle" {...attributes} {...listeners} aria-label="taşı">⋮⋮</button>
-      <div style={{ flex: 1, minWidth: 0 }}>{children}</div>
-    </div>
-  );
+// Ayrı bir tutamaç yok — kartın kendisi basılı tutulunca taşınır (bkz sensors: activationConstraint.delay).
+// Böylece kısa dokunuş normal tıklama olarak geçer, ~180ms basılı tutmak sürüklemeyi başlatır.
+// disabled=true olan satırlar (zaman dilimi ayraçları) hiç taşınamaz ama listede yer tutmaya devam eder.
+function SortableRow({ id, disabled, children }: { id: string; disabled?: boolean; children: ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled });
+  const style: any = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.55 : 1 };
+  if (disabled) return <div ref={setNodeRef} style={style}>{children}</div>;
+  return <div ref={setNodeRef} style={{ ...style, touchAction: 'none' }} {...attributes} {...listeners}>{children}</div>;
 }
 
 type Client = { id: string; ad: string; code: string; share_code?: string };
@@ -40,7 +39,6 @@ const POOL_KAYNAK: Record<string, string> = { def: 'Rite', afh: 'AfH', mer: 'Mer
 const TODS: [string, string][] = [['sabah', 'Sabah'], ['gün', 'Gün içi'], ['akşam', 'Akşam']];
 const ZAMANSIZ = 'esnek'; // zaman dilimine bağlı olmayan, isimsiz dördüncü bölüm
 const SLOTS: [string, string][] = [...TODS, [ZAMANSIZ, 'Serbest']]; // seçim gerektiren yerlerde (chip/başlık) etiketli
-const SLOTCLR = '#f3efe4'; // tüm zaman dilimi bloklarında tek, nötr renk
 // Haftagünü: getDay değeri (0=Paz..6=Cmt), Pazartesi-önce görüntü sırası
 const GUNLER: [number, string][] = [[1, 'Pzt'], [2, 'Sal'], [3, 'Çar'], [4, 'Per'], [5, 'Cum'], [6, 'Cmt'], [0, 'Paz']];
 // Akıllı kart tipleri: kod · etiket · ikon
@@ -699,7 +697,9 @@ export default function Rite() {
   const [aciklamaInput, setAciklamaInput] = useState('');
   const [kartUrlInput, setKartUrlInput] = useState('');
   const [sureInput, setSureInput] = useState('21');
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { delay: 180, tolerance: 6 } }));
+  // Artık ayrı bir tutamaç yok, kartın tamamı basılı tutulunca taşınıyor — bu yüzden gecikme (delay) daha önceki
+  // (küçük tutamaca özel) 180ms'den daha uzun: kısa bir "aç/işaretle" dokunuşuyla yanlışlıkla sürüklemeyi karıştırmasın.
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { delay: 300, tolerance: 6 } }));
   const [faydaList, setFaydaList] = useState<any[]>([]);
   const [alanList, setAlanList] = useState<string[]>([]);
   const [kZamanlar, setKZamanlar] = useState<string[]>(['gün']);
@@ -1181,15 +1181,36 @@ export default function Rite() {
     await supabase.from('dog_rituals').update({ rutin: null }).eq('id', id);
     loadData(client.id);
   }
-  async function onDragEndSlot(items: any[], e: any) {
+  // Ajanda gün görünümü artık zaman dilimi başına ayrı bir sürükleme alanı değil, TEK akış: dilimler (Sabah/Gün
+  // içi/Akşam/Serbest) sürüklenemeyen ince ayraç satırları, kartlar bu ayraçların arasında serbestçe taşınabiliyor.
+  // Bir kartı bir ayracın öbür tarafına bırakmak, o kartın (zincirse tüm üyelerinin) `zaman` alanını da günceller —
+  // önceden bunun için kartı açıp Zamanlama sekmesine girmek gerekiyordu (o yol hâlâ duruyor, bu ek bir kestirme).
+  async function onDragEndDay(rows: any[], e: any) {
+    if (!client) return;
     const { active, over } = e;
     if (!over || active.id === over.id) return;
-    const oldIndex = items.findIndex((i) => i.key === active.id);
-    const newIndex = items.findIndex((i) => i.key === over.id);
+    const oldIndex = rows.findIndex((r) => r.key === active.id);
+    const newIndex = rows.findIndex((r) => r.key === over.id);
     if (oldIndex < 0 || newIndex < 0) return;
-    const ordered = arrayMove(items, oldIndex, newIndex);
-    await Promise.all(ordered.flatMap((it: any, idx: number) => it.members.map((m: any) => supabase.from('dog_rituals').update({ blok_sira: idx }).eq('id', m.id))));
-    if (client) loadData(client.id);
+    const moved = arrayMove(rows, oldIndex, newIndex);
+    let curZ = SLOTS[0][0];
+    const groups: Record<string, any[]> = {};
+    moved.forEach((r) => {
+      if (r.kind === 'divider') { curZ = r.z; return; }
+      (groups[curZ] = groups[curZ] || []).push(r);
+    });
+    const updates: Promise<any>[] = [];
+    Object.entries(groups).forEach(([z, arr]) => {
+      arr.forEach((it, idx) => {
+        it.members.forEach((m: any) => {
+          const patch: any = { blok_sira: idx };
+          if ((m.zaman || 'gün') !== z) patch.zaman = z;
+          updates.push(supabase.from('dog_rituals').update(patch).eq('id', m.id));
+        });
+      });
+    });
+    await Promise.all(updates);
+    loadData(client.id);
   }
   async function rutinBoz(name: string) {
     if (!client) return;
@@ -1421,13 +1442,6 @@ export default function Rite() {
   const personalGroupOf = (a: any) => a.grup && a.grup !== 'Kişisel' ? a.grup : 'Genel';
   const personalGroups = personalActs.map(personalGroupOf).filter((v, i, arr) => arr.indexOf(v) === i);
 
-  function providerTag(kaynak: string) {
-    if (kaynak === 'Meridyen') return <span className="tagp p-mer">Meridyen</span>;
-    if (kaynak === 'AfH') return <span className="tagp p-afh">AfH</span>;
-    if (kaynak === 'Kendi') return <span className="tagp p-own">Kendi</span>;
-    return null;
-  }
-
   function RitItem({ rt }: { rt: any }) {
     const done = ritDone(rt.id);
     const total = ritTotal(rt.id);
@@ -1443,7 +1457,6 @@ export default function Rite() {
           <div className={'chk' + (done ? ' on' : '')} onClick={() => (noDone ? openRit(rt) : toggleRit(rt.id))} title={noDone ? 'Aç' : 'Yaptım'}>{done ? '✓' : (noDone ? kartIkon(tip) : '')}</div>
           <div style={{ flex: 1, cursor: 'pointer' }} onClick={() => openRit(rt)}>
             <div className="t">{rt.ad}
-              {providerTag(rt.kaynak)}
               {ritAreas(rt).map((a) => <span key={a} className="tagp p-alan">{a}</span>)}
               {cfg.dikey && DIKEY_LABEL[cfg.dikey] && <span className="tagp p-dikey">{DIKEY_LABEL[cfg.dikey]}</span>}
             </div>
@@ -1553,17 +1566,25 @@ export default function Rite() {
               </div>
             ) : (
               <div>
-                {SLOTS.map(([z, lbl]) => {
-                  const slotRits = habits.filter((r) => (r.zaman || 'gün') === z);
-                  const map = new Map<string, any>();
-                  for (const r of slotRits) {
-                    const key = r.rutin ? 'r:' + r.rutin : 's:' + r.id;
-                    if (!map.has(key)) map.set(key, { key, rutin: r.rutin || null, members: [] });
-                    map.get(key).members.push(r);
-                  }
-                  const items = Array.from(map.values());
-                  for (const it of items) it.members.sort((a: any, b: any) => (a.sira || 0) - (b.sira || 0));
-                  items.sort((a, b) => (Number(a.members[0].blok_sira) || 0) - (Number(b.members[0].blok_sira) || 0));
+                {(() => {
+                  // Zaman dilimleri artık kutu değil — sürüklenemeyen (disabled) birer ayraç satırı; kartların
+                  // hepsi TEK akışta, bir ayracın öbür tarafına bırakılınca zaman dilimi de değişir (onDragEndDay).
+                  const rows: any[] = [];
+                  SLOTS.forEach(([z, lbl]) => {
+                    rows.push({ key: 'div:' + z, kind: 'divider', z, lbl });
+                    const slotRits = habits.filter((r) => (r.zaman || 'gün') === z);
+                    const map = new Map<string, any>();
+                    for (const r of slotRits) {
+                      const key = r.rutin ? 'r:' + r.rutin : 's:' + r.id;
+                      if (!map.has(key)) map.set(key, { key, rutin: r.rutin || null, members: [] });
+                      map.get(key).members.push(r);
+                    }
+                    const items = Array.from(map.values());
+                    for (const it of items) it.members.sort((a: any, b: any) => (a.sira || 0) - (b.sira || 0));
+                    items.sort((a, b) => (Number(a.members[0].blok_sira) || 0) - (Number(b.members[0].blok_sira) || 0));
+                    items.forEach((it) => rows.push({ ...it, kind: 'item' }));
+                  });
+
                   const itemBody = (it: any) => it.rutin ? (
                     <div className="card routine">
                       <div className="chain">
@@ -1588,30 +1609,27 @@ export default function Rite() {
                   ) : (
                     <div className="card" style={{ padding: '4px 10px' }}><RitItem rt={it.members[0]} /></div>
                   );
+
                   return (
-                    <div key={z} style={{ background: SLOTCLR, border: '1px solid var(--line)', borderRadius: 12, padding: '2px 8px 6px', margin: '10px 0' }}>
-                      <div className="slothead">
-                        <div className="tod" style={{ margin: '6px 4px 2px' }}>{lbl}</div>
-                        <button className="slotadd" onClick={() => setSlotAddOpen(z)} aria-label="ekle">+</button>
-                      </div>
-                      {/* Sürükle-taşı tutamacı yalnız birden çok blok varken gösterilir — tek kart varsa taşınacak
-                          başka bir şey olmadığından tutamaç gereksiz yer kaplar; bu durumda kart tam genişlik kullanır. */}
-                      {items.length > 1 ? (
-                        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => onDragEndSlot(items, e)}>
-                          <SortableContext items={items.map((i) => i.key)} strategy={verticalListSortingStrategy}>
-                            {items.map((it) => (
-                              <SortableItem key={it.key} id={it.key}>
-                                {itemBody(it)}
-                              </SortableItem>
-                            ))}
-                          </SortableContext>
-                        </DndContext>
-                      ) : (
-                        items.map((it) => <div key={it.key}>{itemBody(it)}</div>)
-                      )}
-                    </div>
+                    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => onDragEndDay(rows, e)}>
+                      <SortableContext items={rows.map((r) => r.key)} strategy={verticalListSortingStrategy}>
+                        {rows.map((r) => r.kind === 'divider' ? (
+                          <SortableRow key={r.key} id={r.key} disabled>
+                            <div className="timediv">
+                              <span className="tl">{r.lbl}</span>
+                              <span className="ln" />
+                              <button className="slotadd" onClick={() => setSlotAddOpen(r.z)} aria-label="ekle">+</button>
+                            </div>
+                          </SortableRow>
+                        ) : (
+                          <SortableRow key={r.key} id={r.key}>
+                            {itemBody(r)}
+                          </SortableRow>
+                        ))}
+                      </SortableContext>
+                    </DndContext>
                   );
-                })}
+                })()}
 
                 {pushMsg && <div className="msg">{pushMsg}</div>}
               </div>

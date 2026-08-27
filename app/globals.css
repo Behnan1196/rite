@@ -21,9 +21,8 @@ input{width:100%;font-size:15px;padding:11px 12px;border:1px solid var(--line);b
 .btn:disabled{opacity:.4;cursor:default;}
 .rit{display:flex;align-items:center;gap:8px;padding:12px 2px;border-top:1px solid var(--line);}
 .rit:first-child{border-top:none;}
-/* Sağlayıcıdan (Meridyen) gelen kartlar — kişisel kartlardan çerçeveyle ayrışır (bkz .p-mer rozet rengiyle eşleşen mavi ton). */
-.rit.rit-mer{background:#f6f8fd;border:1px solid #d7deee;border-radius:10px;padding:10px 10px;margin:5px 0;}
-.rit.rit-mer:first-child{border-top:1px solid #d7deee;}
+/* Sağlayıcıdan (Meridyen) gelen kartlar — ayrı bir kutu/rozet yerine sol kenarda ince bir mavi şerit ile ayrışır. */
+.rit.rit-mer{border-left:3px solid #7f93d6;padding-left:9px;}
 .rit .chk{width:26px;height:26px;border-radius:50%;border:2px solid var(--line);flex:0 0 26px;display:flex;align-items:center;justify-content:center;font-size:14px;color:#fff;cursor:pointer;}
 .rit .chk.on{background:var(--green);border-color:var(--green);}
 .rit .t{font-size:14px;font-weight:600;}
@@ -62,7 +61,6 @@ input{width:100%;font-size:15px;padding:11px 12px;border:1px solid var(--line);b
 .wday.on{background:var(--ink);}
 .wday.on .wl,.wday.on .wn{color:#efe9dd;}
 .tod{font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;margin:16px 2px 4px;}
-.slothead{display:flex;align-items:center;justify-content:space-between;}
 .slotadd{background:transparent;border:1px solid var(--line);border-radius:50%;width:26px;height:26px;font-size:16px;line-height:1;color:var(--muted);cursor:pointer;flex:0 0 auto;}
 .slotadd:active{background:var(--green2);color:var(--green);border-color:var(--green2);}
 .playbtn{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;background:#fdecea;color:var(--red);text-decoration:none;font-size:13px;margin-right:4px;flex:0 0 auto;}
@@ -125,7 +123,6 @@ input{width:100%;font-size:15px;padding:11px 12px;border:1px solid var(--line);b
 .typechip{font-size:9px;font-weight:800;border-radius:20px;padding:2px 7px;margin-left:6px;}
 .t-hab{background:#e7efe1;color:#3f6b2f;}.t-rem{background:#f3e7dd;color:#9a6a3a;}.t-not{background:#efe8da;color:#7a715e;}
 .tagp{font-size:9px;font-weight:800;border-radius:20px;padding:2px 7px;margin-left:5px;}
-.p-mer{background:#e9eef8;color:#3a56b0;}.p-afh{background:#f6e9f0;color:#9a3f6f;}.p-own{background:#eceae4;color:#6b6250;}
 .tagp.p-dikey{background:#fbf1de;color:#8a5a2e;}
 .banner{display:flex;gap:9px;align-items:center;background:#eef2fb;border:1px solid #c3cdf0;border-radius:12px;padding:10px 12px;font-size:12px;color:#39457e;margin:10px 0;line-height:1.4;}
 .banner .bb{margin-left:auto;background:#3a56b0;color:#fff;border:none;border-radius:20px;padding:6px 11px;font-size:11px;font-weight:700;white-space:nowrap;cursor:pointer;}
@@ -229,9 +226,11 @@ input{width:100%;font-size:15px;padding:11px 12px;border:1px solid var(--line);b
 .cact{display:flex;gap:1px;flex:0 0 auto;}
 .cact button{background:none;border:none;color:#c4bca8;font-size:14px;cursor:pointer;padding:3px 4px;line-height:1;}
 .cact button:hover{color:var(--ink);}
-.sortrow{display:flex;align-items:center;gap:0;}
-.draghandle{background:none;border:none;color:#c4bca8;font-size:13px;line-height:1;cursor:grab;padding:8px 2px 8px 0;flex:0 0 auto;touch-action:none;align-self:center;width:16px;}
-.draghandle:active{cursor:grabbing;color:var(--muted);}
+/* Zaman dilimi ayracı — artık kutu değil, ince bir çizgi + etiket (bkz Ajanda gün akışı, onDragEndDay). */
+.timediv{display:flex;align-items:center;gap:8px;margin:16px 2px 6px;}
+.timediv:first-child{margin-top:2px;}
+.timediv .tl{font-size:10.5px;font-weight:800;color:#9a9280;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap;}
+.timediv .ln{flex:1;height:1px;background:var(--line);}
 
 /* Ne zaman? — kartın Inbox↔gün↔süregelen kontrolü */
 .howto{margin:2px 0 10px;padding:10px 12px;background:var(--card2,#f6f4ee);border:1px solid var(--line);border-left:3px solid var(--green);border-radius:10px}
