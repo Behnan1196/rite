@@ -1564,45 +1564,50 @@ export default function Rite() {
                   const items = Array.from(map.values());
                   for (const it of items) it.members.sort((a: any, b: any) => (a.sira || 0) - (b.sira || 0));
                   items.sort((a, b) => (Number(a.members[0].blok_sira) || 0) - (Number(b.members[0].blok_sira) || 0));
+                  const itemBody = (it: any) => it.rutin ? (
+                    <div className="card routine">
+                      <div className="chain">
+                        {it.members.map((rt: any, i: number) => {
+                          const done = ritDone(rt.id);
+                          return (
+                            <div key={rt.id} className="cstep">
+                              <div className={'cdot' + (done ? ' on' : '')} onClick={() => toggleRit(rt.id)}>{done ? '✓' : ''}</div>
+                              <div className="cbody" style={{ cursor: 'pointer' }} onClick={() => openRit(rt)}><div className="t">{i === 0 && <span style={{ marginRight: 4 }}>🔗</span>}{rt.ad}{ritAreas(rt).map((a) => <span key={a} className="tagp p-alan">{a}</span>)}{rt.kart_config?.dikey && DIKEY_LABEL[rt.kart_config.dikey] && <span className="tagp p-dikey">{DIKEY_LABEL[rt.kart_config.dikey]}</span>}</div><div className="m">{rt.hatirlatma_saat ? '🔔 ' + rt.hatirlatma_saat + ' · ' : ''}toplam {ritTotal(rt.id)}</div></div>
+                              <div className="cact">
+                                {rt.url && <a href={rt.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} title="Aç">▶</a>}
+                                <button onClick={() => moveStep(it.rutin, i, -1)}>↑</button>
+                                <button onClick={() => moveStep(it.rutin, i, 1)}>↓</button>
+                                <button onClick={() => rutinCikar(rt.id)} title="Zincirden çıkar">✕</button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div style={{ textAlign: 'right', marginTop: 2 }}><button className="rboz" onClick={() => rutinBoz(it.rutin)}>zinciri boz</button></div>
+                    </div>
+                  ) : (
+                    <div className="card" style={{ padding: '4px 10px' }}><RitItem rt={it.members[0]} /></div>
+                  );
                   return (
                     <div key={z} style={{ background: SLOTCLR, border: '1px solid var(--line)', borderRadius: 12, padding: '2px 8px 6px', margin: '10px 0' }}>
                       <div className="slothead">
                         <div className="tod" style={{ margin: '6px 4px 2px' }}>{lbl}</div>
                         <button className="slotadd" onClick={() => setSlotAddOpen(z)} aria-label="ekle">+</button>
                       </div>
-                      {items.length > 0 && (
-                      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => onDragEndSlot(items, e)}>
-                        <SortableContext items={items.map((i) => i.key)} strategy={verticalListSortingStrategy}>
-                          {items.map((it) => (
-                            <SortableItem key={it.key} id={it.key}>
-                              {it.rutin ? (
-                                <div className="card routine">
-                                  <div className="chain">
-                                    {it.members.map((rt: any, i: number) => {
-                                      const done = ritDone(rt.id);
-                                      return (
-                                        <div key={rt.id} className="cstep">
-                                          <div className={'cdot' + (done ? ' on' : '')} onClick={() => toggleRit(rt.id)}>{done ? '✓' : ''}</div>
-                                          <div className="cbody" style={{ cursor: 'pointer' }} onClick={() => openRit(rt)}><div className="t">{i === 0 && <span style={{ marginRight: 4 }}>🔗</span>}{rt.ad}{ritAreas(rt).map((a) => <span key={a} className="tagp p-alan">{a}</span>)}{rt.kart_config?.dikey && DIKEY_LABEL[rt.kart_config.dikey] && <span className="tagp p-dikey">{DIKEY_LABEL[rt.kart_config.dikey]}</span>}</div><div className="m">{rt.hatirlatma_saat ? '🔔 ' + rt.hatirlatma_saat + ' · ' : ''}toplam {ritTotal(rt.id)}</div></div>
-                                          <div className="cact">
-                                            {rt.url && <a href={rt.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} title="Aç">▶</a>}
-                                            <button onClick={() => moveStep(it.rutin, i, -1)}>↑</button>
-                                            <button onClick={() => moveStep(it.rutin, i, 1)}>↓</button>
-                                            <button onClick={() => rutinCikar(rt.id)} title="Zincirden çıkar">✕</button>
-                                          </div>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                  <div style={{ textAlign: 'right', marginTop: 2 }}><button className="rboz" onClick={() => rutinBoz(it.rutin)}>zinciri boz</button></div>
-                                </div>
-                              ) : (
-                                <div className="card" style={{ padding: '4px 14px' }}><RitItem rt={it.members[0]} /></div>
-                              )}
-                            </SortableItem>
-                          ))}
-                        </SortableContext>
-                      </DndContext>
+                      {/* Sürükle-taşı tutamacı yalnız birden çok blok varken gösterilir — tek kart varsa taşınacak
+                          başka bir şey olmadığından tutamaç gereksiz yer kaplar; bu durumda kart tam genişlik kullanır. */}
+                      {items.length > 1 ? (
+                        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => onDragEndSlot(items, e)}>
+                          <SortableContext items={items.map((i) => i.key)} strategy={verticalListSortingStrategy}>
+                            {items.map((it) => (
+                              <SortableItem key={it.key} id={it.key}>
+                                {itemBody(it)}
+                              </SortableItem>
+                            ))}
+                          </SortableContext>
+                        </DndContext>
+                      ) : (
+                        items.map((it) => <div key={it.key}>{itemBody(it)}</div>)
                       )}
                     </div>
                   );
@@ -2049,7 +2054,7 @@ export default function Rite() {
         return (
         <div className="modal full" onClick={() => setDetay(null)}>
           <div className="sheet fullsheet" onClick={(e) => e.stopPropagation()}>
-            <div className="draghandle" onClick={() => setDetay(null)} />
+            <div className="sheetgrip" onClick={() => setDetay(null)} />
             <button className="x" onClick={() => setDetay(null)}>×</button>
             {isRit ? (
               <input className="detbaslik" value={adInput} onChange={(e) => setAdInput(e.target.value)} onBlur={() => { if (adInput.trim() && adInput.trim() !== (o.ad || '')) setRitAd(o.id, adInput); }} />
