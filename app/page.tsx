@@ -706,6 +706,9 @@ export default function Rite() {
   const [linkIds, setLinkIds] = useState<string[]>([]);
   const [detay, setDetay] = useState<any>(null);
   const [detayAct, setDetayAct] = useState<any>(null);
+  // Ritüel bir Meridyen şablonundan geldiyse (sablon_id), şablonun GÜNCEL adımını burada tutuyoruz —
+  // detay açılınca canlı çekilir; içerik gösterirken önce buna, yoksa ritüelin kendi (o anki) kopyasına bakılır.
+  const [detaySablon, setDetaySablon] = useState<any>(null);
   const [zamanOpen, setZamanOpen] = useState(false);
   const [grupEditOpen, setGrupEditOpen] = useState(false);
   const [grupEditVal, setGrupEditVal] = useState('');
@@ -716,6 +719,7 @@ export default function Rite() {
   const [urlInput, setUrlInput] = useState('');
   const [adInput, setAdInput] = useState('');
   const [aciklamaInput, setAciklamaInput] = useState('');
+  const [kisiselNotInput, setKisiselNotInput] = useState('');
   const [kartUrlInput, setKartUrlInput] = useState('');
   const [sureInput, setSureInput] = useState('21');
   // Artık ayrı bir tutamaç yok, kartın tamamı basılı tutulunca taşınıyor — bu yüzden gecikme (delay) daha önceki
@@ -908,13 +912,13 @@ export default function Rite() {
     else await supabase.from('dog_ritual_logs').insert({ client_id: client.id, ritual_id: ritId, tarih: day, yapildi: true });
     loadData(client.id);
   }
-  async function ritEkle(ad: string, zaman = 'gün', kaynak = 'Kendi', tip = 'aliskanlik', alan: string | null = null, activityId: string | null = null, faydalar: string[] = [], url: string | null = null, gunler: number[] | null = null, sureG: number | null = null, programId: string | null = null, programAd: string | null = null, reload = true, basGun = 0, rutin: string | null = null, sira = 0, kartTipi: string | null = null, kartConfig: any = null, aliskanlikP: boolean | null = null) {
+  async function ritEkle(ad: string, zaman = 'gün', kaynak = 'Kendi', tip = 'aliskanlik', alan: string | null = null, activityId: string | null = null, faydalar: string[] = [], url: string | null = null, gunler: number[] | null = null, sureG: number | null = null, programId: string | null = null, programAd: string | null = null, reload = true, basGun = 0, rutin: string | null = null, sira = 0, kartTipi: string | null = null, kartConfig: any = null, aliskanlikP: boolean | null = null, sablonId: string | null = null, sablonAdim: number | null = null) {
     if (!client || !ad.trim()) return;
     const g = gunler && gunler.length > 0 && gunler.length < 7 ? gunler : null;
     const bas = parseD(today); bas.setDate(bas.getDate() + (basGun || 0)); const basStr = iso(bas);
     let bitis: string | null = null;
     if (sureG && sureG > 0) { const e = parseD(basStr); e.setDate(e.getDate() + sureG - 1); bitis = iso(e); }
-    await supabase.from('dog_rituals').insert({ client_id: client.id, ad: ad.trim(), zaman, kaynak, tip, alan, activity_id: activityId, faydalar, url, gunler: g, program: programId, program_ad: programAd, rutin, sira, kart_tipi: kartTipi, kart_config: kartConfig, aliskanlik: aliskanlikP === null ? !bitis : aliskanlikP, aktif: true, mezun: false, baslangic: basStr, bitis, blok_sira: Date.now() });
+    await supabase.from('dog_rituals').insert({ client_id: client.id, ad: ad.trim(), zaman, kaynak, tip, alan, activity_id: activityId, faydalar, url, gunler: g, program: programId, program_ad: programAd, rutin, sira, kart_tipi: kartTipi, kart_config: kartConfig, aliskanlik: aliskanlikP === null ? !bitis : aliskanlikP, aktif: true, mezun: false, baslangic: basStr, bitis, blok_sira: Date.now(), sablon_id: sablonId, sablon_adim: sablonAdim });
     setYeniRit('');
     if (reload) loadData(client.id);
   }
@@ -948,10 +952,10 @@ export default function Rite() {
         const alan0 = st.faydalar?.length ? faydaMap[st.faydalar[0]]?.alan || null : null;
         if (zincir) {
           // zincir üyesi: tek slot (lider), liderin penceresi/günleri, rutin+sıra
-          await ritEkle(st.ad, liderSlot, 'Program', 'aliskanlik', alan0, null, st.faydalar || [], st.url || null, lider.gunler || null, spans[grp[0]].d || null, pid, prog.ad, false, spans[grp[0]].o, rutinId, k, st.kartTipi || null, st.kartConfig || null, typeof st.aliskanlik === 'boolean' ? st.aliskanlik : null);
+          await ritEkle(st.ad, liderSlot, 'Program', 'aliskanlik', alan0, null, st.faydalar || [], st.url || null, lider.gunler || null, spans[grp[0]].d || null, pid, prog.ad, false, spans[grp[0]].o, rutinId, k, st.kartTipi || null, st.kartConfig || null, typeof st.aliskanlik === 'boolean' ? st.aliskanlik : null, prog.sablon_id || null, idx);
         } else {
           const slots = st.zamanlar && st.zamanlar.length ? st.zamanlar : ['gün'];
-          for (const s of slots) await ritEkle(st.ad, s, 'Program', 'aliskanlik', alan0, null, st.faydalar || [], st.url || null, st.gunler || null, spans[idx].d || null, pid, prog.ad, false, spans[idx].o, null, 0, st.kartTipi || null, st.kartConfig || null, typeof st.aliskanlik === 'boolean' ? st.aliskanlik : null);
+          for (const s of slots) await ritEkle(st.ad, s, 'Program', 'aliskanlik', alan0, null, st.faydalar || [], st.url || null, st.gunler || null, spans[idx].d || null, pid, prog.ad, false, spans[idx].o, null, 0, st.kartTipi || null, st.kartConfig || null, typeof st.aliskanlik === 'boolean' ? st.aliskanlik : null, prog.sablon_id || null, idx);
         }
       }
     }
@@ -1049,11 +1053,13 @@ export default function Rite() {
   async function openDetay(obj: any, tur: string) {
     setDetay({ obj, tur }); setGrupEditOpen(false); setGrupEditVal('');
     if (tur === 'ritual') {
-      setAdInput(obj.ad || ''); setRemInput(obj.hatirlatma_saat || ''); setUrlInput(obj.url || ''); setAciklamaInput(obj.aciklama || ''); setKartUrlInput((obj.kart_config && obj.kart_config.url) || obj.url || '');
+      setAdInput(obj.ad || ''); setRemInput(obj.hatirlatma_saat || ''); setUrlInput(obj.url || ''); setAciklamaInput(obj.aciklama || ''); setKartUrlInput((obj.kart_config && obj.kart_config.url) || obj.url || ''); setKisiselNotInput(obj.kisisel_not || '');
       const n = sureGun(obj); setSureInput(n > 0 ? String(n) : '21');
       if (obj.activity_id) { const a = await supabase.from('dog_activities').select('*').eq('id', obj.activity_id).single(); setDetayAct(a.data || null); }
       else setDetayAct(null);
-    } else { setDetayAct(obj); }
+      if (obj.sablon_id) { const s = await supabase.from('dog_activities').select('id,adimlar').eq('id', obj.sablon_id).single(); setDetaySablon(s.data || null); }
+      else setDetaySablon(null);
+    } else { setDetayAct(obj); setDetaySablon(null); }
   }
   function openRit(rt: any) { openDetay(rt, 'ritual'); }
   // Havuzdaki (kişisel) bir aktivite/programın grubunu değiştir — aktivite ve program için ortak.
@@ -1084,6 +1090,14 @@ export default function Rite() {
     const a = v.trim() || null;
     await supabase.from('dog_rituals').update({ aciklama: a }).eq('id', id);
     patchDetay({ aciklama: a });
+    loadData(client.id);
+  }
+  // Kişisel not: şablondan bağımsız, danışanın kendi kartına eklediği serbest not — şablon güncellenişi/senkronu bunu hiç etkilemez.
+  async function setRitKisiselNot(id: string, v: string) {
+    if (!client) return;
+    const n = v.trim() || null;
+    await supabase.from('dog_rituals').update({ kisisel_not: n }).eq('id', id);
+    patchDetay({ kisisel_not: n });
     loadData(client.id);
   }
   async function setRitKartUrl(id: string, url: string) {
@@ -1348,7 +1362,7 @@ export default function Rite() {
     const p = item.payload || {};
     const g = (grup || '').trim();
     if (p.tur === 'program') {
-      await supabase.from('dog_activities').insert({ client_id: client.id, tur: 'program', ad: p.ad, grup: g || 'Genel', adimlar: p.adimlar || [], sure_gun: p.sure_gun || null, faydalar: [], kaynak_etiket: 'Paylaşılan', aktif: true });
+      await supabase.from('dog_activities').insert({ client_id: client.id, tur: 'program', ad: p.ad, grup: g || 'Genel', adimlar: p.adimlar || [], sure_gun: p.sure_gun || null, faydalar: [], kaynak_etiket: 'Paylaşılan', aktif: true, sablon_id: p.sablon_id || null });
     } else {
       const alan0 = (p.faydalar && p.faydalar.length) ? (faydaList.find((f) => f.kod === p.faydalar[0])?.alan || null) : null;
       await supabase.from('dog_activities').insert({ client_id: client.id, tur: 'aktivite', ad: p.ad, grup: g || alan0 || 'Genel', faydalar: p.faydalar || [], aciklama: p.aciklama || null, videolar: p.videolar || null, zaman: p.zaman || 'gün', zamanlar: p.zamanlar || null, gunler: p.gunler || null, sure_gun: p.sure_gun || null, kart_tipi: p.kartTipi || null, kart_config: p.kartConfig || null, kaynak_etiket: 'Paylaşılan', aktif: true });
@@ -1362,7 +1376,7 @@ export default function Rite() {
     if (!client) return;
     const p = item.payload || {};
     if (p.tur === 'program') {
-      await programBaslat({ ad: p.ad, adimlar: p.adimlar || [], sure_gun: p.sure_gun || null });
+      await programBaslat({ ad: p.ad, adimlar: p.adimlar || [], sure_gun: p.sure_gun || null, sablon_id: p.sablon_id || null });
     } else {
       const alan0 = (p.faydalar && p.faydalar.length) ? (faydaList.find((f) => f.kod === p.faydalar[0])?.alan || null) : null;
       const slots = p.zamanlar && p.zamanlar.length ? p.zamanlar : [p.zaman || 'gün'];
@@ -2083,8 +2097,13 @@ export default function Rite() {
         const hasBilgi = act && (act.ozet || act.aciklama || act.nasil || (act.videolar || []).length || (act.alternatifler || []).length || act.dikkat || act.kaynak);
         const personal = act && act.client_id;
         const isProg = !isRit && o.tur === 'program';
-        const kTip = (isRit ? o.kart_tipi : act?.kart_tipi) || 'standart';
-        const kCfg = (isRit ? o.kart_config : act?.kart_config) || {};
+        // Ritüel bir Meridyen şablonundan geldiyse (sablon_id) ve şablon canlı olarak çekilebildiyse içerik ORADAN
+        // okunur — koç şablonu güncellediğinde her yerde görünür. Şablon silinmiş/erişilemezse ritüelin kendi
+        // (atandığı andaki) kopyasına sessizce düşer, içerik hiç kaybolmaz.
+        const canliAdim = isRit && detaySablon ? (detaySablon.adimlar || [])[o.sablon_adim ?? 0] : null;
+        const kTip = (isRit ? (canliAdim?.kartTipi || o.kart_tipi) : act?.kart_tipi) || 'standart';
+        const kCfg = (isRit ? (canliAdim?.kartConfig || o.kart_config) : act?.kart_config) || {};
+        const aciklamaGoster = isRit ? (canliAdim ? (canliAdim.aciklama || null) : o.aciklama) : o.aciklama;
         const noDone = kTip === 'anket' || kTip === 'coktan' || kTip === 'nefes' || kTip === 'ruhhali' || kTip === 'tarif' || kTip === 'sukran' || kTip === 'topraklama' || kTip === 'pomodoro' || kTip === 'beden' || kTip === 'uykuoncesi' || kTip === 'su' || kTip === 'maruz' || kTip === 'niyet' || kTip === 'workout' || (kTip === 'video' && kCfg.done === false) || (kTip === 'randevu' && kCfg.done === false);
         const gunOzet = !o.baslangic ? "📥 Inbox'ta bekliyor" : (o.baslangic === o.bitis ? '📅 ' + kisaTarih(o.baslangic) : (o.bitis ? kisaTarih(o.baslangic) + ' → ' + kisaTarih(o.bitis) : 'süregelen · ' + kisaTarih(o.baslangic) + "'den"));
         const yarin = (() => { const d = parseD(today); d.setDate(d.getDate() + 1); return iso(d); })();
@@ -2122,7 +2141,7 @@ export default function Rite() {
             {isRit && kTip !== 'bilgi' && kTip !== 'tarif' && (o.kaynak === 'Kendi' ? (
               <textarea value={aciklamaInput} onChange={(e) => setAciklamaInput(e.target.value)} onBlur={() => { if (aciklamaInput.trim() !== (o.aciklama || '')) setRitAciklama(o.id, aciklamaInput); }} placeholder="Açıklama / not ekle…" style={{ width: '100%', minHeight: 44, margin: '2px 0 8px' }} />
             ) : (
-              o.aciklama && <div className="howto"><div className="k">📋 Nasıl yapılır</div><div className="v">{o.aciklama}</div></div>
+              aciklamaGoster && <div className="howto"><div className="k">📋 Nasıl yapılır</div><div className="v">{aciklamaGoster}</div></div>
             ))}
 
             {isRit && (
@@ -2135,11 +2154,11 @@ export default function Rite() {
               </div>
             )}
 
-            {isRit && kTip === 'standart' && o.kart_config?.resim &&<img src={o.kart_config.resim} alt="" style={{ maxWidth: '100%', borderRadius: 8, margin: '4px 0 8px', display: 'block' }} />}
+            {isRit && kTip === 'standart' && kCfg?.resim && <img src={kCfg.resim} alt="" style={{ maxWidth: '100%', borderRadius: 8, margin: '4px 0 8px', display: 'block' }} />}
             {isRit && kTip === 'bilgi' && <BilgiKart cfg={kCfg} />}
             {isRit && kTip === 'video' && <div style={{ margin: '4px 0 8px' }}>
               {(kCfg.url || o.url) && <EmbedVideo url={kCfg.url || o.url} />}
-              <div className="daterow" style={{ marginTop: 6 }}><input value={kartUrlInput} onChange={(e) => setKartUrlInput(e.target.value)} onBlur={() => { if (kartUrlInput.trim() !== ((o.kart_config && o.kart_config.url) || o.url || '')) setRitKartUrl(o.id, kartUrlInput); }} placeholder="Video linki (düzenle)…" style={{ flex: 1 }} /></div>
+              {!o.sablon_id && <div className="daterow" style={{ marginTop: 6 }}><input value={kartUrlInput} onChange={(e) => setKartUrlInput(e.target.value)} onBlur={() => { if (kartUrlInput.trim() !== ((o.kart_config && o.kart_config.url) || o.url || '')) setRitKartUrl(o.id, kartUrlInput); }} placeholder="Video linki (düzenle)…" style={{ flex: 1 }} /></div>}
             </div>}
             {isRit && kTip === 'anket' && <AnketKart cfg={kCfg} done={ritDone(o.id)} onGonder={() => { if (!ritDone(o.id)) toggleRit(o.id); }} />}
             {isRit && kTip === 'coktan' && <ChoktanKart cfg={kCfg} done={ritDone(o.id)} onGonder={() => { if (!ritDone(o.id)) toggleRit(o.id); }} />}
@@ -2158,6 +2177,12 @@ export default function Rite() {
             {isRit && kTip === 'maruz' && <MaruzKart cfg={kCfg} done={ritDone(o.id)} onBitir={() => { if (!ritDone(o.id)) toggleRit(o.id); }} />}
             {isRit && kTip === 'niyet' && <NiyetKart cfg={kCfg} done={ritDone(o.id)} onKaydet={() => { if (!ritDone(o.id)) toggleRit(o.id); }} />}
             {isRit && kTip === 'randevu' && <RandevuKart cfg={kCfg} />}
+
+            {isRit && (
+              <div style={{ margin: '4px 0 8px' }}>
+                <textarea value={kisiselNotInput} onChange={(e) => setKisiselNotInput(e.target.value)} onBlur={() => { if (kisiselNotInput.trim() !== (o.kisisel_not || '')) setRitKisiselNot(o.id, kisiselNotInput); }} placeholder="✎ Kendi notun (isteğe bağlı — şablon güncellense de bu değişmez)" style={{ width: '100%', minHeight: 36 }} />
+              </div>
+            )}
 
             {isRit && !noDone && kTip !== 'bilgi' && (
               <button className={'btn' + (ritDone(o.id) ? ' ghost' : '')} style={{ width: '100%', margin: '2px 0 8px' }} onClick={() => toggleRit(o.id)}>{ritDone(o.id) ? '✓ Yaptım — geri al' : '✓ Yaptım'}</button>
