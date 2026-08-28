@@ -1264,7 +1264,7 @@ export default function Rite() {
       await supabase.from('dog_activities').update({ puan: puan || null }).eq('id', rt.activity_id);
     } else {
       const alan0 = rt.faydalar?.length ? (faydaMap[rt.faydalar[0]]?.alan || 'Kişisel') : 'Kişisel';
-      await supabase.from('dog_activities').insert({ client_id: client.id, tur: 'aktivite', ad: rt.ad, grup: alan0, faydalar: rt.faydalar || [], zaman: rt.zaman || 'gün', zamanlar: [rt.zaman || 'gün'], kart_tipi: rt.kart_tipi || null, kart_config: rt.kart_config || null, puan: puan || null, kaynak_etiket: 'Mezun', aktif: true });
+      await supabase.from('dog_activities').insert({ client_id: client.id, tur: 'aktivite', ad: rt.ad, grup: alan0, faydalar: rt.faydalar || [], zaman: rt.zaman || 'gün', zamanlar: [rt.zaman || 'gün'], kart_tipi: rt.kart_tipi || null, kart_config: rt.kart_config || null, puan: puan || null, kaynak_etiket: 'Mezun', aktif: true, sablon_id: rt.sablon_id || null });
     }
     await supabase.from('dog_rituals').update({ mezun: true, aktif: false, bitis: today }).eq('id', rt.id);
     setMezunModal(null); setMezunPuan(0); setDetay(null);
@@ -2107,6 +2107,9 @@ export default function Rite() {
         const noDone = kTip === 'anket' || kTip === 'coktan' || kTip === 'nefes' || kTip === 'ruhhali' || kTip === 'tarif' || kTip === 'sukran' || kTip === 'topraklama' || kTip === 'pomodoro' || kTip === 'beden' || kTip === 'uykuoncesi' || kTip === 'su' || kTip === 'maruz' || kTip === 'niyet' || kTip === 'workout' || (kTip === 'video' && kCfg.done === false) || (kTip === 'randevu' && kCfg.done === false);
         const gunOzet = !o.baslangic ? "📥 Inbox'ta bekliyor" : (o.baslangic === o.bitis ? '📅 ' + kisaTarih(o.baslangic) : (o.bitis ? kisaTarih(o.baslangic) + ' → ' + kisaTarih(o.bitis) : 'süregelen · ' + kisaTarih(o.baslangic) + "'den"));
         const yarin = (() => { const d = parseD(today); d.setDate(d.getDate() + 1); return iso(d); })();
+        // Meridyen'den (koçtan) gelen kart/program — doğrudan atanmış ya da şablona bağlı (sablon_id) — danışan
+        // tarafından başka birine paylaşılamaz. Kendi yazdığı ya da bir arkadaşından aldığı kişisel kartlar serbest.
+        const paylasilamaz = isRit ? (o.kaynak === 'Meridyen' || o.kaynak === 'Program' || !!o.sablon_id) : !!o.sablon_id;
         return (
         <div className="modal full" onClick={() => setDetay(null)}>
           <div className="sheet fullsheet" onClick={(e) => e.stopPropagation()}>
@@ -2149,7 +2152,7 @@ export default function Rite() {
                 <div className="note" style={{ cursor: 'pointer' }} onClick={() => setZamanOpen(true)}>{gunOzet} · değiştir ✎</div>
                 <div style={{ display: 'flex', gap: 6, flex: '0 0 auto' }}>
                   {!o.mezun && o.aliskanlik && <button className="btn ghost sm" onClick={() => { setMezunPuan(0); setMezunModal(o); }} title="Mezun et" aria-label="Mezun et">🎓</button>}
-                  <button className="btn ghost sm" onClick={() => { setPaylasOpen(true); setKMsg(''); }} title="Paylaş" aria-label="Paylaş">↪️</button>
+                  {!paylasilamaz && <button className="btn ghost sm" onClick={() => { setPaylasOpen(true); setKMsg(''); }} title="Paylaş" aria-label="Paylaş">↪️</button>}
                 </div>
               </div>
             )}
@@ -2289,7 +2292,7 @@ export default function Rite() {
 
             {(!isRit || (personal && !isProg)) && (
               <div className="dettoolbar">
-                {!isRit && <button className="tbtn" onClick={() => { setPaylasOpen(true); setKMsg(''); }}><span className="tbic">↪️</span>Paylaş</button>}
+                {!isRit && !paylasilamaz && <button className="tbtn" onClick={() => { setPaylasOpen(true); setKMsg(''); }}><span className="tbic">↪️</span>Paylaş</button>}
                 {personal && !isProg && <button className="tbtn" onClick={() => { setDetay(null); openStudioEdit(act); }}><span className="tbic">✎</span>Düzenle</button>}
                 {!isRit && personal && <button className="tbtn danger" onClick={() => silAktivite(o)}><span className="tbic">🗑</span>Sil</button>}
               </div>
