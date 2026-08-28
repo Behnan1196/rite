@@ -2137,8 +2137,6 @@ export default function Rite() {
               </div>
             )}
             {areas.length > 0 && <div style={{ margin: '6px 0' }}>{areas.map((a) => <span key={a} className="tagp p-alan">{a}</span>)}</div>}
-            {/* GEÇİCİ TEŞHİS SATIRI — sorun çözülünce kaldırılacak */}
-            {isRit && <div className="note" style={{ fontSize: 10, opacity: .55, margin: '2px 0' }}>{o.sablon_id ? (detaySablon ? '🔗 şablon bağlı (id ' + o.sablon_id.slice(0, 8) + '… · adım ' + (o.sablon_adim ?? 0) + ' · ' + (detaySablon.adimlar?.length || 0) + ' adım var)' : '⚠️ sablon_id var (' + o.sablon_id.slice(0, 8) + '…) ama şablon çekilemedi') : '— sablon_id yok (eski/bağımsız kart)'}</div>}
 
             {isRit && kTip !== 'bilgi' && kTip !== 'tarif' && (o.kaynak === 'Kendi' ? (
               <textarea value={aciklamaInput} onChange={(e) => setAciklamaInput(e.target.value)} onBlur={() => { if (aciklamaInput.trim() !== (o.aciklama || '')) setRitAciklama(o.id, aciklamaInput); }} placeholder="Açıklama / not ekle…" style={{ width: '100%', minHeight: 44, margin: '2px 0 8px' }} />
