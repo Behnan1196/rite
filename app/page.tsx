@@ -449,8 +449,7 @@ function RandevuKartEdit({ cfg, onSave }: { cfg: any; onSave: (patch: any) => vo
   const [saat, setSaat] = useState(cfg?.saat || '');
   const [format, setFormat] = useState(cfg?.format || 'online');
   const [yer, setYer] = useState(cfg?.yer || '');
-  const [notVal, setNotVal] = useState(cfg?.not || '');
-  useEffect(() => { setSaat(cfg?.saat || ''); setFormat(cfg?.format || 'online'); setYer(cfg?.yer || ''); setNotVal(cfg?.not || ''); }, [cfg?.saat, cfg?.format, cfg?.yer, cfg?.not]);
+  useEffect(() => { setSaat(cfg?.saat || ''); setFormat(cfg?.format || 'online'); setYer(cfg?.yer || ''); }, [cfg?.saat, cfg?.format, cfg?.yer]);
   return (
     <div className="kv" style={{ margin: '4px 0 8px' }}>
       <div className="k">📅 Görüşme randevusu</div>
@@ -460,8 +459,6 @@ function RandevuKartEdit({ cfg, onSave }: { cfg: any; onSave: (patch: any) => vo
         <div style={{ margin: '6px 0' }}>{RANDEVU_FORMAT.map(([f, l]) => <span key={f} className={'chip' + (format === f ? ' on' : '')} onClick={() => { setFormat(f); onSave({ format: f }); }}>{l}</span>)}</div>
         <label className="fldlbl">{format === 'online' ? 'Görüşme linki (ops.)' : 'Adres (ops.)'}</label>
         <input value={yer} onChange={(e) => setYer(e.target.value)} onBlur={() => onSave({ yer: yer.trim() || null })} placeholder={format === 'online' ? 'https://…' : 'Adres'} />
-        <label className="fldlbl">Not (ops.)</label>
-        <textarea value={notVal} onChange={(e) => setNotVal(e.target.value)} onBlur={() => onSave({ not: notVal.trim() || null })} style={{ width: '100%', minHeight: 44 }} />
       </div>
     </div>
   );
@@ -1200,12 +1197,13 @@ export default function Rite() {
     loadData(client.id);
     if (ins.data) openRit(ins.data);
   }
-  // Kişisel kartı randevu ↔ bilgi kartı arasında geçirir (kutucuk "değiştir" satırının yanında) — içerik/video kaybolmaz, sadece görünmez olur.
+  // Kartı "randevu" olarak işaretler — ayrı bir kart tipine geçmez, aynı bilgi kartı kalır, sadece kart_config.randevu
+  // bayrağı eklenir (saat için zaten var olan "değiştir → hatırlatma" kullanılır, buluşma linki için "+ Link ekle").
+  // Eski (kart_tipi='randevu' olarak kaydedilmiş) kartlara dokunulunca da otomatik bu modele geçer.
   async function setRitRandevu(id: string, on: boolean) {
     if (!client) return;
-    const cfg = detay?.obj?.kart_config || {};
-    const patch: any = { kart_tipi: on ? 'randevu' : 'bilgi' };
-    if (on) patch.kart_config = { ...cfg, format: cfg.format || 'online', done: cfg.done !== false };
+    const cfg = { ...(detay?.obj?.kart_config || {}), randevu: on };
+    const patch: any = { kart_tipi: 'bilgi', kart_config: cfg };
     await supabase.from('dog_rituals').update(patch).eq('id', id);
     patchDetay(patch);
     loadData(client.id);
@@ -1939,7 +1937,7 @@ export default function Rite() {
             })()}
 
             {ajView === 'ay' && (() => {
-              const randevular = rituals.filter((r) => !r.mezun && r.baslangic && r.baslangic === r.bitis && r.baslangic >= today).sort((a, b) => (a.baslangic < b.baslangic ? -1 : 1));
+              const randevular = rituals.filter((r) => !r.mezun && r.baslangic && r.baslangic === r.bitis && r.baslangic >= today && (r.kart_tipi === 'randevu' || r.kart_config?.randevu === true)).sort((a, b) => (a.baslangic < b.baslangic ? -1 : 1));
               if (randevular.length === 0) return null;
               return (
                 <div style={{ marginTop: 10 }}>
@@ -2359,11 +2357,17 @@ export default function Rite() {
                 </div>
               </div>
             )}
-            {isRit && o.kaynak === 'Kendi' && (kTip === 'bilgi' || kTip === 'randevu') && (
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, margin: '-6px 0 10px' }}>
-                <input type="checkbox" style={{ width: 'auto' }} checked={kTip === 'randevu'} onChange={(e) => setRitRandevu(o.id, e.target.checked)} /> 📅 Bu bir randevu
-              </label>
-            )}
+            {isRit && o.kaynak === 'Kendi' && (kTip === 'bilgi' || kTip === 'randevu') && (() => {
+              const isRandevu = kTip === 'randevu' || !!kCfg?.randevu;
+              return (
+                <div style={{ margin: '-6px 0 10px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+                    <input type="checkbox" style={{ width: 'auto' }} checked={isRandevu} onChange={(e) => setRitRandevu(o.id, e.target.checked)} /> 📅 Bu bir randevu
+                  </label>
+                  {isRandevu && <div className="note" style={{ margin: '2px 0 0' }}>Saat için üstteki &quot;değiştir&quot;den hatırlatma, buluşma linki için aşağıdan &quot;+ Link ekle&quot;yi kullan.</div>}
+                </div>
+              );
+            })()}
 
             {isRit && kTip === 'standart' && kCfg?.resim && <img src={kCfg.resim} alt="" style={{ maxWidth: '100%', borderRadius: 8, margin: '4px 0 8px', display: 'block' }} />}
             {isRit && kTip === 'bilgi' && (o.kaynak === 'Kendi' ? <BilgiKartEdit cfg={kCfg} onSave={(c) => setBilgiCfg(o.id, c)} /> : <BilgiKart cfg={kCfg} />)}
@@ -2435,7 +2439,7 @@ export default function Rite() {
                 <div className="kv"><div className="k">Takip</div>
                   <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}><input type="checkbox" style={{ width: 'auto' }} checked={!!o.aliskanlik} onChange={(e) => setRitAliskanlik(o.id, e.target.checked)} /> Alışkanlık olarak haftalık takipte göster</label>
                 </div>
-                <div className="kv"><div className="k">Günlük hatırlatma</div>
+                <div className="kv"><div className="k">{(kTip === 'randevu' || o.kart_config?.randevu) ? 'Randevu saati' : 'Günlük hatırlatma'}</div>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     <input type="time" style={{ width: 'auto' }} value={remInput} onChange={(e) => setRemInput(e.target.value)} />
                     <button className="btn sm" disabled={remInput === (o.hatirlatma_saat || '')} onClick={() => setRitReminder(o.id, remInput)}>Kaydet</button>
