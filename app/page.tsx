@@ -210,6 +210,65 @@ function BilgiKart({ cfg }: { cfg: any }) {
     </div>
   );
 }
+// Kişisel bilgi kartının düzenlenebilir hâli — kaynak==='Kendi' kartlarda BilgiKart yerine bu gösterilir.
+// Video(lar) chip şeridinde tutulur (seçili chip altta oynar); "+ Link ekle" ile satır-içi mini formdan yeni video eklenir.
+// İçerik varsayılan olarak stilli (renderMetin) görünür, üstüne dokunulunca ham metin textarea'sına döner (blur'da kaydedilir).
+function BilgiKartEdit({ cfg, onSave }: { cfg: any; onSave: (cfg: any) => void }) {
+  const videolar: { baslik?: string; url: string }[] = cfg?.videolar || [];
+  const [vidSec, setVidSec] = useState(0);
+  const [vidEkleOpen, setVidEkleOpen] = useState(false);
+  const [vAd, setVAd] = useState('');
+  const [vUrl, setVUrl] = useState('');
+  const [icerikEdit, setIcerikEdit] = useState(false);
+  const [icerikVal, setIcerikVal] = useState(cfg?.icerik || '');
+  useEffect(() => { setIcerikVal(cfg?.icerik || ''); }, [cfg?.icerik]);
+  const secili = videolar[Math.min(vidSec, videolar.length - 1)];
+  function videoEkle() {
+    if (!vUrl.trim()) return;
+    const yeni = [...videolar, { baslik: vAd.trim() || undefined, url: vUrl.trim() }];
+    onSave({ ...cfg, videolar: yeni });
+    setVAd(''); setVUrl(''); setVidEkleOpen(false); setVidSec(yeni.length - 1);
+  }
+  function videoSil(i: number) {
+    const yeni = videolar.filter((_, j) => j !== i);
+    onSave({ ...cfg, videolar: yeni });
+    setVidSec(0);
+  }
+  function icerikKaydet() {
+    setIcerikEdit(false);
+    if (icerikVal.trim() !== (cfg?.icerik || '')) onSave({ ...cfg, icerik: icerikVal.trim() || null });
+  }
+  return (
+    <div className="howto">
+      <div className="bilgi">
+        <div style={{ margin: '0 0 6px', display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+          {videolar.map((v, i) => (
+            <span key={i} className={'chip' + (i === vidSec ? ' on' : '')} onClick={() => setVidSec(i)}>
+              {v.baslik || ('Video ' + (i + 1))}
+              <span style={{ marginLeft: 6, opacity: 0.55 }} onClick={(e) => { e.stopPropagation(); videoSil(i); }}>✕</span>
+            </span>
+          ))}
+          <span className="chip" style={{ borderStyle: 'dashed' }} onClick={() => setVidEkleOpen((o) => !o)}>+ Link ekle</span>
+        </div>
+        {vidEkleOpen && (
+          <div className="daterow" style={{ margin: '0 0 8px', flexWrap: 'wrap', gap: 6 }}>
+            <input value={vAd} onChange={(e) => setVAd(e.target.value)} placeholder="Video adı (ops.)" style={{ flex: 1, minWidth: 100 }} />
+            <input value={vUrl} onChange={(e) => setVUrl(e.target.value)} placeholder="https://…" style={{ flex: 2, minWidth: 140 }} />
+            <button className="btn sm" onClick={videoEkle} disabled={!vUrl.trim()}>Ekle</button>
+          </div>
+        )}
+        {secili && <div style={{ margin: '0 0 8px' }}><EmbedVideo url={secili.url} /></div>}
+        {icerikEdit ? (
+          <textarea autoFocus value={icerikVal} onChange={(e) => setIcerikVal(e.target.value)} onBlur={icerikKaydet} placeholder={'# Başlık\nNotun…\n- madde\n**kalın**'} style={{ width: '100%', minHeight: 100 }} />
+        ) : (
+          <div onClick={() => setIcerikEdit(true)} style={{ cursor: 'text', minHeight: 24 }}>
+            {icerikVal.trim() ? renderMetin(icerikVal) : <div className="note" style={{ marginTop: 0 }}>Yazmak için dokun…</div>}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 // Anket kartı (taslak): soruları form olarak gösterir; Gönder → ritüeli "yapıldı" işaretler.
 function AnketKart({ cfg, done, onGonder }: { cfg: any; done: boolean; onGonder: () => void }) {
   const [ans, setAns] = useState<string[]>([]);
@@ -1103,6 +1162,14 @@ export default function Rite() {
     patchDetay({ kisisel_not: n });
     loadData(client.id);
   }
+  // Kişisel bilgi kartı düzenlemesi (BilgiKartEdit'ten): video ekle/sil, içerik kaydet — hep 'bilgi' tipine sabitler.
+  async function setBilgiCfg(id: string, cfg: any) {
+    if (!client) return;
+    const patch = { kart_config: cfg, kart_tipi: 'bilgi' };
+    await supabase.from('dog_rituals').update(patch).eq('id', id);
+    patchDetay(patch);
+    loadData(client.id);
+  }
   async function setRitKartUrl(id: string, url: string) {
     if (!client) return;
     const u = url.trim() || null;
@@ -1117,12 +1184,12 @@ export default function Rite() {
   function hzReset() { setHzAd(''); setHzLink(''); setHzRandevu(false); setHzSaat(''); setHzFormat('online'); setHzYer(''); setHzNot(''); }
   async function hizliEkle() {
     if (!client || !slotAddOpen || !hzAd.trim()) return;
-    const linkVar = !hzRandevu && hzLink.trim();
-    const kartTipi = hzRandevu ? 'randevu' : (linkVar ? 'video' : 'standart');
-    const kartConfig = hzRandevu ? { saat: hzSaat.trim() || null, format: hzFormat, yer: hzYer.trim() || null, not: hzNot.trim() || null, done: true } : (linkVar ? { url: hzLink.trim(), done: true } : null);
-    await supabase.from('dog_rituals').insert({ client_id: client.id, ad: hzAd.trim(), zaman: slotAddOpen, kaynak: 'Kendi', tip: 'aliskanlik', url: linkVar ? hzLink.trim() : null, kart_tipi: kartTipi, kart_config: kartConfig, aliskanlik: false, aktif: true, mezun: false, baslangic: day, bitis: day, blok_sira: Date.now() });
+    const kartTipi = hzRandevu ? 'randevu' : 'bilgi';
+    const kartConfig = hzRandevu ? { saat: hzSaat.trim() || null, format: hzFormat, yer: hzYer.trim() || null, not: hzNot.trim() || null, done: true } : { icerik: null, videolar: [] };
+    const ins = await supabase.from('dog_rituals').insert({ client_id: client.id, ad: hzAd.trim(), zaman: slotAddOpen, kaynak: 'Kendi', tip: 'aliskanlik', kart_tipi: kartTipi, kart_config: kartConfig, aliskanlik: false, aktif: true, mezun: false, baslangic: day, bitis: day, blok_sira: Date.now() }).select().single();
     hzReset(); setSlotAddOpen(null);
     loadData(client.id);
+    if (ins.data) openRit(ins.data);
   }
   // Ne zaman? — kartı bir güne koy (tek seferlik) ya da süregelen yap.
   // Zamanlama sekmesinin ana eylemi: kartı başka bir güne "taşı". Tek günlük bir kart (baslangic===bitis)
@@ -2159,10 +2226,7 @@ export default function Rite() {
                   <textarea value={hzNot} onChange={(e) => setHzNot(e.target.value)} style={{ width: '100%', minHeight: 44 }} />
                 </>
               ) : (
-                <>
-                  <label className="fldlbl">Video linki (ops.)</label>
-                  <input value={hzLink} onChange={(e) => setHzLink(e.target.value)} placeholder="https://…" />
-                </>
+                <div className="note" style={{ margin: '4px 0 0' }}>Video, not vb. detayları kart açıldıktan sonra ekleyebilirsin.</div>
               )}
               <div className="rowbtns" style={{ marginTop: 10 }}>
                 <button className="btn" onClick={hizliEkle} disabled={!hzAd.trim()}>Ekle</button>
@@ -2303,7 +2367,7 @@ export default function Rite() {
             )}
 
             {isRit && kTip === 'standart' && kCfg?.resim && <img src={kCfg.resim} alt="" style={{ maxWidth: '100%', borderRadius: 8, margin: '4px 0 8px', display: 'block' }} />}
-            {isRit && kTip === 'bilgi' && <BilgiKart cfg={kCfg} />}
+            {isRit && kTip === 'bilgi' && (o.kaynak === 'Kendi' ? <BilgiKartEdit cfg={kCfg} onSave={(c) => setBilgiCfg(o.id, c)} /> : <BilgiKart cfg={kCfg} />)}
             {isRit && kTip === 'video' && <div style={{ margin: '4px 0 8px' }}>
               {(kCfg.url || o.url) && <EmbedVideo url={kCfg.url || o.url} />}
               {!o.sablon_id && <div className="daterow" style={{ marginTop: 6 }}><input value={kartUrlInput} onChange={(e) => setKartUrlInput(e.target.value)} onBlur={() => { if (kartUrlInput.trim() !== ((o.kart_config && o.kart_config.url) || o.url || '')) setRitKartUrl(o.id, kartUrlInput); }} placeholder="Video linki (düzenle)…" style={{ flex: 1 }} /></div>}
