@@ -444,6 +444,28 @@ function NefesKart({ cfg, done, onFinish }: { cfg: any; done: boolean; onFinish:
     </div>
   );
 }
+// RandevuKart'ın düzenlenebilir hâli — kaynak==='Kendi' randevu kartlarında RandevuKart yerine bu gösterilir.
+function RandevuKartEdit({ cfg, onSave }: { cfg: any; onSave: (patch: any) => void }) {
+  const [saat, setSaat] = useState(cfg?.saat || '');
+  const [format, setFormat] = useState(cfg?.format || 'online');
+  const [yer, setYer] = useState(cfg?.yer || '');
+  const [notVal, setNotVal] = useState(cfg?.not || '');
+  useEffect(() => { setSaat(cfg?.saat || ''); setFormat(cfg?.format || 'online'); setYer(cfg?.yer || ''); setNotVal(cfg?.not || ''); }, [cfg?.saat, cfg?.format, cfg?.yer, cfg?.not]);
+  return (
+    <div className="kv" style={{ margin: '4px 0 8px' }}>
+      <div className="k">📅 Görüşme randevusu</div>
+      <div style={{ width: '100%' }}>
+        <label className="fldlbl" style={{ marginTop: 0 }}>Saat (ops.)</label>
+        <input type="time" value={saat} onChange={(e) => setSaat(e.target.value)} onBlur={() => onSave({ saat: saat || null })} style={{ width: 'auto' }} />
+        <div style={{ margin: '6px 0' }}>{RANDEVU_FORMAT.map(([f, l]) => <span key={f} className={'chip' + (format === f ? ' on' : '')} onClick={() => { setFormat(f); onSave({ format: f }); }}>{l}</span>)}</div>
+        <label className="fldlbl">{format === 'online' ? 'Görüşme linki (ops.)' : 'Adres (ops.)'}</label>
+        <input value={yer} onChange={(e) => setYer(e.target.value)} onBlur={() => onSave({ yer: yer.trim() || null })} placeholder={format === 'online' ? 'https://…' : 'Adres'} />
+        <label className="fldlbl">Not (ops.)</label>
+        <textarea value={notVal} onChange={(e) => setNotVal(e.target.value)} onBlur={() => onSave({ not: notVal.trim() || null })} style={{ width: '100%', minHeight: 44 }} />
+      </div>
+    </div>
+  );
+}
 // Ruh hali check-in kartı: 5'li emoji ölçek; kaydedince ölçüme (dog_measurements) yazılır.
 function MoodKart({ soru, bugun, onKaydet }: { soru?: string; bugun: number | null; onKaydet: (d: number) => void }) {
   const [sel, setSel] = useState<number | null>(bugun);
@@ -748,14 +770,6 @@ export default function Rite() {
   const [ibdUrl, setIbdUrl] = useState('');
   const [ibdTarih, setIbdTarih] = useState('');
   // Zaman dilimindeki + ile hızlı ekleme (havuzdan seç ya da anında not/randevu oluştur).
-  const [slotAddOpen, setSlotAddOpen] = useState<string | null>(null);
-  const [hzAd, setHzAd] = useState('');
-  const [hzLink, setHzLink] = useState('');
-  const [hzRandevu, setHzRandevu] = useState(false);
-  const [hzSaat, setHzSaat] = useState('');
-  const [hzFormat, setHzFormat] = useState('online');
-  const [hzYer, setHzYer] = useState('');
-  const [hzNot, setHzNot] = useState('');
   const [msg, setMsg] = useState('');
   const [pushOn, setPushOn] = useState(false);
   const [pushMsg, setPushMsg] = useState('');
@@ -1179,16 +1193,30 @@ export default function Rite() {
     patchDetay(patch);
     loadData(client.id);
   }
-  // Zaman diliminin + butonundan hızlı ekleme — not/video/randevu, doğrudan o güne ve o dilime.
-  function hzReset() { setHzAd(''); setHzLink(''); setHzRandevu(false); setHzSaat(''); setHzFormat('online'); setHzYer(''); setHzNot(''); }
-  async function hizliEkle() {
-    if (!client || !slotAddOpen || !hzAd.trim()) return;
-    const kartTipi = hzRandevu ? 'randevu' : 'bilgi';
-    const kartConfig = hzRandevu ? { saat: hzSaat.trim() || null, format: hzFormat, yer: hzYer.trim() || null, not: hzNot.trim() || null, done: true } : { icerik: null, videolar: [] };
-    const ins = await supabase.from('dog_rituals').insert({ client_id: client.id, ad: hzAd.trim(), zaman: slotAddOpen, kaynak: 'Kendi', tip: 'aliskanlik', kart_tipi: kartTipi, kart_config: kartConfig, aliskanlik: false, aktif: true, mezun: false, baslangic: day, bitis: day, blok_sira: Date.now() }).select().single();
-    hzReset(); setSlotAddOpen(null);
+  // Zaman diliminin + butonundan hemen ekleme — boş bir kişisel bilgi kartı açar, başlık/video/içerik kartın kendi içinde düzenlenir.
+  async function hemenEkle(zaman: string) {
+    if (!client) return;
+    const ins = await supabase.from('dog_rituals').insert({ client_id: client.id, ad: 'Yeni not', zaman, kaynak: 'Kendi', tip: 'aliskanlik', kart_tipi: 'bilgi', kart_config: { icerik: null, videolar: [] }, aliskanlik: false, aktif: true, mezun: false, baslangic: day, bitis: day, blok_sira: Date.now() }).select().single();
     loadData(client.id);
     if (ins.data) openRit(ins.data);
+  }
+  // Kişisel kartı randevu ↔ bilgi kartı arasında geçirir (kutucuk "değiştir" satırının yanında) — içerik/video kaybolmaz, sadece görünmez olur.
+  async function setRitRandevu(id: string, on: boolean) {
+    if (!client) return;
+    const cfg = detay?.obj?.kart_config || {};
+    const patch: any = { kart_tipi: on ? 'randevu' : 'bilgi' };
+    if (on) patch.kart_config = { ...cfg, format: cfg.format || 'online', done: cfg.done !== false };
+    await supabase.from('dog_rituals').update(patch).eq('id', id);
+    patchDetay(patch);
+    loadData(client.id);
+  }
+  // Randevu alanlarından biri değiştiğinde (RandevuKartEdit'ten) — diğer alanları koruyarak kart_config'i günceller.
+  async function setRandevuCfg(id: string, patch: any) {
+    if (!client) return;
+    const cfg = { ...(detay?.obj?.kart_config || {}), ...patch };
+    await supabase.from('dog_rituals').update({ kart_config: cfg }).eq('id', id);
+    patchDetay({ kart_config: cfg });
+    loadData(client.id);
   }
   // Ne zaman? — kartı bir güne koy (tek seferlik) ya da süregelen yap.
   // Zamanlama sekmesinin ana eylemi: kartı başka bir güne "taşı". Tek günlük bir kart (baslangic===bitis)
@@ -1862,7 +1890,7 @@ export default function Rite() {
                             <div className="timediv">
                               <span className="tl">{r.lbl}</span>
                               <span className="ln" />
-                              <button className="slotadd" onClick={() => setSlotAddOpen(r.z)} aria-label="ekle">+</button>
+                              <button className="slotadd" onClick={() => hemenEkle(r.z)} aria-label="ekle">+</button>
                             </div>
                           </SortableRow>
                         ) : (
@@ -2202,36 +2230,6 @@ export default function Rite() {
           </div>
         )}
 
-        {/* ---------- HIZLI EKLE (zaman dilimi +) ---------- */}
-        {slotAddOpen && (
-          <div className="modal" onClick={() => { hzReset(); setSlotAddOpen(null); }}>
-            <div className="sheet" onClick={(e) => e.stopPropagation()}>
-              <button className="x" onClick={() => { hzReset(); setSlotAddOpen(null); }}>×</button>
-              <h2 style={{ marginTop: 2 }}>{SLOTS.find((t) => t[0] === slotAddOpen)?.[1]}&apos;a ekle</h2>
-              <label className="fldlbl" style={{ marginTop: 0 }}>Başlık</label>
-              <input value={hzAd} onChange={(e) => setHzAd(e.target.value)} placeholder="ör. Su iç, Doktor görüşmesi…" />
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginTop: 8 }}><input type="checkbox" style={{ width: 'auto' }} checked={hzRandevu} onChange={(e) => setHzRandevu(e.target.checked)} /> Bu bir görüşme randevusu</label>
-              {hzRandevu ? (
-                <>
-                  <label className="fldlbl">Saat (ops.)</label>
-                  <input type="time" value={hzSaat} onChange={(e) => setHzSaat(e.target.value)} style={{ width: 'auto' }} />
-                  <div style={{ margin: '6px 0' }}>{RANDEVU_FORMAT.map(([f, l]) => <span key={f} className={'chip' + (hzFormat === f ? ' on' : '')} onClick={() => setHzFormat(f)}>{l}</span>)}</div>
-                  <label className="fldlbl">{hzFormat === 'online' ? 'Görüşme linki (ops.)' : 'Adres (ops.)'}</label>
-                  <input value={hzYer} onChange={(e) => setHzYer(e.target.value)} placeholder={hzFormat === 'online' ? 'https://…' : 'Adres'} />
-                  <label className="fldlbl">Not (ops.)</label>
-                  <textarea value={hzNot} onChange={(e) => setHzNot(e.target.value)} style={{ width: '100%', minHeight: 44 }} />
-                </>
-              ) : (
-                <div className="note" style={{ margin: '4px 0 0' }}>Video, not vb. detayları kart açıldıktan sonra ekleyebilirsin.</div>
-              )}
-              <div className="rowbtns" style={{ marginTop: 10 }}>
-                <button className="btn" onClick={hizliEkle} disabled={!hzAd.trim()}>Ekle</button>
-                <button className="btn ghost sm" onClick={() => { hzReset(); setSlotAddOpen(null); }}>Vazgeç</button>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* ---------- MEZUNLAR ---------- */}
         {screen === 'mezunlar' && (
           <div>
@@ -2361,6 +2359,11 @@ export default function Rite() {
                 </div>
               </div>
             )}
+            {isRit && o.kaynak === 'Kendi' && (kTip === 'bilgi' || kTip === 'randevu') && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, margin: '-6px 0 10px' }}>
+                <input type="checkbox" style={{ width: 'auto' }} checked={kTip === 'randevu'} onChange={(e) => setRitRandevu(o.id, e.target.checked)} /> 📅 Bu bir randevu
+              </label>
+            )}
 
             {isRit && kTip === 'standart' && kCfg?.resim && <img src={kCfg.resim} alt="" style={{ maxWidth: '100%', borderRadius: 8, margin: '4px 0 8px', display: 'block' }} />}
             {isRit && kTip === 'bilgi' && (o.kaynak === 'Kendi' ? <BilgiKartEdit cfg={kCfg} onSave={(c) => setBilgiCfg(o.id, c)} /> : <BilgiKart cfg={kCfg} />)}
@@ -2384,7 +2387,7 @@ export default function Rite() {
             {isRit && kTip === 'su' && <SuKart cfg={kCfg} bugun={(() => { const arr = meas.filter((m) => m.anahtar === 'su' && m.tarih === today); return arr.length ? Number(arr[arr.length - 1].deger) : null; })()} onEkle={(delta) => biriktirKaydet(o.id, 'su', delta, 'bardak')} />}
             {isRit && kTip === 'maruz' && <MaruzKart cfg={kCfg} done={ritDone(o.id)} onBitir={() => { if (!ritDone(o.id)) toggleRit(o.id); }} />}
             {isRit && kTip === 'niyet' && <NiyetKart cfg={kCfg} done={ritDone(o.id)} onKaydet={() => { if (!ritDone(o.id)) toggleRit(o.id); }} />}
-            {isRit && kTip === 'randevu' && <RandevuKart cfg={kCfg} />}
+            {isRit && kTip === 'randevu' && (o.kaynak === 'Kendi' ? <RandevuKartEdit cfg={kCfg} onSave={(p) => setRandevuCfg(o.id, p)} /> : <RandevuKart cfg={kCfg} />)}
 
             {isRit && (
               <div style={{ margin: '4px 0 8px' }}>
