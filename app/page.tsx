@@ -1259,21 +1259,26 @@ export default function Rite() {
       };
       const targetRutin = neighborRutin(pos - 1) || neighborRutin(pos + 1);
       if (targetRutin) {
-        // Bırakılan yerin çevresindeki (aynı rutine ait) satırları toparlayıp yeni görsel sırayı üye listesine
-        // aynen uygula — böylece animasyonda görünen yer ile gerçek sonuç birebir eşleşiyor.
-        let lo = pos, hi = pos;
+        // Bir rutinin üyeleri kendi gunler/tarih aralığını koruyor (kasıtlı — biri Pzt/Çrş, biri her gün olabilir,
+        // Meridyen'den gelen bir program adımı kendi başlangıç gününde devreye girebilir); o yüzden `habits`
+        // (SADECE bugün aktif olanlar) değil, rutinin TÜM üyeleri (rituals) üzerinden sira yeniden hesaplanır —
+        // yoksa bugün görünmeyen bir üye, görünenlerle aynı sira değerini alıp çakışabilirdi.
+        let lo = pos;
         while (lo > 0 && ((moved[lo - 1].kind === 'member' && moved[lo - 1].rutin === targetRutin) || (moved[lo - 1].kind === 'rutinHead' && moved[lo - 1].rutin === targetRutin))) lo--;
-        while (hi < moved.length - 1 && moved[hi + 1].kind === 'member' && moved[hi + 1].rutin === targetRutin) hi++;
-        const clusterIds: string[] = [];
-        for (let i = lo; i <= hi; i++) {
-          const row = moved[i];
-          if (row.kind === 'rutinHead') continue;
-          clusterIds.push(row === activeRow ? (activeRow.kind === 'member' ? activeRow.ritual.id : activeRow.members[0].id) : row.ritual.id);
-        }
-        const targetMembers = habits.filter((r: any) => r.rutin === targetRutin);
-        const targetAd = targetMembers[0]?.rutin_ad ?? null;
-        const targetSlot = targetMembers[0]?.zaman || moved[pos].z;
-        await Promise.all(clusterIds.map((id, i) => supabase.from('dog_rituals').update({ rutin: targetRutin, rutin_ad: targetAd, sira: i, zaman: targetSlot }).eq('id', id)));
+        let prevVisibleId: string | null = null;
+        for (let i = pos - 1; i >= lo; i--) { const row = moved[i]; if (row.kind === 'member') { prevVisibleId = row.ritual.id; break; } }
+        const activeId = activeRow.kind === 'member' ? activeRow.ritual.id : activeRow.members[0].id;
+        const anyExisting = rituals.find((r: any) => r.rutin === targetRutin);
+        const targetAd = anyExisting?.rutin_ad ?? null;
+        const targetSlot = anyExisting?.zaman || moved[pos].z;
+        const allMembers = rituals.filter((r: any) => r.rutin === targetRutin && r.id !== activeId).sort((a: any, b: any) => (a.sira || 0) - (b.sira || 0));
+        const insertAt = prevVisibleId ? allMembers.findIndex((r: any) => r.id === prevVisibleId) + 1 : 0;
+        allMembers.splice(insertAt < 0 ? allMembers.length : insertAt, 0, { id: activeId });
+        await Promise.all(allMembers.map((r: any, i: number) => {
+          const patch: any = { sira: i };
+          if (r.id === activeId) { patch.rutin = targetRutin; patch.rutin_ad = targetAd; patch.zaman = targetSlot; }
+          return supabase.from('dog_rituals').update(patch).eq('id', r.id);
+        }));
         loadData(client.id);
         return;
       }
