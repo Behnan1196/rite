@@ -1146,12 +1146,27 @@ export default function Rite() {
     loadData(client.id);
   }
   // gun: null = süregelen (bitiş kaldır); >0 = başlangıçtan itibaren N gün
+  // Günler kısıtlıysa (haftanın belirli günleri), verilen tarihten itibaren o günlerden birine denk gelen ilk
+  // tarihi bulur (en çok 7 gün ileri bakar — bir hafta içinde mutlaka bir eşleşme vardır). Kısıtlama yoksa
+  // olduğu gibi döner.
+  function ilkUygunGun(baslangic: string, gunler: number[] | null): string {
+    if (!gunler || gunler.length === 0) return baslangic;
+    const d = parseD(baslangic);
+    for (let i = 0; i < 7; i++) { const ds = iso(d); if (gunler.includes(wday(ds))) return ds; d.setDate(d.getDate() + 1); }
+    return baslangic;
+  }
   async function setRitSure(id: string, gun: number | null) {
     if (!client) return;
     const rt = rituals.find((r) => r.id === id);
     let patch: any;
     if (!gun) patch = { bitis: null };
-    else { const bas = (rt && rt.baslangic && rt.baslangic >= today) ? rt.baslangic : today; const e = parseD(bas); e.setDate(e.getDate() + gun - 1); patch = { baslangic: bas, bitis: iso(e) }; }
+    else {
+      // Süre penceresi seçili Günler'e hiç denk gelmezse kart bir daha asla görünmez (activeOn ikisini de AND
+      // ile arıyor) — bu yüzden başlangıç, ilk uygun güne kaydırılıyor, süre (gün sayısı) aynen korunuyor.
+      const bas0 = (rt && rt.baslangic && rt.baslangic >= today) ? rt.baslangic : today;
+      const bas = ilkUygunGun(bas0, rt?.gunler || null);
+      const e = parseD(bas); e.setDate(e.getDate() + gun - 1); patch = { baslangic: bas, bitis: iso(e) };
+    }
     await supabase.from('dog_rituals').update(patch).eq('id', id);
     patchDetay(patch);
     loadData(client.id);
@@ -1159,8 +1174,22 @@ export default function Rite() {
   async function setRitGunler(id: string, g: number[]) {
     if (!client) return;
     const arr = g.length === 0 || g.length === 7 ? null : g;
-    await supabase.from('dog_rituals').update({ gunler: arr }).eq('id', id);
-    patchDetay({ gunler: arr });
+    const rt = rituals.find((r) => r.id === id);
+    let patch: any = { gunler: arr };
+    // Kart zaten süreliyse (bitiş tarihi var) ve yeni seçilen günler mevcut pencereye hiç denk gelmiyorsa, aynı
+    // sorunu burada da önlemek için pencereyi (süresini koruyarak) ilk uygun güne kaydırıyoruz.
+    if (arr && rt?.bitis) {
+      let uyumlu = false; const d = parseD(rt.baslangic);
+      while (iso(d) <= rt.bitis) { if (arr.includes(wday(iso(d)))) { uyumlu = true; break; } d.setDate(d.getDate() + 1); }
+      if (!uyumlu) {
+        const uzunlukGun = Math.round((parseD(rt.bitis).getTime() - parseD(rt.baslangic).getTime()) / 86400000) + 1;
+        const yeniBas = ilkUygunGun(rt.baslangic >= today ? rt.baslangic : today, arr);
+        const e = parseD(yeniBas); e.setDate(e.getDate() + uzunlukGun - 1);
+        patch = { gunler: arr, baslangic: yeniBas, bitis: iso(e) };
+      }
+    }
+    await supabase.from('dog_rituals').update(patch).eq('id', id);
+    patchDetay(patch);
     loadData(client.id);
   }
   async function setRitAliskanlik(id: string, val: boolean) {
