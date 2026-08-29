@@ -1227,7 +1227,7 @@ export default function Rite() {
   }
   async function rutinCikar(id: string) {
     if (!client) return;
-    await supabase.from('dog_rituals').update({ rutin: null, rutin_ad: null }).eq('id', id);
+    await supabase.from('dog_rituals').update({ rutin: null, rutin_ad: null, blok_sira: Date.now() }).eq('id', id);
     loadData(client.id);
   }
   // Ajanda gün görünümü artık zaman dilimi başına ayrı bir sürükleme alanı değil, TEK akış: dilimler (Sabah/Gün
@@ -1235,49 +1235,56 @@ export default function Rite() {
   // Bir kartı bir ayracın öbür tarafına bırakmak, o kartın (zincirse tüm üyelerinin) `zaman` alanını da günceller —
   // önceden bunun için kartı açıp Zamanlama sekmesine girmek gerekiyordu (o yol hâlâ duruyor, bu ek bir kestirme).
   // Rutin (isimli grup) satırları artık ayrı satır olarak akışa gömülü: kapalıyken tek başlık satırı, açıkken
-  // başlığın hemen altına her üyesi kendi satırı olarak eklenir (bkz. rows inşası). onDragEndDay üç durumu ayırt
-  // eder: (1) bir üyeyi kendi rutini içinde başka bir üyenin yanına bırakmak → sadece sıra (sira) değişir;
-  // (2) bağımsız (rutinsiz) bir kartı bir rutinin üstüne/içine bırakmak → o rutine sona eklenir (nereye
-  // bırakıldığı önemli değil, her zaman sona eklenir); (3) diğer her şey → eskisi gibi üst düzey sıralama/dilim
-  // değişimi. Bir üyeyi kendi rutininin dışına sürüklemek desteklenmiyor (görmezden gelinir, veriler yeniden
-  // yüklenip görünüm eski hâline döner) — çıkarmak için ✕ (rutinCikar) kullanılır.
+  // başlığın hemen altına her üyesi kendi satırı olarak eklenir (bkz. rows inşası). Bir aktivite (bağımsız ya da
+  // zaten bir rutin üyesi) bırakıldığı TAM görsel konuma göre yerleşir — grup açıksa üyelerin arasına, kapalıysa
+  // (görünürde tek satır olduğu için) başlığın hemen yanına, yani pratikte sona. Bunun dışındaki her sürükleme
+  // (rutinle ilgisi olmayan bir konuma bırakma) eskisi gibi üst düzey sıralama/dilim değişimi olarak işlenir.
+  // Bir üyeyi HİÇBİR rutine değmeyecek şekilde tamamen dışarı sürüklemek desteklenmiyor (görmezden gelinir,
+  // veriler yeniden yüklenip görünüm eski hâline döner) — çıkarmak için ✕ (rutinCikar) kullanılır.
   async function onDragEndDay(rows: any[], e: any) {
     if (!client) return;
     const { active, over } = e;
     if (!over || active.id === over.id) return;
-    const activeRow = rows.find((r) => r.key === active.id);
-    const overRow = rows.find((r) => r.key === over.id);
-    if (!activeRow || !overRow) return;
+    const oldIndex = rows.findIndex((r) => r.key === active.id);
+    const newIndex = rows.findIndex((r) => r.key === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+    const activeRow = rows[oldIndex];
 
-    if (activeRow.kind === 'member' && overRow.kind !== 'divider' && overRow.rutin === activeRow.rutin) {
-      const oldIdx = rows.findIndex((r) => r.key === active.id);
-      const newIdx = rows.findIndex((r) => r.key === over.id);
-      const moved = arrayMove(rows, oldIdx, newIdx);
-      const siblings = moved.filter((r) => r.kind === 'member' && r.rutin === activeRow.rutin);
-      await Promise.all(siblings.map((r, i) => supabase.from('dog_rituals').update({ sira: i }).eq('id', r.ritual.id)));
-      loadData(client.id);
-      return;
+    if (activeRow.kind === 'item' || activeRow.kind === 'member') {
+      const moved = arrayMove(rows, oldIndex, newIndex);
+      const pos = moved.indexOf(activeRow);
+      const neighborRutin = (idx: number): string | null => {
+        const row = moved[idx];
+        return row && (row.kind === 'member' || row.kind === 'rutinHead') ? row.rutin : null;
+      };
+      const targetRutin = neighborRutin(pos - 1) || neighborRutin(pos + 1);
+      if (targetRutin) {
+        // Bırakılan yerin çevresindeki (aynı rutine ait) satırları toparlayıp yeni görsel sırayı üye listesine
+        // aynen uygula — böylece animasyonda görünen yer ile gerçek sonuç birebir eşleşiyor.
+        let lo = pos, hi = pos;
+        while (lo > 0 && ((moved[lo - 1].kind === 'member' && moved[lo - 1].rutin === targetRutin) || (moved[lo - 1].kind === 'rutinHead' && moved[lo - 1].rutin === targetRutin))) lo--;
+        while (hi < moved.length - 1 && moved[hi + 1].kind === 'member' && moved[hi + 1].rutin === targetRutin) hi++;
+        const clusterIds: string[] = [];
+        for (let i = lo; i <= hi; i++) {
+          const row = moved[i];
+          if (row.kind === 'rutinHead') continue;
+          clusterIds.push(row === activeRow ? (activeRow.kind === 'member' ? activeRow.ritual.id : activeRow.members[0].id) : row.ritual.id);
+        }
+        const targetMembers = habits.filter((r: any) => r.rutin === targetRutin);
+        const targetAd = targetMembers[0]?.rutin_ad ?? null;
+        const targetSlot = targetMembers[0]?.zaman || moved[pos].z;
+        await Promise.all(clusterIds.map((id, i) => supabase.from('dog_rituals').update({ rutin: targetRutin, rutin_ad: targetAd, sira: i, zaman: targetSlot }).eq('id', id)));
+        loadData(client.id);
+        return;
+      }
+      if (activeRow.kind === 'member') { loadData(client.id); return; } // rutin dışına bırakma desteklenmiyor
     }
-
-    if (activeRow.kind === 'item' && overRow.rutin && overRow.rutin !== activeRow.rutin) {
-      const targetRutin = overRow.rutin;
-      const targetMembers = habits.filter((r: any) => r.rutin === targetRutin);
-      const targetAd = targetMembers[0]?.rutin_ad ?? null;
-      const targetSlot = targetMembers[0]?.zaman || overRow.z;
-      const nextSira = targetMembers.length ? Math.max(...targetMembers.map((m: any) => m.sira || 0)) + 1 : 0;
-      const rit = activeRow.members[0];
-      await supabase.from('dog_rituals').update({ rutin: targetRutin, rutin_ad: targetAd, sira: nextSira, zaman: targetSlot, blok_sira: Date.now() }).eq('id', rit.id);
-      loadData(client.id);
-      return;
-    }
-
-    if (activeRow.kind === 'member') { loadData(client.id); return; } // rutin dışına bırakma desteklenmiyor
 
     const topRows = rows.filter((r) => r.kind !== 'member');
-    const oldIndex = topRows.findIndex((r) => r.key === active.id);
-    const newIndex = topRows.findIndex((r) => r.key === over.id);
-    if (oldIndex < 0 || newIndex < 0) return;
-    const moved = arrayMove(topRows, oldIndex, newIndex);
+    const topOldIndex = topRows.findIndex((r) => r.key === active.id);
+    const topNewIndex = topRows.findIndex((r) => r.key === over.id);
+    if (topOldIndex < 0 || topNewIndex < 0) return;
+    const moved = arrayMove(topRows, topOldIndex, topNewIndex);
     let curZ = SLOTS[0][0];
     const groups: Record<string, any[]> = {};
     moved.forEach((r) => {
@@ -1301,7 +1308,9 @@ export default function Rite() {
     if (!client) return;
     const ids = rituals.filter((r) => r.rutin === name).map((r) => r.id);
     if (!ids.length) return;
-    await supabase.from('dog_rituals').update({ rutin: null, rutin_ad: null }).in('id', ids);
+    // rutin/rutin_ad temizleniyor — aktiviteler SİLİNMİYOR, bağımsız kart olarak kalıyor. blok_sira'yı da
+    // tazeleyip listede kendi zaman diliminin sonuna, göze görünür şekilde yerleşmelerini sağlıyoruz.
+    await Promise.all(ids.map((id, i) => supabase.from('dog_rituals').update({ rutin: null, rutin_ad: null, blok_sira: Date.now() + i }).eq('id', id)));
     loadData(client.id);
   }
   async function emekli(id: string) {
@@ -1681,7 +1690,7 @@ export default function Rite() {
                       if (it.rutin) {
                         rows.push({ key: it.key, kind: 'rutinHead', z, rutin: it.rutin, rutinAd: it.rutinAd, members: it.members });
                         if (expandedRutin.has(it.rutin)) {
-                          it.members.forEach((m: any) => rows.push({ key: 'm:' + m.id, kind: 'member', z, rutin: it.rutin, ritual: m, members: [m] }));
+                          it.members.forEach((m: any, i: number) => rows.push({ key: 'm:' + m.id, kind: 'member', z, rutin: it.rutin, ritual: m, members: [m], isLast: i === it.members.length - 1 }));
                         }
                       } else {
                         rows.push({ key: it.key, kind: 'item', z, members: it.members });
@@ -1689,25 +1698,28 @@ export default function Rite() {
                     });
                   });
 
+                  // Başlık + (açıksa) üyeler tek bir kutuymuş gibi görünsün diye kenarlar/köşeler birbirine
+                  // kaynatılıyor: başlık açıkken alt kenarını kapatır, üyeler üstten kaynaşır, sadece SON üye
+                  // kutuyu alttan kapatır (isLast). Girinti sadece sol iç boşlukla veriliyor.
                   const rowBody = (r: any) => {
                     if (r.kind === 'rutinHead') {
                       const doneCount = r.members.filter((m: any) => ritDone(m.id)).length;
                       const hepsi = r.members.length > 0 && doneCount === r.members.length;
                       const acik = expandedRutin.has(r.rutin);
                       return (
-                        <div className="card routine">
-                          <div className="rh" style={{ borderBottom: acik ? undefined : 'none', paddingBottom: acik ? undefined : 0 }}>
+                        <div className="card routine" style={acik ? { marginBottom: 0, borderBottomLeftRadius: 0, borderBottomRightRadius: 0, borderBottom: 'none', paddingBottom: 8 } : undefined}>
+                          <div className="rh" style={{ border: 'none', padding: 0 }}>
                             <div className={'chk' + (hepsi ? ' on' : '')} onClick={(e) => { e.stopPropagation(); toggleRutinAll(r.members); }} title="Hepsini yaptım / geri al" style={{ width: 22, height: 22, flex: '0 0 22px' }}>{hepsi ? '✓' : ''}</div>
-                            <div style={{ flex: 1, cursor: 'pointer', minWidth: 0 }} onClick={() => toggleRutinExpand(r.rutin)}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
                               {rutinAdEdit === r.rutin ? (
                                 <input autoFocus value={rutinAdVal} onChange={(e) => setRutinAdVal(e.target.value)} onClick={(e) => e.stopPropagation()} onBlur={() => saveRutinAd(r.rutin)} onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} style={{ width: '100%' }} />
                               ) : (
-                                <div onClick={(e) => { if (acik) { e.stopPropagation(); setRutinAdEdit(r.rutin); setRutinAdVal(r.rutinAd || ''); } }}>🔗 {r.rutinAd || 'Rutin'} <span style={{ fontWeight: 400, opacity: .6 }}>· {doneCount}/{r.members.length}</span></div>
+                                <div style={{ cursor: 'pointer' }} onClick={() => { if (acik) { setRutinAdEdit(r.rutin); setRutinAdVal(r.rutinAd || ''); } else { toggleRutinExpand(r.rutin); } }}>🔗 {r.rutinAd || 'Rutin'} <span style={{ fontWeight: 400, opacity: .6 }}>· {doneCount}/{r.members.length}</span></div>
                               )}
                             </div>
-                            <div style={{ flex: '0 0 auto', opacity: .6 }}>{acik ? '▾' : '▸'}</div>
+                            <div style={{ flex: '0 0 auto', opacity: .6, cursor: 'pointer', padding: '4px 2px' }} onClick={() => toggleRutinExpand(r.rutin)}>{acik ? '▾' : '▸'}</div>
                           </div>
-                          {acik && <div style={{ textAlign: 'right', marginTop: 2 }}><button className="rboz" onClick={() => rutinBoz(r.rutin)}>rutini boz</button></div>}
+                          {acik && <div style={{ textAlign: 'right', marginTop: 4 }}><button className="rboz" onClick={() => rutinBoz(r.rutin)}>rutini boz</button></div>}
                         </div>
                       );
                     }
@@ -1715,7 +1727,19 @@ export default function Rite() {
                       const rt = r.ritual;
                       const done = ritDone(rt.id);
                       return (
-                        <div className="card" style={{ padding: '2px 10px 2px 12px', marginTop: -6, borderLeft: '3px solid var(--line)', borderRadius: '0 8px 8px 0' }}>
+                        <div
+                          className="card"
+                          style={{
+                            padding: '2px 14px 2px 30px',
+                            margin: r.isLast ? '0 0 10px' : 0,
+                            borderTop: '1px dashed var(--line)',
+                            borderTopLeftRadius: 0,
+                            borderTopRightRadius: 0,
+                            borderBottomLeftRadius: r.isLast ? 14 : 0,
+                            borderBottomRightRadius: r.isLast ? 14 : 0,
+                            borderBottom: r.isLast ? undefined : 'none',
+                          }}
+                        >
                           <div className="cstep">
                             <div className={'cdot' + (done ? ' on' : '')} onClick={() => toggleRit(rt.id)}>{done ? '✓' : ''}</div>
                             <div className="cbody" style={{ cursor: 'pointer' }} onClick={() => openRit(rt)}><div className="t">{rt.ad}{ritAreas(rt).map((a: string) => <span key={a} className="tagp p-alan">{a}</span>)}{rt.kart_config?.dikey && DIKEY_LABEL[rt.kart_config.dikey] && <span className="tagp p-dikey">{DIKEY_LABEL[rt.kart_config.dikey]}</span>}</div><div className="m">{rt.hatirlatma_saat ? '🔔 ' + rt.hatirlatma_saat + ' · ' : ''}toplam {ritTotal(rt.id)}</div></div>
