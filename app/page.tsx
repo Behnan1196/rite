@@ -747,7 +747,6 @@ export default function Rite() {
   const [ibdAcik, setIbdAcik] = useState('');
   const [ibdUrl, setIbdUrl] = useState('');
   const [ibdTarih, setIbdTarih] = useState('');
-  const [addSlot, setAddSlot] = useState<string | null>(null);
   // Zaman dilimindeki + ile hızlı ekleme (havuzdan seç ya da anında not/randevu oluştur).
   const [slotAddOpen, setSlotAddOpen] = useState<string | null>(null);
   const [hzAd, setHzAd] = useState('');
@@ -1941,7 +1940,6 @@ export default function Rite() {
               <button className="btn sm" onClick={() => openStudioNew(havuzTop === 'kisisel' && actGroup !== 'Genel' ? actGroup : undefined)}>＋ Yeni</button>
             </div>
             <p className="sub">Kendi aktiviteni <b>＋ Yeni</b> ile oluştur ya da hazır gruplardan seç.</p>
-            {addSlot && <div className="banner">➕ <div><b>{SLOTS.find((t) => t[0] === addSlot)?.[1]}</b>&apos;a ekleniyor — bir aktivite seç.</div><button className="bb" onClick={() => setAddSlot(null)}>İptal</button></div>}
             <div className="vswitch">
               <div className={'vseg' + (havuzTop === 'kisisel' ? ' on' : '')} onClick={() => { setHavuzTop('kisisel'); setActGroup(personalGroups[0] || 'Genel'); }}>Kişisel</div>
               <div className={'vseg' + (havuzTop === 'wellbeing' ? ' on' : '')} onClick={() => { setHavuzTop('wellbeing'); setActGroup(actGroups[0] || ''); }}>Well-being</div>
@@ -2210,8 +2208,6 @@ export default function Rite() {
             <div className="sheet" onClick={(e) => e.stopPropagation()}>
               <button className="x" onClick={() => { hzReset(); setSlotAddOpen(null); }}>×</button>
               <h2 style={{ marginTop: 2 }}>{SLOTS.find((t) => t[0] === slotAddOpen)?.[1]}&apos;a ekle</h2>
-              <button className="btn ghost" style={{ width: '100%', marginTop: 6 }} onClick={() => { const z = slotAddOpen; hzReset(); setAddSlot(z); setSlotAddOpen(null); setScreen('havuz'); }}>📚 Havuzdan seç</button>
-              <div className="note" style={{ textAlign: 'center', margin: '8px 0' }}>— ya da hızlı ekle —</div>
               <label className="fldlbl" style={{ marginTop: 0 }}>Başlık</label>
               <input value={hzAd} onChange={(e) => setHzAd(e.target.value)} placeholder="ör. Su iç, Doktor görüşmesi…" />
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginTop: 8 }}><input type="checkbox" style={{ width: 'auto' }} checked={hzRandevu} onChange={(e) => setHzRandevu(e.target.checked)} /> Bu bir görüşme randevusu</label>
@@ -2497,7 +2493,7 @@ export default function Rite() {
             )}
 
             {isProg && <button className="btn" style={{ width: '100%', marginTop: 14 }} onClick={() => { programBaslat(o); setDetay(null); setScreen('ajanda'); }}>Ajandama başlat{o.sure_gun ? ' (' + o.sure_gun + ' gün)' : ''}</button>}
-            {!isRit && !isProg && <button className="btn" style={{ width: '100%', marginTop: 14 }} onClick={() => { aktiviteEkleSlotlar(o, addSlot || undefined); setDetay(null); setAddSlot(null); setScreen('ajanda'); }}>Ajandama ekle{addSlot ? ' (' + (SLOTS.find((t) => t[0] === addSlot)?.[1]) + ')' : ''}</button>}
+            {!isRit && !isProg && <button className="btn" style={{ width: '100%', marginTop: 14 }} onClick={() => { aktiviteEkleSlotlar(o); setDetay(null); setScreen('ajanda'); }}>Ajandama ekle</button>}
 
             {(!isRit || (personal && !isProg)) && (
               <div className="dettoolbar">
