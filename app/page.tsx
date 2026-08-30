@@ -164,26 +164,28 @@ function Acc({ title, summary, defaultOpen, children }: { title: string; summary
   );
 }
 // Video linkini tanı: YouTube / Instagram (public) → gömülü oynatıcı; değilse dış link.
-function embedInfo(url?: string | null, bas?: number | null, bit?: number | null, autoplay?: boolean): { tur: 'yt' | 'ig'; src: string } | null {
+// YouTube için enablejsapi=1 + playsinline=1 her zaman eklenir: cümle segmentlerini "postMessage" komutuyla (src'yi
+// yeniden yükletmeden) oynatabilmek için gerekli — src'yi değiştirip autoplay=1 ile yeniden yükletmek mobil
+// tarayıcıların otomatik oynatma kısıtlarına takılıyordu (masaüstünde çalışıp telefonda çalışmamasının sebebi buydu).
+function embedInfo(url?: string | null, bas?: number | null, bit?: number | null): { tur: 'yt' | 'ig'; src: string } | null {
   if (!url) return null;
   let m = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|shorts\/|embed\/|live\/))([\w-]{6,})/);
   if (m) {
-    const q: string[] = [];
+    const q: string[] = ['enablejsapi=1', 'playsinline=1'];
     if (bas && bas > 0) q.push('start=' + Math.floor(bas));
     if (bit && bit > 0) q.push('end=' + Math.floor(bit));
-    if (autoplay) q.push('autoplay=1');
-    return { tur: 'yt', src: 'https://www.youtube.com/embed/' + m[1] + (q.length ? '?' + q.join('&') : '') };
+    if (typeof window !== 'undefined') q.push('origin=' + encodeURIComponent(window.location.origin));
+    return { tur: 'yt', src: 'https://www.youtube.com/embed/' + m[1] + '?' + q.join('&') };
   }
   m = url.match(/instagram\.com\/(reel|reels|p|tv)\/([\w-]+)/);
   if (m) { const t = m[1] === 'reels' ? 'reel' : m[1]; return { tur: 'ig', src: 'https://www.instagram.com/' + t + '/' + m[2] + '/embed' }; }
   return null;
 }
-// oynatKey verilirse iframe'i o değer değişince yeniden kurar — aynı segmenti art arda "tekrar tekrar oynat"mak için gerekli
-// (src aynı kalsa React iframe'i yeniden yüklemez).
-function EmbedVideo({ url, bas, bit, autoplay, oynatKey }: { url?: string | null; bas?: number | null; bit?: number | null; autoplay?: boolean; oynatKey?: number }) {
-  const info = embedInfo(url, bas, bit, autoplay);
+// iframeRef verilirse YouTube oynatıcısına dışarıdan postMessage komutu (seekTo/playVideo/pauseVideo) gönderilebilir.
+function EmbedVideo({ url, bas, bit, iframeRef }: { url?: string | null; bas?: number | null; bit?: number | null; iframeRef?: { current: HTMLIFrameElement | null } }) {
+  const info = embedInfo(url, bas, bit);
   if (!info) return url ? <a className="btn ghost sm" href={url} target="_blank" rel="noreferrer">▶ Aç</a> : null;
-  if (info.tur === 'yt') return <div className="ytwrap"><iframe key={oynatKey ?? 0} src={info.src} title="video" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen /></div>;
+  if (info.tur === 'yt') return <div className="ytwrap"><iframe ref={iframeRef} src={info.src} title="video" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen /></div>;
   return <iframe className="igframe" src={info.src} title="video" scrolling="no" allowFullScreen />;
 }
 // Tarayıcının yerel TTS'i (Web Speech API) ile metni sesli okur — dil öğrenim kartlarında kelime/cümle telaffuzu için.
@@ -210,28 +212,35 @@ function BilgiKart({ cfg }: { cfg: any }) {
   const sozluk: { ru: string; okunus?: string; tr?: string; baglam?: string }[] = cfg?.sozluk || [];
   const cumleler: { ru: string; tr?: string; bas?: number; bit?: number; not?: string }[] = cfg?.cumleler || [];
   const [vidSec, setVidSec] = useState(0);
-  // Bir cümleye dokununca o cümlenin bas/bit aralığı geçici olarak videoya uygulanır (segmenti tekrar tekrar oynatmak için);
-  // "✕" ile videonun tamamına dönülür. oynatSeq, aynı segmente art arda dokunulduğunda iframe'in yeniden yüklenmesini sağlar.
-  const [oynatOverride, setOynatOverride] = useState<{ bas?: number; bit?: number } | null>(null);
-  const [oynatSeq, setOynatSeq] = useState(0);
   const secili = videolar[Math.min(vidSec, videolar.length - 1)];
+  const ytRef = useRef<HTMLIFrameElement>(null);
+  const bitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (bitTimerRef.current) clearTimeout(bitTimerRef.current); }, []);
+  // Cümleye dokununca video src'sini değiştirip yeniden yüklemek yerine, halihazırda yüklü YouTube oynatıcısına
+  // postMessage komutuyla (seekTo/playVideo) "atla ve oynat" komutu gönderilir — bir iframe yeniden yüklemesi
+  // olmadığı için mobil tarayıcıların otomatik oynatma engeline takılmıyor (src değiştirip autoplay=1 denemek takılıyordu).
+  function ytKomut(func: string, args: any[] = []) {
+    try { ytRef.current?.contentWindow?.postMessage(JSON.stringify({ event: 'command', func, args }), '*'); } catch (_) { /* sessiz */ }
+  }
   function cumleOynat(c: { bas?: number; bit?: number }) {
-    setOynatOverride({ bas: c.bas, bit: c.bit });
-    setOynatSeq((n) => n + 1);
+    const bas = c.bas || 0;
+    ytKomut('seekTo', [bas, true]);
+    ytKomut('playVideo', []);
+    if (bitTimerRef.current) clearTimeout(bitTimerRef.current);
+    if (c.bit != null && c.bit > bas) bitTimerRef.current = setTimeout(() => ytKomut('pauseVideo', []), (c.bit - bas + 0.3) * 1000);
   }
   return (
     <div className="howto">
       <div className="bilgi">
         {videolar.length > 1 && (
           <div style={{ margin: '0 0 6px' }}>
-            {videolar.map((v, i) => <span key={i} className={'chip' + (i === vidSec ? ' on' : '')} onClick={() => { setVidSec(i); setOynatOverride(null); }}>{v.baslik || ('Video ' + (i + 1))}</span>)}
+            {videolar.map((v, i) => <span key={i} className={'chip' + (i === vidSec ? ' on' : '')} onClick={() => setVidSec(i)}>{v.baslik || ('Video ' + (i + 1))}</span>)}
           </div>
         )}
         {secili && (
           <div style={{ margin: '0 0 8px' }}>
             {videolar.length === 1 && secili.baslik && <div className="fldlbl" style={{ marginTop: 0 }}>{secili.baslik}</div>}
-            <EmbedVideo url={secili.url} bas={oynatOverride?.bas ?? secili.bas} bit={oynatOverride?.bit ?? secili.bit} autoplay={!!oynatOverride} oynatKey={oynatSeq} />
-            {oynatOverride && <div style={{ marginTop: 4 }}><span className="chip" style={{ borderStyle: 'dashed' }} onClick={() => setOynatOverride(null)}>✕ Segmenti kapat</span></div>}
+            <EmbedVideo url={secili.url} bas={secili.bas} bit={secili.bit} iframeRef={ytRef} />
           </div>
         )}
         {cfg?.icerik ? renderMetin(cfg.icerik) : <div className="note" style={{ marginTop: 0 }}>İçerik yok (taslak).</div>}
