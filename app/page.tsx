@@ -198,11 +198,14 @@ function speak(text?: string | null, rate = 0.85, lang = 'ru-RU') {
     window.speechSynthesis.speak(u);
   } catch (_) { /* sessiz */ }
 }
-// "495" ya da "8:15" gibi bir saniye değerini "8:15" gösterime çevirir.
+// "495" ya da "8:15" gibi bir saniye değerini "8:15" gösterime çevirir; yarım saniye varsa "8:15.5" olarak gösterir
+// (ince ayar 0.5 saniyelik adımlarla çalıştığı için tam saniyeye yuvarlarsak değişikliğin etkisi görünmüyordu).
 function saniyeStr(s?: number | null): string {
   if (s == null || isNaN(s)) return '';
-  const m = Math.floor(s / 60), sn = Math.floor(s % 60);
-  return m + ':' + String(sn).padStart(2, '0');
+  const m = Math.floor(s / 60);
+  const sn = s % 60;
+  const snStr = Number.isInteger(sn) ? String(sn).padStart(2, '0') : sn.toFixed(1).padStart(4, '0');
+  return m + ':' + snStr;
 }
 // Bilgi/makale kartı: video(lar) üstte, altında biçimli metin + kaynaklar; tek bir stilli kutu içinde. "Yaptım" işaretlemesi kart satırından/başlıktaki checkbox'tan yapılır.
 // Birden fazla video = alternatifler (ör. seviye/versiyon) — sekme ile tek tek gösterilir, dikey yer sabit kalır.
