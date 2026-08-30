@@ -350,46 +350,54 @@ function BilgiKart({ cfg, onSave }: { cfg: any; onSave?: (cfg: any) => void }) {
       </div>
     </div>
     {acikCumle && (
-      <div className="modal top2" onClick={cumleKapat}>
-        <div className="sheet small" onClick={(e) => e.stopPropagation()}>
+      <div className="modal top2 full" onClick={cumleKapat}>
+        <div className="sheet cumlesheet" onClick={(e) => e.stopPropagation()}>
           <button className="x" onClick={cumleKapat}>×</button>
-          {secili && (
-            <div style={{ margin: '0 0 10px' }}>
-              <EmbedVideo url={secili.url} bas={secili.bas} bit={secili.bit} iframeRef={modalYtRef} />
+          <div className="cumlebody">
+            {secili && (
+              <div style={{ margin: '0 0 10px' }}>
+                <EmbedVideo url={secili.url} bas={secili.bas} bit={secili.bit} iframeRef={modalYtRef} />
+              </div>
+            )}
+            <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.4 }}>{acikCumle.ru}</div>
+            {acikCumle.tr && <div style={{ fontSize: 17, color: 'var(--ink)', marginTop: 8 }}>{acikCumle.tr}</div>}
+            {acikCumle.not && (
+              <div className="howto" style={{ marginTop: 10 }}>
+                <div className="v" style={{ fontSize: 15, fontStyle: 'italic' }}>{acikCumle.not}</div>
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 14, flexWrap: 'wrap' }}>
+              <button className="btn ghost sm" onClick={() => speak(acikCumle.ru)}>🔊 Dinle</button>
+              {(localBas != null || localBit != null) && <button className="btn sm" onClick={modalOynat}>▶ Oynat</button>}
             </div>
-          )}
-          <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.4 }}>{acikCumle.ru}</div>
-          {acikCumle.tr && <div style={{ fontSize: 17, color: 'var(--ink)', marginTop: 8 }}>{acikCumle.tr}</div>}
-          {acikCumle.not && <div className="note" style={{ marginTop: 8, fontStyle: 'italic', fontSize: 13 }}>{acikCumle.not}</div>}
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 12, flexWrap: 'wrap' }}>
-            <button className="btn ghost sm" onClick={() => speak(acikCumle.ru)}>🔊 Dinle</button>
-            {(localBas != null || localBit != null) && <button className="btn sm" onClick={modalOynat}>▶ Oynat</button>}
           </div>
-          {onSave && (localBas != null || localBit != null) && (
-            <div style={{ marginTop: 12, borderTop: '1px solid var(--line)', paddingTop: 10, display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
-              {localBas != null && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <span className="note" style={{ margin: 0 }}>Başl.</span>
-                  <button className="btn ghost sm" style={{ padding: '4px 11px' }} onClick={() => modalNudge('bas', -0.5)}>−</button>
-                  <b style={{ minWidth: 48, textAlign: 'center', display: 'inline-block', fontSize: 13 }}>{saniyeStr(localBas)}</b>
-                  <button className="btn ghost sm" style={{ padding: '4px 11px' }} onClick={() => modalNudge('bas', 0.5)}>+</button>
-                </div>
-              )}
-              {localBit != null && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <span className="note" style={{ margin: 0 }}>Bitiş</span>
-                  <button className="btn ghost sm" style={{ padding: '4px 11px' }} onClick={() => modalNudge('bit', -0.5)}>−</button>
-                  <b style={{ minWidth: 48, textAlign: 'center', display: 'inline-block', fontSize: 13 }}>{saniyeStr(localBit)}</b>
-                  <button className="btn ghost sm" style={{ padding: '4px 11px' }} onClick={() => modalNudge('bit', 0.5)}>+</button>
-                </div>
-              )}
-              <span style={{ fontSize: 12, color: '#1f7a4d', fontWeight: 700, visibility: savedFlash ? 'visible' : 'hidden' }}>✓ kaydedildi</span>
+          <div className="cumlefoot">
+            {onSave && (localBas != null || localBit != null) && (
+              <div style={{ display: 'flex', gap: 16, alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
+                {localBas != null && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span className="note" style={{ margin: 0 }}>Başl.</span>
+                    <button className="btn ghost sm" style={{ padding: '4px 11px' }} onClick={() => modalNudge('bas', -0.5)}>−</button>
+                    <b style={{ minWidth: 48, textAlign: 'center', display: 'inline-block', fontSize: 13 }}>{saniyeStr(localBas)}</b>
+                    <button className="btn ghost sm" style={{ padding: '4px 11px' }} onClick={() => modalNudge('bas', 0.5)}>+</button>
+                  </div>
+                )}
+                {localBit != null && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span className="note" style={{ margin: 0 }}>Bitiş</span>
+                    <button className="btn ghost sm" style={{ padding: '4px 11px' }} onClick={() => modalNudge('bit', -0.5)}>−</button>
+                    <b style={{ minWidth: 48, textAlign: 'center', display: 'inline-block', fontSize: 13 }}>{saniyeStr(localBit)}</b>
+                    <button className="btn ghost sm" style={{ padding: '4px 11px' }} onClick={() => modalNudge('bit', 0.5)}>+</button>
+                  </div>
+                )}
+                <span style={{ fontSize: 12, color: '#1f7a4d', fontWeight: 700, visibility: savedFlash ? 'visible' : 'hidden' }}>✓ kaydedildi</span>
+              </div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 }}>
+              <button className="btn ghost sm" disabled={cumleModal === 0} onClick={() => cumleGit((cumleModal as number) - 1)}>‹ Önceki</button>
+              <span className="note" style={{ margin: 0 }}>{(cumleModal as number) + 1} / {cumleler.length}</span>
+              <button className="btn ghost sm" disabled={cumleModal === cumleler.length - 1} onClick={() => cumleGit((cumleModal as number) + 1)}>Sonraki ›</button>
             </div>
-          )}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 18 }}>
-            <button className="btn ghost sm" disabled={cumleModal === 0} onClick={() => cumleGit((cumleModal as number) - 1)}>‹ Önceki</button>
-            <span className="note" style={{ margin: 0 }}>{(cumleModal as number) + 1} / {cumleler.length}</span>
-            <button className="btn ghost sm" disabled={cumleModal === cumleler.length - 1} onClick={() => cumleGit((cumleModal as number) + 1)}>Sonraki ›</button>
           </div>
         </div>
       </div>
