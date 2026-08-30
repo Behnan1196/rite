@@ -211,9 +211,10 @@ function parseSaniye(v: any): number | undefined {
 }
 // Başka bir AI'ın ürettiği ders JSON'unu (vocabulary/sentences, ru/tr/reading/context/timestamp/note alanlarıyla)
 // bizim sozluk/cumleler şeklimize eşler — alan adları esnek tutulur ki farklı biçimlerde JSON de kabul edilsin.
-function parseLessonJson(text: string): { sozluk: any[]; cumleler: any[] } {
+function parseLessonJson(text: string): { ozet: string | null; sozluk: any[]; cumleler: any[] } {
   const obj = JSON.parse(text);
   const src = obj.vocabulary || obj.sozluk || obj.sentences || obj.cumleler ? obj : (obj.data || obj);
+  const ozet = (src.summary || src.ozet || '').trim() || null;
   const sozluk = (src.vocabulary || src.sozluk || []).map((v: any) => ({
     ru: v.ru || v.word || '', okunus: v.reading || v.okunus || undefined,
     tr: v.tr || v.meaning || undefined, baglam: v.context || v.baglam || undefined,
@@ -222,7 +223,7 @@ function parseLessonJson(text: string): { sozluk: any[]; cumleler: any[] } {
     ru: v.ru || v.sentence || '', tr: v.tr || v.translation || undefined,
     saniye: parseSaniye(v.timestamp ?? v.saniye), not: v.note || v.not || undefined,
   })).filter((v: any) => v.ru);
-  return { sozluk, cumleler };
+  return { ozet, sozluk, cumleler };
 }
 // Bilgi/makale kartı: video(lar) üstte, altında biçimli metin + kaynaklar; tek bir stilli kutu içinde. "Yaptım" işaretlemesi kart satırından/başlıktaki checkbox'tan yapılır.
 // Birden fazla video = alternatifler (ör. seviye/versiyon) — sekme ile tek tek gösterilir, dikey yer sabit kalır.
@@ -304,6 +305,9 @@ function BilgiKartEdit({ cfg, onSave }: { cfg: any; onSave: (cfg: any) => void }
   const [jsonOpen, setJsonOpen] = useState(false);
   const [jsonText, setJsonText] = useState('');
   const [jsonMsg, setJsonMsg] = useState('');
+  // Sözlük/cümle/JSON alanları her kartta gösterilmez — dil öğrenimi için kullanılmayan sıradan bir not kalabalıklaşmasın.
+  // İçinde zaten kelime/cümle varsa (ör. bu kart daha önce dolduruldu) otomatik açık gelir, yoksa "+ " ile elle açılır.
+  const [dilAcik, setDilAcik] = useState(sozluk.length > 0 || cumleler.length > 0);
   const secili = videolar[Math.min(vidSec, videolar.length - 1)];
   function videoEkle() {
     if (!vUrl.trim()) return;
@@ -338,9 +342,11 @@ function BilgiKartEdit({ cfg, onSave }: { cfg: any; onSave: (cfg: any) => void }
   function cumleSil(i: number) { onSave({ ...cfg, cumleler: cumleler.filter((_, j) => j !== i) }); }
   function jsonIceAktar() {
     try {
-      const { sozluk: sv, cumleler: cv } = parseLessonJson(jsonText);
-      if (!sv.length && !cv.length) { setJsonMsg('JSON içinde vocabulary/sentences bulunamadı.'); return; }
-      onSave({ ...cfg, sozluk: [...sozluk, ...sv], cumleler: [...cumleler, ...cv] });
+      const { ozet, sozluk: sv, cumleler: cv } = parseLessonJson(jsonText);
+      if (!ozet && !sv.length && !cv.length) { setJsonMsg('JSON içinde summary/vocabulary/sentences bulunamadı.'); return; }
+      const mevcut = cfg?.icerik || '';
+      const yeniIcerik = ozet ? (mevcut.trim() ? mevcut.trim() + '\n\n' + ozet : ozet) : mevcut;
+      onSave({ ...cfg, icerik: yeniIcerik || null, sozluk: [...sozluk, ...sv], cumleler: [...cumleler, ...cv] });
       setJsonText(''); setJsonOpen(false); setJsonMsg('');
     } catch (_) { setJsonMsg('JSON okunamadı, formatı kontrol et.'); }
   }
@@ -374,62 +380,70 @@ function BilgiKartEdit({ cfg, onSave }: { cfg: any; onSave: (cfg: any) => void }
           </div>
         )}
 
-        <Acc title="📚 Sözlük" summary={sozluk.length ? sozluk.length + ' kelime' : undefined} defaultOpen={sozluk.length === 0}>
-          {sozluk.map((v, i) => (
-            <div key={i} style={{ margin: '4px 0', display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-              <div style={{ flex: 1 }}>
-                <div><b>{v.ru}</b>{v.okunus ? <span className="note" style={{ margin: 0 }}> ({v.okunus})</span> : null}<span style={{ marginLeft: 6, cursor: 'pointer' }} onClick={() => speak(v.ru)}>🔊</span></div>
-                {v.tr && <div className="note" style={{ marginTop: 2 }}>{v.tr}</div>}
-                {v.baglam && <div className="note" style={{ marginTop: 2, fontStyle: 'italic' }}>{v.baglam}</div>}
-              </div>
-              <span style={{ opacity: 0.55, cursor: 'pointer' }} onClick={() => sozlukSil(i)}>✕</span>
-            </div>
-          ))}
-          {sozlukEkleOpen ? (
-            <div className="daterow" style={{ margin: '6px 0', flexWrap: 'wrap', gap: 6 }}>
-              <input value={sWord} onChange={(e) => setSWord(e.target.value)} placeholder="Rusça kelime" style={{ flex: 1, minWidth: 100 }} />
-              <input value={sOku} onChange={(e) => setSOku(e.target.value)} placeholder="Okunuş (ops.)" style={{ flex: 1, minWidth: 100 }} />
-              <input value={sTr} onChange={(e) => setSTr(e.target.value)} placeholder="Türkçe anlamı" style={{ flex: 1, minWidth: 100 }} />
-              <input value={sBag} onChange={(e) => setSBag(e.target.value)} placeholder="Bağlam (ops.)" style={{ flex: 2, minWidth: 140 }} />
-              <button className="btn sm" onClick={sozlukEkle} disabled={!sWord.trim()}>Ekle</button>
-            </div>
-          ) : <span className="chip" style={{ borderStyle: 'dashed' }} onClick={() => setSozlukEkleOpen(true)}>+ Kelime ekle</span>}
-        </Acc>
+        {dilAcik ? (
+          <>
+            <Acc title="📚 Sözlük" summary={sozluk.length ? sozluk.length + ' kelime' : undefined} defaultOpen={sozluk.length === 0}>
+              {sozluk.map((v, i) => (
+                <div key={i} style={{ margin: '4px 0', display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                  <div style={{ flex: 1 }}>
+                    <div><b>{v.ru}</b>{v.okunus ? <span className="note" style={{ margin: 0 }}> ({v.okunus})</span> : null}<span style={{ marginLeft: 6, cursor: 'pointer' }} onClick={() => speak(v.ru)}>🔊</span></div>
+                    {v.tr && <div className="note" style={{ marginTop: 2 }}>{v.tr}</div>}
+                    {v.baglam && <div className="note" style={{ marginTop: 2, fontStyle: 'italic' }}>{v.baglam}</div>}
+                  </div>
+                  <span style={{ opacity: 0.55, cursor: 'pointer' }} onClick={() => sozlukSil(i)}>✕</span>
+                </div>
+              ))}
+              {sozlukEkleOpen ? (
+                <div className="daterow" style={{ margin: '6px 0', flexWrap: 'wrap', gap: 6 }}>
+                  <input value={sWord} onChange={(e) => setSWord(e.target.value)} placeholder="Rusça kelime" style={{ flex: 1, minWidth: 100 }} />
+                  <input value={sOku} onChange={(e) => setSOku(e.target.value)} placeholder="Okunuş (ops.)" style={{ flex: 1, minWidth: 100 }} />
+                  <input value={sTr} onChange={(e) => setSTr(e.target.value)} placeholder="Türkçe anlamı" style={{ flex: 1, minWidth: 100 }} />
+                  <input value={sBag} onChange={(e) => setSBag(e.target.value)} placeholder="Bağlam (ops.)" style={{ flex: 2, minWidth: 140 }} />
+                  <button className="btn sm" onClick={sozlukEkle} disabled={!sWord.trim()}>Ekle</button>
+                </div>
+              ) : <span className="chip" style={{ borderStyle: 'dashed' }} onClick={() => setSozlukEkleOpen(true)}>+ Kelime ekle</span>}
+            </Acc>
 
-        <Acc title="💬 Cümle kalıpları" summary={cumleler.length ? cumleler.length + ' cümle' : undefined} defaultOpen={cumleler.length === 0}>
-          {cumleler.map((c, i) => (
-            <div key={i} style={{ margin: '4px 0', display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-              <div style={{ flex: 1 }}>
-                <div><b>{c.ru}</b><span style={{ marginLeft: 6, cursor: 'pointer' }} onClick={() => speak(c.ru)}>🔊</span>{c.saniye != null && <span className="note" style={{ margin: '0 0 0 6px' }}>⏱{saniyeStr(c.saniye)}</span>}</div>
-                {c.tr && <div className="note" style={{ marginTop: 2 }}>{c.tr}</div>}
-                {c.not && <div className="note" style={{ marginTop: 2, fontStyle: 'italic' }}>{c.not}</div>}
-              </div>
-              <span style={{ opacity: 0.55, cursor: 'pointer' }} onClick={() => cumleSil(i)}>✕</span>
-            </div>
-          ))}
-          {cumleEkleOpen ? (
-            <div className="daterow" style={{ margin: '6px 0', flexWrap: 'wrap', gap: 6 }}>
-              <input value={cRu} onChange={(e) => setCRu(e.target.value)} placeholder="Rusça cümle" style={{ flex: 2, minWidth: 140 }} />
-              <input value={cTr} onChange={(e) => setCTr(e.target.value)} placeholder="Türkçe çevirisi" style={{ flex: 2, minWidth: 140 }} />
-              <input value={cSn} onChange={(e) => setCSn(e.target.value)} placeholder="dk:sn (ops.)" style={{ flex: 1, minWidth: 80 }} />
-              <input value={cNot} onChange={(e) => setCNot(e.target.value)} placeholder="Not (ops.)" style={{ flex: 1, minWidth: 100 }} />
-              <button className="btn sm" onClick={cumleEkle} disabled={!cRu.trim()}>Ekle</button>
-            </div>
-          ) : <span className="chip" style={{ borderStyle: 'dashed' }} onClick={() => setCumleEkleOpen(true)}>+ Cümle ekle</span>}
-        </Acc>
+            <Acc title="💬 Cümle kalıpları" summary={cumleler.length ? cumleler.length + ' cümle' : undefined} defaultOpen={cumleler.length === 0}>
+              {cumleler.map((c, i) => (
+                <div key={i} style={{ margin: '4px 0', display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                  <div style={{ flex: 1 }}>
+                    <div><b>{c.ru}</b><span style={{ marginLeft: 6, cursor: 'pointer' }} onClick={() => speak(c.ru)}>🔊</span>{c.saniye != null && <span className="note" style={{ margin: '0 0 0 6px' }}>⏱{saniyeStr(c.saniye)}</span>}</div>
+                    {c.tr && <div className="note" style={{ marginTop: 2 }}>{c.tr}</div>}
+                    {c.not && <div className="note" style={{ marginTop: 2, fontStyle: 'italic' }}>{c.not}</div>}
+                  </div>
+                  <span style={{ opacity: 0.55, cursor: 'pointer' }} onClick={() => cumleSil(i)}>✕</span>
+                </div>
+              ))}
+              {cumleEkleOpen ? (
+                <div className="daterow" style={{ margin: '6px 0', flexWrap: 'wrap', gap: 6 }}>
+                  <input value={cRu} onChange={(e) => setCRu(e.target.value)} placeholder="Rusça cümle" style={{ flex: 2, minWidth: 140 }} />
+                  <input value={cTr} onChange={(e) => setCTr(e.target.value)} placeholder="Türkçe çevirisi" style={{ flex: 2, minWidth: 140 }} />
+                  <input value={cSn} onChange={(e) => setCSn(e.target.value)} placeholder="dk:sn (ops.)" style={{ flex: 1, minWidth: 80 }} />
+                  <input value={cNot} onChange={(e) => setCNot(e.target.value)} placeholder="Not (ops.)" style={{ flex: 1, minWidth: 100 }} />
+                  <button className="btn sm" onClick={cumleEkle} disabled={!cRu.trim()}>Ekle</button>
+                </div>
+              ) : <span className="chip" style={{ borderStyle: 'dashed' }} onClick={() => setCumleEkleOpen(true)}>+ Cümle ekle</span>}
+            </Acc>
 
-        <div style={{ margin: '8px 0 0' }}>
-          {jsonOpen ? (
-            <div>
-              <textarea value={jsonText} onChange={(e) => setJsonText(e.target.value)} placeholder={'{"vocabulary":[{"ru":"...","tr":"...","reading":"...","context":"..."}],"sentences":[{"ru":"...","tr":"...","timestamp":"8:15"}]}'} style={{ width: '100%', minHeight: 80 }} />
-              <div className="rowbtns" style={{ marginTop: 6 }}>
-                <button className="btn sm" onClick={jsonIceAktar} disabled={!jsonText.trim()}>İçe aktar</button>
-                <button className="btn ghost sm" onClick={() => { setJsonOpen(false); setJsonText(''); setJsonMsg(''); }}>Vazgeç</button>
-              </div>
-              {jsonMsg && <div className="msg">{jsonMsg}</div>}
+            <div style={{ margin: '8px 0 0' }}>
+              {jsonOpen ? (
+                <div>
+                  <textarea value={jsonText} onChange={(e) => setJsonText(e.target.value)} placeholder={'{"summary":"...","vocabulary":[{"ru":"...","tr":"...","reading":"...","context":"..."}],"sentences":[{"ru":"...","tr":"...","timestamp":"8:15"}]}'} style={{ width: '100%', minHeight: 80 }} />
+                  <div className="rowbtns" style={{ marginTop: 6 }}>
+                    <button className="btn sm" onClick={jsonIceAktar} disabled={!jsonText.trim()}>İçe aktar</button>
+                    <button className="btn ghost sm" onClick={() => { setJsonOpen(false); setJsonText(''); setJsonMsg(''); }}>Vazgeç</button>
+                  </div>
+                  {jsonMsg && <div className="msg">{jsonMsg}</div>}
+                </div>
+              ) : <span className="chip" style={{ borderStyle: 'dashed' }} onClick={() => setJsonOpen(true)}>+ JSON yapıştır</span>}
             </div>
-          ) : <span className="chip" style={{ borderStyle: 'dashed' }} onClick={() => setJsonOpen(true)}>+ JSON yapıştır</span>}
-        </div>
+          </>
+        ) : (
+          <div style={{ margin: '8px 0 0' }}>
+            <span className="chip" style={{ borderStyle: 'dashed' }} onClick={() => setDilAcik(true)}>+ Kelime / cümle ekle (dil öğrenimi)</span>
+          </div>
+        )}
       </div>
     </div>
   );
