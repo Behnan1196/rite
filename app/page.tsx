@@ -206,13 +206,15 @@ function saniyeStr(s?: number | null): string {
 }
 // Bilgi/makale kartı: video(lar) üstte, altında biçimli metin + kaynaklar; tek bir stilli kutu içinde. "Yaptım" işaretlemesi kart satırından/başlıktaki checkbox'tan yapılır.
 // Birden fazla video = alternatifler (ör. seviye/versiyon) — sekme ile tek tek gösterilir, dikey yer sabit kalır.
-function BilgiKart({ cfg }: { cfg: any }) {
+function BilgiKart({ cfg, onSave }: { cfg: any; onSave?: (cfg: any) => void }) {
   const kaynaklar: string[] = cfg?.kaynaklar || [];
   const videolar: { baslik?: string; url: string; bas?: number; bit?: number }[] = cfg?.videolar && cfg.videolar.length ? cfg.videolar : (cfg?.video ? [{ url: cfg.video }] : []);
   const sozluk: { ru: string; okunus?: string; tr?: string; baglam?: string }[] = cfg?.sozluk || [];
   const cumleler: { ru: string; tr?: string; bas?: number; bit?: number; not?: string }[] = cfg?.cumleler || [];
   const [vidSec, setVidSec] = useState(0);
+  const [cumleModal, setCumleModal] = useState<number | null>(null);
   const secili = videolar[Math.min(vidSec, videolar.length - 1)];
+  const acikCumle = cumleModal != null ? cumleler[cumleModal] : null;
   const ytRef = useRef<HTMLIFrameElement>(null);
   const bitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (bitTimerRef.current) clearTimeout(bitTimerRef.current); }, []);
@@ -229,7 +231,15 @@ function BilgiKart({ cfg }: { cfg: any }) {
     if (bitTimerRef.current) clearTimeout(bitTimerRef.current);
     if (c.bit != null && c.bit > bas) bitTimerRef.current = setTimeout(() => ytKomut('pauseVideo', []), (c.bit - bas + 0.3) * 1000);
   }
+  // Meridyen'deki ince ayarla aynı desen: hedef saniyeyi doğrudan düğmenin üstünde gösterir. onSave verilmişse
+  // (Rite'ta doğrudan düzenleme açıksa) kart_config'e kaydeder.
+  function cumleAyarla(i: number, alan: 'bas' | 'bit', delta: number) {
+    if (!onSave) return;
+    const yeni = cumleler.map((c, j) => j === i ? { ...c, [alan]: Math.max(0, +(((c as any)[alan] ?? 0) + delta).toFixed(1)) } : c);
+    onSave({ ...cfg, cumleler: yeni });
+  }
   return (
+    <>
     <div className="howto">
       <div className="bilgi">
         {videolar.length > 1 && (
@@ -238,7 +248,7 @@ function BilgiKart({ cfg }: { cfg: any }) {
           </div>
         )}
         {secili && (
-          <div style={{ margin: '0 0 8px' }}>
+          <div style={{ margin: '0 0 8px', position: 'sticky', top: 44, zIndex: 1, background: 'var(--card2, #f6f4ee)', paddingTop: 2, paddingBottom: 4, boxShadow: '0 6px 8px -6px rgba(24,21,16,.18)' }}>
             {videolar.length === 1 && secili.baslik && <div className="fldlbl" style={{ marginTop: 0 }}>{secili.baslik}</div>}
             <EmbedVideo url={secili.url} bas={secili.bas} bit={secili.bit} iframeRef={ytRef} />
           </div>
@@ -264,6 +274,7 @@ function BilgiKart({ cfg }: { cfg: any }) {
                   <b>{c.ru}</b>
                   <span style={{ marginLeft: 6, cursor: 'pointer' }} onClick={() => speak(c.ru)}>🔊</span>
                   {(c.bas != null || c.bit != null) && secili && <span style={{ marginLeft: 6, cursor: 'pointer', color: '#1f7a4d', fontWeight: 600 }} onClick={() => cumleOynat(c)}>▶ {saniyeStr(c.bas) || '0:00'}{c.bit != null ? '–' + saniyeStr(c.bit) : ''}</span>}
+                  {onSave && <span style={{ marginLeft: 6, cursor: 'pointer', opacity: 0.55 }} onClick={() => setCumleModal(i)}>✎</span>}
                 </div>
                 {c.tr && <div className="note" style={{ marginTop: 2 }}>{c.tr}</div>}
                 {c.not && <div className="note" style={{ marginTop: 2, fontStyle: 'italic' }}>{c.not}</div>}
@@ -273,6 +284,40 @@ function BilgiKart({ cfg }: { cfg: any }) {
         )}
       </div>
     </div>
+    {acikCumle && (
+      <div className="modal top2" onClick={() => setCumleModal(null)}>
+        <div className="sheet small" onClick={(e) => e.stopPropagation()}>
+          <button className="x" onClick={() => setCumleModal(null)}>×</button>
+          <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.4, marginTop: 6 }}>{acikCumle.ru}</div>
+          {acikCumle.tr && <div style={{ fontSize: 17, color: 'var(--ink)', marginTop: 8 }}>{acikCumle.tr}</div>}
+          {acikCumle.not && <div className="note" style={{ marginTop: 8, fontStyle: 'italic', fontSize: 13 }}>{acikCumle.not}</div>}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 14, flexWrap: 'wrap' }}>
+            <button className="btn ghost sm" onClick={() => speak(acikCumle.ru)}>🔊 Dinle</button>
+            {(acikCumle.bas != null || acikCumle.bit != null) && <button className="btn ghost sm" onClick={() => { cumleOynat(acikCumle); setCumleModal(null); }}>▶ Videoda oynat</button>}
+          </div>
+          {onSave && (acikCumle.bas != null || acikCumle.bit != null) && (
+            <div style={{ marginTop: 16, borderTop: '1px solid var(--line)', paddingTop: 12 }}>
+              <label className="fldlbl" style={{ marginTop: 0 }}>Zamanlama</label>
+              {acikCumle.bas != null && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '4px 0', flexWrap: 'wrap' }}>
+                  <span className="note" style={{ margin: 0, minWidth: 110 }}>Başlangıç {saniyeStr(acikCumle.bas)}</span>
+                  <button className="btn ghost mini" onClick={() => cumleAyarla(cumleModal as number, 'bas', -0.5)}>→ {saniyeStr(Math.max(0, acikCumle.bas - 0.5))}</button>
+                  <button className="btn ghost mini" onClick={() => cumleAyarla(cumleModal as number, 'bas', 0.5)}>→ {saniyeStr(acikCumle.bas + 0.5)}</button>
+                </div>
+              )}
+              {acikCumle.bit != null && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '4px 0', flexWrap: 'wrap' }}>
+                  <span className="note" style={{ margin: 0, minWidth: 110 }}>Bitiş {saniyeStr(acikCumle.bit)}</span>
+                  <button className="btn ghost mini" onClick={() => cumleAyarla(cumleModal as number, 'bit', -0.5)}>→ {saniyeStr(Math.max(0, acikCumle.bit - 0.5))}</button>
+                  <button className="btn ghost mini" onClick={() => cumleAyarla(cumleModal as number, 'bit', 0.5)}>→ {saniyeStr(acikCumle.bit + 0.5)}</button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    )}
+    </>
   );
 }
 // Kişisel bilgi kartının düzenlenebilir hâli — kaynak==='Kendi' kartlarda BilgiKart yerine bu gösterilir.
@@ -2440,7 +2485,7 @@ export default function Rite() {
               );
             })()}
             {isRit && kTip === 'standart' && kCfg?.resim && <img src={kCfg.resim} alt="" style={{ maxWidth: '100%', borderRadius: 8, margin: '4px 0 8px', display: 'block' }} />}
-            {isRit && kTip === 'bilgi' && (o.kaynak === 'Kendi' ? <BilgiKartEdit cfg={kCfg} onSave={(c) => setBilgiCfg(o.id, c)} /> : <BilgiKart cfg={kCfg} />)}
+            {isRit && kTip === 'bilgi' && (o.kaynak === 'Kendi' ? <BilgiKartEdit cfg={kCfg} onSave={(c) => setBilgiCfg(o.id, c)} /> : <BilgiKart cfg={kCfg} onSave={(c) => setBilgiCfg(o.id, c)} />)}
             {isRit && kTip === 'video' && <div style={{ margin: '4px 0 8px' }}>
               {(kCfg.url || o.url) && <EmbedVideo url={kCfg.url || o.url} />}
               {!o.sablon_id && <div className="daterow" style={{ marginTop: 6 }}><input value={kartUrlInput} onChange={(e) => setKartUrlInput(e.target.value)} onBlur={() => { if (kartUrlInput.trim() !== ((o.kart_config && o.kart_config.url) || o.url || '')) setRitKartUrl(o.id, kartUrlInput); }} placeholder="Video linki (düzenle)…" style={{ flex: 1 }} /></div>}
