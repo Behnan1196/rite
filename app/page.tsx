@@ -1370,6 +1370,20 @@ export default function Rite() {
     patchDetay(patch);
     loadData(client.id);
   }
+  // Bir program/şablondan atanmış kartlarda ("canlı adım") detay ekranı, ritüelin kendi kart_config'i yerine
+  // ŞABLONUN o adımdaki kartConfig'ini gösterir (koç şablonu güncelleyince zaten atanmış kartlara da yansısın diye).
+  // Bu yüzden cümle saniyesi gibi bir düzeltme sadece dog_rituals.kart_config'e yazılırsa hiç görünmüyordu —
+  // "kaydedildi" diyor ama ekran hep şablondaki eski veriyi gösterip duruyordu. Şablon bağlantılı bir kart için
+  // düzeltmeyi doğrudan şablonun (dog_activities.adimlar[adım].kartConfig) üstüne yazmak gerekiyor.
+  async function setSablonAdimKart(sablonId: string, adimIdx: number, cfg: any) {
+    if (!detaySablon) return;
+    const adimlar = [...(detaySablon.adimlar || [])];
+    if (!adimlar[adimIdx]) return;
+    adimlar[adimIdx] = { ...adimlar[adimIdx], kartConfig: cfg };
+    const { error } = await supabase.from('dog_activities').update({ adimlar }).eq('id', sablonId);
+    if (error) { console.error('setSablonAdimKart', error); return; }
+    setDetaySablon((d: any) => (d ? { ...d, adimlar } : d));
+  }
   async function setRitKartUrl(id: string, url: string) {
     if (!client) return;
     const u = url.trim() || null;
@@ -2495,6 +2509,12 @@ export default function Rite() {
         const kTip = (isRit ? (canliAdim?.kartTipi || o.kart_tipi) : act?.kart_tipi) || 'standart';
         const kCfg = (isRit ? (canliAdim?.kartConfig || o.kart_config) : act?.kart_config) || {};
         const aciklamaGoster = isRit ? (canliAdim ? (canliAdim.aciklama || null) : o.aciklama) : o.aciklama;
+        // Bilgi kartı düzenlemesi (video/içerik/cümle saniyesi): kart "canlı adım" olarak şablondan okunuyorsa
+        // kaydı da şablona yazmak gerekir — yoksa ekran hep şablondaki eski veriyi göstermeye devam eder (kCfg
+        // yukarıda canliAdim'i önceliklendiriyor).
+        const bilgiKaydet = canliAdim && o.sablon_id
+          ? (c: any) => setSablonAdimKart(o.sablon_id, o.sablon_adim ?? 0, c)
+          : (c: any) => setBilgiCfg(o.id, c);
         const noDone = kTip === 'anket' || kTip === 'coktan' || kTip === 'nefes' || kTip === 'ruhhali' || kTip === 'tarif' || kTip === 'sukran' || kTip === 'topraklama' || kTip === 'pomodoro' || kTip === 'beden' || kTip === 'uykuoncesi' || kTip === 'su' || kTip === 'maruz' || kTip === 'niyet' || kTip === 'workout' || (kTip === 'video' && kCfg.done === false) || (kTip === 'randevu' && kCfg.done === false);
         const gunOzet = !o.baslangic ? "📥 Inbox'ta bekliyor" : (o.baslangic === o.bitis ? '📅 ' + kisaTarih(o.baslangic) : (o.bitis ? kisaTarih(o.baslangic) + ' → ' + kisaTarih(o.bitis) : 'süregelen · ' + kisaTarih(o.baslangic) + "'den"));
         const yarin = (() => { const d = parseD(today); d.setDate(d.getDate() + 1); return iso(d); })();
@@ -2559,7 +2579,7 @@ export default function Rite() {
               );
             })()}
             {isRit && kTip === 'standart' && kCfg?.resim && <img src={kCfg.resim} alt="" style={{ maxWidth: '100%', borderRadius: 8, margin: '4px 0 8px', display: 'block' }} />}
-            {isRit && kTip === 'bilgi' && (o.kaynak === 'Kendi' ? <BilgiKartEdit cfg={kCfg} onSave={(c) => setBilgiCfg(o.id, c)} /> : <BilgiKart cfg={kCfg} onSave={(c) => setBilgiCfg(o.id, c)} />)}
+            {isRit && kTip === 'bilgi' && (o.kaynak === 'Kendi' ? <BilgiKartEdit cfg={kCfg} onSave={bilgiKaydet} /> : <BilgiKart cfg={kCfg} onSave={bilgiKaydet} />)}
             {isRit && kTip === 'video' && <div style={{ margin: '4px 0 8px' }}>
               {(kCfg.url || o.url) && <EmbedVideo url={kCfg.url || o.url} />}
               {!o.sablon_id && <div className="daterow" style={{ marginTop: 6 }}><input value={kartUrlInput} onChange={(e) => setKartUrlInput(e.target.value)} onBlur={() => { if (kartUrlInput.trim() !== ((o.kart_config && o.kart_config.url) || o.url || '')) setRitKartUrl(o.id, kartUrlInput); }} placeholder="Video linki (düzenle)…" style={{ flex: 1 }} /></div>}
