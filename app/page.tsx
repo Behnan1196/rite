@@ -223,12 +223,36 @@ function BilgiKart({ cfg, onSave }: { cfg: any; onSave?: (cfg: any) => void }) {
   const modalYtRef = useRef<HTMLIFrameElement>(null);
   const modalBitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => { if (bitTimerRef.current) clearTimeout(bitTimerRef.current); if (modalBitTimerRef.current) clearTimeout(modalBitTimerRef.current); if (flashTimerRef.current) clearTimeout(flashTimerRef.current); }, []);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // localBas/localBit'in en son değerini setTimeout içinden okumak için: state'i doğrudan okumak eski (kapanış anındaki)
+  // değeri verirdi, bu da art arda hızlı dokunuşlarda bir önceki değişikliğin üzerine yazıp kaybetmesine yol açıyordu.
+  const localRef = useRef<{ bas?: number; bit?: number }>({});
+  useEffect(() => { localRef.current = { bas: localBas, bit: localBit }; }, [localBas, localBit]);
+  useEffect(() => () => { if (bitTimerRef.current) clearTimeout(bitTimerRef.current); if (modalBitTimerRef.current) clearTimeout(modalBitTimerRef.current); if (flashTimerRef.current) clearTimeout(flashTimerRef.current); if (saveTimerRef.current) clearTimeout(saveTimerRef.current); }, []);
   // Modal başka bir cümleye geçtiğinde (önceki/sonraki), o cümlenin gerçek bas/bit'ini yerel taslağa yükler —
   // ince ayar düğmeleri kayıt tamamlanmasını beklemeden bu yerel değeri değiştirip anında geri bildirim verir.
   useEffect(() => {
     if (cumleModal != null) { const c = cumleler[cumleModal]; setLocalBas(c?.bas); setLocalBit(c?.bit); }
   }, [cumleModal]);
+  // Kaydı, cümlenin cfg'deki DİĞER alanlarını (ru/tr/not) değil sadece bas/bit'i localRef'ten alarak yapar — böylece
+  // arka arkaya bas'a sonra bit'e dokunulduğunda ikinci kayıt, birincisinin henüz supabase'den geri dönmemiş hâlini
+  // ("eski" cumleler dizisini) temel alıp ilk değişikliği geri almıyor. Ayrıca 450ms'lik bir gecikmeyle "debounce"
+  // ediliyor: hızlı art arda dokunuşlarda tek bir kayıt gider, ara adımlar network sırasına göre birbirini ezmez.
+  function persistCumle(idx: number) {
+    if (!onSave) return;
+    const { bas, bit } = localRef.current;
+    const arr = cumleler.map((c, j) => j === idx ? { ...c, bas, bit } : c);
+    onSave({ ...cfg, cumleler: arr });
+  }
+  function flushSave() {
+    if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null; if (cumleModal != null) persistCumle(cumleModal); }
+  }
+  function scheduleSave() {
+    if (cumleModal == null) return;
+    const idx = cumleModal;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => { saveTimerRef.current = null; persistCumle(idx); }, 450);
+  }
   // Cümleye dokununca video src'sini değiştirip yeniden yüklemek yerine, halihazırda yüklü YouTube oynatıcısına
   // postMessage komutuyla (seekTo/playVideo) "atla ve oynat" komutu gönderilir — bir iframe yeniden yüklemesi
   // olmadığı için mobil tarayıcıların otomatik oynatma engeline takılmıyor (src değiştirip autoplay=1 denemek takılıyordu).
@@ -253,24 +277,28 @@ function BilgiKart({ cfg, onSave }: { cfg: any; onSave?: (cfg: any) => void }) {
     if (modalBitTimerRef.current) clearTimeout(modalBitTimerRef.current);
     if (localBit != null && localBit > bas) modalBitTimerRef.current = setTimeout(() => modalYtKomut('pauseVideo', []), (localBit - bas + 0.3) * 1000);
   }
-  // İnce ayar: yerel değeri anında değiştirip görünür geri bildirim verir (✓ kaydedildi), kaydetmeyi arkada yapar —
-  // önceki sürümde ekran, kayıt supabase'den geri dönene kadar değişmiyormuş gibi görünüyordu.
+  // İnce ayar: yerel değeri anında değiştirip görünür geri bildirim verir (✓ kaydedildi); asıl kayıt scheduleSave
+  // ile 450ms geciktirilerek arkada yapılır (bkz. persistCumle/scheduleSave üstteki not).
   function modalNudge(alan: 'bas' | 'bit', delta: number) {
     if (cumleModal == null) return;
     const cur = alan === 'bas' ? (localBas ?? 0) : (localBit ?? 0);
     const yeni = Math.max(0, +(cur + delta).toFixed(1));
     if (alan === 'bas') setLocalBas(yeni); else setLocalBit(yeni);
-    if (onSave) {
-      const arr = cumleler.map((c, j) => j === cumleModal ? { ...c, [alan]: yeni } : c);
-      onSave({ ...cfg, cumleler: arr });
-    }
     setSavedFlash(true);
     if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
     flashTimerRef.current = setTimeout(() => setSavedFlash(false), 900);
+    scheduleSave();
   }
+  // Başka cümleye geçmeden ya da modalı kapatmadan önce, bekleyen (henüz 450ms dolmamış) kaydı hemen gönderir —
+  // aksi halde o zamanlayıcı hâlâ ESKİ cümle indeksine kayıtlıyken kullanıcı zaten yeni cümleye geçmiş olabilirdi.
   function cumleGit(i: number) {
     if (i < 0 || i >= cumleler.length) return;
+    flushSave();
     setCumleModal(i);
+  }
+  function cumleKapat() {
+    flushSave();
+    setCumleModal(null);
   }
   return (
     <>
@@ -319,9 +347,9 @@ function BilgiKart({ cfg, onSave }: { cfg: any; onSave?: (cfg: any) => void }) {
       </div>
     </div>
     {acikCumle && (
-      <div className="modal top2" onClick={() => setCumleModal(null)}>
+      <div className="modal top2" onClick={cumleKapat}>
         <div className="sheet small" onClick={(e) => e.stopPropagation()}>
-          <button className="x" onClick={() => setCumleModal(null)}>×</button>
+          <button className="x" onClick={cumleKapat}>×</button>
           {secili && (
             <div style={{ margin: '0 0 10px' }}>
               <EmbedVideo url={secili.url} bas={secili.bas} bit={secili.bit} iframeRef={modalYtRef} />
