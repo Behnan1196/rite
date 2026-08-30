@@ -305,9 +305,8 @@ function BilgiKartEdit({ cfg, onSave }: { cfg: any; onSave: (cfg: any) => void }
   const [jsonOpen, setJsonOpen] = useState(false);
   const [jsonText, setJsonText] = useState('');
   const [jsonMsg, setJsonMsg] = useState('');
-  // Sözlük/cümle/JSON alanları her kartta gösterilmez — dil öğrenimi için kullanılmayan sıradan bir not kalabalıklaşmasın.
-  // İçinde zaten kelime/cümle varsa (ör. bu kart daha önce dolduruldu) otomatik açık gelir, yoksa "+ " ile elle açılır.
-  const [dilAcik, setDilAcik] = useState(sozluk.length > 0 || cumleler.length > 0);
+  // Sözlük/cümle/JSON alanları her kartta gösterilmez — üstteki "📖 Dil öğrenimi" kutucuğu (kart_config.dilOgrenimi) açıp kapatır.
+  const dilAcik = !!cfg?.dilOgrenimi;
   const secili = videolar[Math.min(vidSec, videolar.length - 1)];
   function videoEkle() {
     if (!vUrl.trim()) return;
@@ -439,11 +438,7 @@ function BilgiKartEdit({ cfg, onSave }: { cfg: any; onSave: (cfg: any) => void }
               ) : <span className="chip" style={{ borderStyle: 'dashed' }} onClick={() => setJsonOpen(true)}>+ JSON yapıştır</span>}
             </div>
           </>
-        ) : (
-          <div style={{ margin: '8px 0 0' }}>
-            <span className="chip" style={{ borderStyle: 'dashed' }} onClick={() => setDilAcik(true)}>+ Kelime / cümle ekle (dil öğrenimi)</span>
-          </div>
-        )}
+        ) : null}
       </div>
     </div>
   );
@@ -1385,6 +1380,14 @@ export default function Rite() {
     const patch: any = { kart_tipi: 'bilgi', kart_config: cfg };
     await supabase.from('dog_rituals').update(patch).eq('id', id);
     patchDetay(patch);
+    loadData(client.id);
+  }
+  // "📖 Dil öğrenimi" kutucuğu — BilgiKartEdit içindeki sözlük/cümle/JSON alanlarını açıp kapatır, veri silinmez.
+  async function setDilOgrenimi(id: string, on: boolean) {
+    if (!client) return;
+    const cfg = { ...(detay?.obj?.kart_config || {}), dilOgrenimi: on };
+    await supabase.from('dog_rituals').update({ kart_config: cfg }).eq('id', id);
+    patchDetay({ kart_config: cfg });
     loadData(client.id);
   }
   // Randevu alanlarından biri değiştiğinde (RandevuKartEdit'ten) — diğer alanları koruyarak kart_config'i günceller.
@@ -2547,6 +2550,11 @@ export default function Rite() {
                 </div>
               );
             })()}
+            {isRit && o.kaynak === 'Kendi' && kTip === 'bilgi' && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, margin: '-6px 0 10px' }}>
+                <input type="checkbox" style={{ width: 'auto' }} checked={!!kCfg?.dilOgrenimi} onChange={(e) => setDilOgrenimi(o.id, e.target.checked)} /> 📖 Dil öğrenimi (sözlük / cümle)
+              </label>
+            )}
 
             {isRit && kTip === 'standart' && kCfg?.resim && <img src={kCfg.resim} alt="" style={{ maxWidth: '100%', borderRadius: 8, margin: '4px 0 8px', display: 'block' }} />}
             {isRit && kTip === 'bilgi' && (o.kaynak === 'Kendi' ? <BilgiKartEdit cfg={kCfg} onSave={(c) => setBilgiCfg(o.id, c)} /> : <BilgiKart cfg={kCfg} />)}
