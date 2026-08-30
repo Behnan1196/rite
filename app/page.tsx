@@ -213,11 +213,22 @@ function BilgiKart({ cfg, onSave }: { cfg: any; onSave?: (cfg: any) => void }) {
   const cumleler: { ru: string; tr?: string; bas?: number; bit?: number; not?: string }[] = cfg?.cumleler || [];
   const [vidSec, setVidSec] = useState(0);
   const [cumleModal, setCumleModal] = useState<number | null>(null);
+  const [localBas, setLocalBas] = useState<number | undefined>(undefined);
+  const [localBit, setLocalBit] = useState<number | undefined>(undefined);
+  const [savedFlash, setSavedFlash] = useState(false);
   const secili = videolar[Math.min(vidSec, videolar.length - 1)];
   const acikCumle = cumleModal != null ? cumleler[cumleModal] : null;
   const ytRef = useRef<HTMLIFrameElement>(null);
   const bitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => { if (bitTimerRef.current) clearTimeout(bitTimerRef.current); }, []);
+  const modalYtRef = useRef<HTMLIFrameElement>(null);
+  const modalBitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (bitTimerRef.current) clearTimeout(bitTimerRef.current); if (modalBitTimerRef.current) clearTimeout(modalBitTimerRef.current); if (flashTimerRef.current) clearTimeout(flashTimerRef.current); }, []);
+  // Modal başka bir cümleye geçtiğinde (önceki/sonraki), o cümlenin gerçek bas/bit'ini yerel taslağa yükler —
+  // ince ayar düğmeleri kayıt tamamlanmasını beklemeden bu yerel değeri değiştirip anında geri bildirim verir.
+  useEffect(() => {
+    if (cumleModal != null) { const c = cumleler[cumleModal]; setLocalBas(c?.bas); setLocalBit(c?.bit); }
+  }, [cumleModal]);
   // Cümleye dokununca video src'sini değiştirip yeniden yüklemek yerine, halihazırda yüklü YouTube oynatıcısına
   // postMessage komutuyla (seekTo/playVideo) "atla ve oynat" komutu gönderilir — bir iframe yeniden yüklemesi
   // olmadığı için mobil tarayıcıların otomatik oynatma engeline takılmıyor (src değiştirip autoplay=1 denemek takılıyordu).
@@ -231,12 +242,35 @@ function BilgiKart({ cfg, onSave }: { cfg: any; onSave?: (cfg: any) => void }) {
     if (bitTimerRef.current) clearTimeout(bitTimerRef.current);
     if (c.bit != null && c.bit > bas) bitTimerRef.current = setTimeout(() => ytKomut('pauseVideo', []), (c.bit - bas + 0.3) * 1000);
   }
-  // Meridyen'deki ince ayarla aynı desen: hedef saniyeyi doğrudan düğmenin üstünde gösterir. onSave verilmişse
-  // (Rite'ta doğrudan düzenleme açıksa) kart_config'e kaydeder.
-  function cumleAyarla(i: number, alan: 'bas' | 'bit', delta: number) {
-    if (!onSave) return;
-    const yeni = cumleler.map((c, j) => j === i ? { ...c, [alan]: Math.max(0, +(((c as any)[alan] ?? 0) + delta).toFixed(1)) } : c);
-    onSave({ ...cfg, cumleler: yeni });
+  // Modal içindeki video, listedekinden ayrı bir iframe/ref kullanır — modal açıkken oradaki oynatıcıyı komutlar.
+  function modalYtKomut(func: string, args: any[] = []) {
+    try { modalYtRef.current?.contentWindow?.postMessage(JSON.stringify({ event: 'command', func, args }), '*'); } catch (_) { /* sessiz */ }
+  }
+  function modalOynat() {
+    const bas = localBas || 0;
+    modalYtKomut('seekTo', [bas, true]);
+    modalYtKomut('playVideo', []);
+    if (modalBitTimerRef.current) clearTimeout(modalBitTimerRef.current);
+    if (localBit != null && localBit > bas) modalBitTimerRef.current = setTimeout(() => modalYtKomut('pauseVideo', []), (localBit - bas + 0.3) * 1000);
+  }
+  // İnce ayar: yerel değeri anında değiştirip görünür geri bildirim verir (✓ kaydedildi), kaydetmeyi arkada yapar —
+  // önceki sürümde ekran, kayıt supabase'den geri dönene kadar değişmiyormuş gibi görünüyordu.
+  function modalNudge(alan: 'bas' | 'bit', delta: number) {
+    if (cumleModal == null) return;
+    const cur = alan === 'bas' ? (localBas ?? 0) : (localBit ?? 0);
+    const yeni = Math.max(0, +(cur + delta).toFixed(1));
+    if (alan === 'bas') setLocalBas(yeni); else setLocalBit(yeni);
+    if (onSave) {
+      const arr = cumleler.map((c, j) => j === cumleModal ? { ...c, [alan]: yeni } : c);
+      onSave({ ...cfg, cumleler: arr });
+    }
+    setSavedFlash(true);
+    if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+    flashTimerRef.current = setTimeout(() => setSavedFlash(false), 900);
+  }
+  function cumleGit(i: number) {
+    if (i < 0 || i >= cumleler.length) return;
+    setCumleModal(i);
   }
   return (
     <>
@@ -288,32 +322,44 @@ function BilgiKart({ cfg, onSave }: { cfg: any; onSave?: (cfg: any) => void }) {
       <div className="modal top2" onClick={() => setCumleModal(null)}>
         <div className="sheet small" onClick={(e) => e.stopPropagation()}>
           <button className="x" onClick={() => setCumleModal(null)}>×</button>
-          <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.4, marginTop: 6 }}>{acikCumle.ru}</div>
-          {acikCumle.tr && <div style={{ fontSize: 17, color: 'var(--ink)', marginTop: 8 }}>{acikCumle.tr}</div>}
-          {acikCumle.not && <div className="note" style={{ marginTop: 8, fontStyle: 'italic', fontSize: 13 }}>{acikCumle.not}</div>}
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 14, flexWrap: 'wrap' }}>
-            <button className="btn ghost sm" onClick={() => speak(acikCumle.ru)}>🔊 Dinle</button>
-            {(acikCumle.bas != null || acikCumle.bit != null) && <button className="btn ghost sm" onClick={() => { cumleOynat(acikCumle); setCumleModal(null); }}>▶ Videoda oynat</button>}
-          </div>
-          {onSave && (acikCumle.bas != null || acikCumle.bit != null) && (
-            <div style={{ marginTop: 16, borderTop: '1px solid var(--line)', paddingTop: 12 }}>
-              <label className="fldlbl" style={{ marginTop: 0 }}>Zamanlama</label>
-              {acikCumle.bas != null && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '4px 0', flexWrap: 'wrap' }}>
-                  <span className="note" style={{ margin: 0, minWidth: 110 }}>Başlangıç {saniyeStr(acikCumle.bas)}</span>
-                  <button className="btn ghost mini" onClick={() => cumleAyarla(cumleModal as number, 'bas', -0.5)}>→ {saniyeStr(Math.max(0, acikCumle.bas - 0.5))}</button>
-                  <button className="btn ghost mini" onClick={() => cumleAyarla(cumleModal as number, 'bas', 0.5)}>→ {saniyeStr(acikCumle.bas + 0.5)}</button>
-                </div>
-              )}
-              {acikCumle.bit != null && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '4px 0', flexWrap: 'wrap' }}>
-                  <span className="note" style={{ margin: 0, minWidth: 110 }}>Bitiş {saniyeStr(acikCumle.bit)}</span>
-                  <button className="btn ghost mini" onClick={() => cumleAyarla(cumleModal as number, 'bit', -0.5)}>→ {saniyeStr(Math.max(0, acikCumle.bit - 0.5))}</button>
-                  <button className="btn ghost mini" onClick={() => cumleAyarla(cumleModal as number, 'bit', 0.5)}>→ {saniyeStr(acikCumle.bit + 0.5)}</button>
-                </div>
-              )}
+          {secili && (
+            <div style={{ margin: '0 0 10px' }}>
+              <EmbedVideo url={secili.url} bas={secili.bas} bit={secili.bit} iframeRef={modalYtRef} />
             </div>
           )}
+          <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.4 }}>{acikCumle.ru}</div>
+          {acikCumle.tr && <div style={{ fontSize: 17, color: 'var(--ink)', marginTop: 8 }}>{acikCumle.tr}</div>}
+          {acikCumle.not && <div className="note" style={{ marginTop: 8, fontStyle: 'italic', fontSize: 13 }}>{acikCumle.not}</div>}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 12, flexWrap: 'wrap' }}>
+            <button className="btn ghost sm" onClick={() => speak(acikCumle.ru)}>🔊 Dinle</button>
+            {(localBas != null || localBit != null) && <button className="btn sm" onClick={modalOynat}>▶ Oynat</button>}
+          </div>
+          {onSave && (localBas != null || localBit != null) && (
+            <div style={{ marginTop: 12, borderTop: '1px solid var(--line)', paddingTop: 10, display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+              {localBas != null && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span className="note" style={{ margin: 0 }}>Başl.</span>
+                  <button className="btn ghost sm" style={{ padding: '4px 11px' }} onClick={() => modalNudge('bas', -0.5)}>−</button>
+                  <b style={{ minWidth: 48, textAlign: 'center', display: 'inline-block', fontSize: 13 }}>{saniyeStr(localBas)}</b>
+                  <button className="btn ghost sm" style={{ padding: '4px 11px' }} onClick={() => modalNudge('bas', 0.5)}>+</button>
+                </div>
+              )}
+              {localBit != null && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span className="note" style={{ margin: 0 }}>Bitiş</span>
+                  <button className="btn ghost sm" style={{ padding: '4px 11px' }} onClick={() => modalNudge('bit', -0.5)}>−</button>
+                  <b style={{ minWidth: 48, textAlign: 'center', display: 'inline-block', fontSize: 13 }}>{saniyeStr(localBit)}</b>
+                  <button className="btn ghost sm" style={{ padding: '4px 11px' }} onClick={() => modalNudge('bit', 0.5)}>+</button>
+                </div>
+              )}
+              <span style={{ fontSize: 12, color: '#1f7a4d', fontWeight: 700, visibility: savedFlash ? 'visible' : 'hidden' }}>✓ kaydedildi</span>
+            </div>
+          )}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 18 }}>
+            <button className="btn ghost sm" disabled={cumleModal === 0} onClick={() => cumleGit((cumleModal as number) - 1)}>‹ Önceki</button>
+            <span className="note" style={{ margin: 0 }}>{(cumleModal as number) + 1} / {cumleler.length}</span>
+            <button className="btn ghost sm" disabled={cumleModal === cumleler.length - 1} onClick={() => cumleGit((cumleModal as number) + 1)}>Sonraki ›</button>
+          </div>
         </div>
       </div>
     )}
