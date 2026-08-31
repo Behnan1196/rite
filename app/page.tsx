@@ -50,6 +50,13 @@ const OLCU_ALAN: Record<string, string> = { kilo: 'Beslenme', bel: 'Beslenme', k
 const ALAN_SIRA = ['Beslenme', 'Fitness', 'Fizyo', 'Psikoloji', 'Mental', 'Genel', 'Diğer'];
 // Rite Studio'da kart_config.dikey olarak seçilen alan etiketi → okunur ad (bkz app-meridyen/app/atama/page.tsx DIKEY_OPTS).
 const DIKEY_LABEL: Record<string, string> = { beslenme: 'Beslenme', fitness: 'Fitness', fizyo: 'Fizyo', psikoloji: 'Psikoloji', mental: 'Mental', genel: 'Genel' };
+// kart_config.stil — Meridyen Studio'da seçilen renk/tema preseti (bg = açık zemin, ac = vurgu rengi, tx = yazı rengi). Liste Meridyen'deki STIL_PRESETS ile aynı kalmalı.
+const STIL_LOOKUP: Record<string, { bg: string; ac: string; tx: string }> = {
+  yesil: { bg: '#e9f4e6', ac: '#5f8a4e', tx: '#2f4a2a' },
+  turuncu: { bg: '#fbeee0', ac: '#d98a3d', tx: '#5c4326' },
+  mavi: { bg: '#e8f0fb', ac: '#4c7fc7', tx: '#2c3e56' },
+  mor: { bg: '#f1e9f7', ac: '#8a5fb0', tx: '#4a2f5c' },
+};
 const RANDEVU_FORMAT: [string, string][] = [['online', '💻 Online'], ['yuz_yuze', '📍 Yüz yüze']];
 // 5-4-3-2-1 topraklama: sabit duyusal kategori listesi.
 const TOPRAK_ADIM: [string, string][] = [['5', '5 şey GÖR'], ['4', '4 şey DOKUN'], ['3', '3 şey DUY'], ['2', '2 şey KOKLA'], ['1', '1 şey TAT']];
@@ -1886,9 +1893,10 @@ export default function Rite() {
     const vurl = tip === 'video' ? (cfg.url || rt.url) : rt.url;
     const ipucu = tip === 'anket' ? '📋 doldur' : tip === 'coktan' ? '❓ yanıtla' : tip === 'diyet' ? '🍽 öğün' : tip === 'tarif' ? '🍳 tarif' : tip === 'video' ? '🎬 izle' : tip === 'nefes' ? '🫁 nefes' : tip === 'ruhhali' ? '🙂 check-in' : tip === 'workout' ? '🏋️ egzersiz' : tip === 'bilgi' ? '📄 oku' : tip === 'sukran' ? '🙏 şükran' : tip === 'topraklama' ? '🖐 topraklan' : tip === 'pomodoro' ? '🍅 odaklan' : tip === 'beden' ? '🧘 taransın' : tip === 'uykuoncesi' ? '🌙 hazırlan' : tip === 'su' ? '💧 iç' : tip === 'maruz' ? '🎯 uygula' : tip === 'niyet' ? '🧭 niyet belirle' : tip === 'randevu' ? '📅 randevu' : '';
     const meridyen = rt.kaynak === 'Meridyen'; // sağlayıcı-kaynaklı kart — kişisel kartlardan çerçeveyle ayrıştır
+    const stilP = cfg.stil ? STIL_LOOKUP[cfg.stil] : null;
     return (
       <div>
-        <div className={'rit' + (meridyen ? ' rit-mer' : '')}>
+        <div className={'rit' + (meridyen && !stilP ? ' rit-mer' : '')} style={stilP ? { borderLeft: '3px solid ' + stilP.ac, paddingLeft: 9 } : undefined}>
           <div className={'chk' + (done ? ' on' : '')} onClick={() => (noDone ? openRit(rt) : toggleRit(rt.id))} title={noDone ? 'Aç' : 'Yaptım'}>{done ? '✓' : (noDone ? kartIkon(tip) : '')}</div>
           <div style={{ flex: 1, cursor: 'pointer' }} onClick={() => openRit(rt)}>
             <div className="t">{rt.ad}
@@ -2532,9 +2540,10 @@ export default function Rite() {
         // Meridyen'den (koçtan) gelen kart/program — doğrudan atanmış ya da şablona bağlı (sablon_id) — danışan
         // tarafından başka birine paylaşılamaz. Kendi yazdığı ya da bir arkadaşından aldığı kişisel kartlar serbest.
         const paylasilamaz = isRit ? (o.kaynak === 'Meridyen' || o.kaynak === 'Program' || !!o.sablon_id) : !!o.sablon_id;
+        const stilP = kCfg.stil ? STIL_LOOKUP[kCfg.stil] : null;
         return (
         <div className="modal full" onClick={() => setDetay(null)}>
-          <div className="sheet fullsheet" onClick={(e) => e.stopPropagation()}>
+          <div className="sheet fullsheet" onClick={(e) => e.stopPropagation()} style={stilP ? { borderTop: '4px solid ' + stilP.ac } : undefined}>
             <div className="sheetgrip" onClick={() => setDetay(null)} />
             <button className="x" onClick={() => setDetay(null)}>×</button>
             {isRit ? (
