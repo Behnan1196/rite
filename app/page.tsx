@@ -698,6 +698,11 @@ export default function Rite() {
   const [mezunModal, setMezunModal] = useState<any>(null);
   const [mezunPuan, setMezunPuan] = useState(0);
   const [remInput, setRemInput] = useState('');
+  // 🎓/🔔 ikonları artık Zamanlama formundaki checkbox/saat alanlarının yerini alıyor — dolu ikon zaten
+  // açık olan bir şeyi (alışkanlık/bildirim) temsil ediyor, dokununca küçük bir seçenek menüsü açılıyor
+  // (kapat vs. daha ağır bir işlem gibi mezun et); boş/soluk ikon dokununca direkt açıyor, çünkü o zararsız.
+  const [habitMenuFor, setHabitMenuFor] = useState<any>(null);
+  const [remMenuFor, setRemMenuFor] = useState<any>(null);
   const [urlInput, setUrlInput] = useState('');
   const [adInput, setAdInput] = useState('');
   const [aciklamaInput, setAciklamaInput] = useState('');
@@ -2284,7 +2289,16 @@ export default function Rite() {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, margin: '2px 0 10px' }}>
                 <div className="note" style={{ cursor: 'pointer' }} onClick={() => setZamanOpen(true)}>{gunOzet} · değiştir ✎</div>
                 <div style={{ display: 'flex', gap: 6, flex: '0 0 auto' }}>
-                  {!o.mezun && o.aliskanlik && <button className="btn ghost sm" onClick={() => { setMezunPuan(0); setMezunModal(o); }} title="Mezun et" aria-label="Mezun et">🎓</button>}
+                  {!o.mezun && (o.aliskanlik ? (
+                    <button className="btn ghost sm" onClick={() => setHabitMenuFor(o)} title="Alışkanlık seçenekleri" aria-label="Alışkanlık seçenekleri">🎓</button>
+                  ) : (
+                    <button className="btn ghost sm" style={{ opacity: .4 }} onClick={() => setRitAliskanlik(o.id, true)} title="Alışkanlık yap" aria-label="Alışkanlık yap">🎓</button>
+                  ))}
+                  {o.hatirlatma_saat ? (
+                    <button className="btn ghost sm" onClick={() => { setRemInput(o.hatirlatma_saat || ''); setRemMenuFor({ ...o, _randevu: kTip === 'randevu' || !!kCfg?.randevu }); }} title="Bildirim seçenekleri" aria-label="Bildirim seçenekleri">🔔</button>
+                  ) : (
+                    <button className="btn ghost sm" style={{ opacity: .4 }} onClick={() => { setRemInput(''); setRemMenuFor({ ...o, _randevu: kTip === 'randevu' || !!kCfg?.randevu }); }} title="Bildirim ekle" aria-label="Bildirim ekle">🔔</button>
+                  )}
                   {!paylasilamaz && <button className="btn ghost sm" onClick={() => { setPaylasOpen(true); setKMsg(''); }} title="Paylaş" aria-label="Paylaş">↪️</button>}
                 </div>
               </div>
@@ -2367,17 +2381,7 @@ export default function Rite() {
                     })}
                   </div>
                 </div>
-                <div className="kv"><div className="k">Takip</div>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}><input type="checkbox" style={{ width: 'auto' }} checked={!!o.aliskanlik} onChange={(e) => setRitAliskanlik(o.id, e.target.checked)} /> Alışkanlık olarak haftalık takipte göster</label>
-                </div>
-                <div className="kv"><div className="k">{(kTip === 'randevu' || o.kart_config?.randevu) ? 'Randevu saati' : 'Günlük hatırlatma'}</div>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <input type="time" style={{ width: 'auto' }} value={remInput} onChange={(e) => setRemInput(e.target.value)} />
-                    <button className="btn sm" disabled={remInput === (o.hatirlatma_saat || '')} onClick={() => setRitReminder(o.id, remInput)}>Kaydet</button>
-                    {o.hatirlatma_saat && <button className="btn sm ghost" onClick={() => { setRemInput(''); setRitReminder(o.id, ''); }}>Kapat</button>}
-                  </div>
-                  <div className="note">Uygulama kapalıyken de bildirim gelir (push açıksa). Saat: Türkiye saati.</div>
-                </div>
+                <div className="note" style={{ marginTop: 2 }}>Alışkanlık ve bildirim ayarları artık kart detayındaki 🎓 ve 🔔 ikonlarından yapılıyor.</div>
               </div>
               </div>
             )}
@@ -2444,6 +2448,41 @@ export default function Rite() {
         </div>
         );
       })()}
+
+      {habitMenuFor && (
+        <div className="modal top2" onClick={() => setHabitMenuFor(null)}>
+          <div className="sheet small" onClick={(e) => e.stopPropagation()}>
+            <button className="x" onClick={() => setHabitMenuFor(null)}>×</button>
+            <h3 style={{ marginBottom: 2 }}>🎓 {habitMenuFor.ad}</h3>
+            <p className="note" style={{ marginTop: 0 }}>Bu bir alışkanlık — ne yapmak istersin?</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+              <button className="btn ghost sm" onClick={() => { setRitAliskanlik(habitMenuFor.id, false); setHabitMenuFor(null); }}>↩️ Alışkanlıktan çıkar</button>
+              <button className="btn" onClick={() => { setMezunPuan(0); setMezunModal(habitMenuFor); setHabitMenuFor(null); }}>🎓 Mezun et</button>
+              <button className="btn ghost sm" onClick={() => setHabitMenuFor(null)}>Vazgeç</button>
+            </div>
+            <div className="note" style={{ marginTop: 8 }}>Alışkanlıktan çıkarmak zararsız — istersen tekrar işaretlersin. Mezun et ise ritüeli ajandadan tamamen kaldırır.</div>
+          </div>
+        </div>
+      )}
+
+      {remMenuFor && (
+        <div className="modal top2" onClick={() => setRemMenuFor(null)}>
+          <div className="sheet small" onClick={(e) => e.stopPropagation()}>
+            <button className="x" onClick={() => setRemMenuFor(null)}>×</button>
+            <h3 style={{ marginBottom: 2 }}>🔔 {remMenuFor.ad}</h3>
+            <p className="note" style={{ marginTop: 0 }}>{remMenuFor._randevu ? 'Randevu saati' : 'Günlük hatırlatma saati'}</p>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '8px 0' }}>
+              <input type="time" style={{ width: 'auto' }} value={remInput} onChange={(e) => setRemInput(e.target.value)} />
+            </div>
+            <div className="note" style={{ marginBottom: 10 }}>Uygulama kapalıyken de bildirim gelir (push açıksa). Saat: Türkiye saati.</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <button className="btn" disabled={!remInput || remInput === (remMenuFor.hatirlatma_saat || '')} onClick={() => { setRitReminder(remMenuFor.id, remInput); setRemMenuFor(null); }}>Kaydet</button>
+              {remMenuFor.hatirlatma_saat && <button className="btn ghost sm" onClick={() => { setRitReminder(remMenuFor.id, ''); setRemMenuFor(null); }}>Bildirimi kapat</button>}
+              <button className="btn ghost sm" onClick={() => setRemMenuFor(null)}>Vazgeç</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {mezunModal && (
         <div className="modal top2" onClick={() => setMezunModal(null)}>
