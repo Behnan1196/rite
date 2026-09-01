@@ -251,8 +251,8 @@ function BilgiKart({ cfg, onSave }: { cfg: any; onSave?: (cfg: any) => void }) {
       </div>
     </div>
     {acikCumle && (
-      <div className="modal top2 full" onClick={cumleKapat}>
-        <div className="sheet cumlesheet" onClick={(e) => e.stopPropagation()}>
+      <div className="modal top2 full" onMouseDown={cumleKapat}>
+        <div className="sheet cumlesheet" onMouseDown={(e) => e.stopPropagation()}>
           <button className="x" onClick={cumleKapat}>×</button>
           <div className="cumlebody">
             {secili && (

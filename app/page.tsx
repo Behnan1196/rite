@@ -2085,8 +2085,8 @@ export default function Rite() {
 
         {/* ---------- INBOX ---------- */}
         {inboxOpen && (
-          <div className="modal top" onClick={() => setInboxOpen(false)}>
-          <div className="sheet topsheet" onClick={(e) => e.stopPropagation()}>
+          <div className="modal top" onMouseDown={() => setInboxOpen(false)}>
+          <div className="sheet topsheet" onMouseDown={(e) => e.stopPropagation()}>
             <button className="x" onClick={() => setInboxOpen(false)}>×</button>
             <h2 style={{ marginTop: 2 }}>📥 Inbox</h2>
             <div className="note" style={{ marginTop: 0 }}>Başkalarının seninle paylaştığı kartlar burada birikir. <button className="btn ghost sm" style={{ marginLeft: 6 }} onClick={() => client && loadInbox(client.id)}>🔄 Yenile</button></div>
@@ -2130,8 +2130,8 @@ export default function Rite() {
         )}
 
         {ibDetay && (
-          <div className="modal top" onClick={() => setIbDetay(null)}>
-          <div className="sheet topsheet" onClick={(e) => e.stopPropagation()}>
+          <div className="modal top" onMouseDown={() => setIbDetay(null)}>
+          <div className="sheet topsheet" onMouseDown={(e) => e.stopPropagation()}>
             <button className="x" onClick={() => setIbDetay(null)}>×</button>
             <input className="detbaslik" value={ibdAd} onChange={(e) => setIbdAd(e.target.value)} onBlur={ibKaydet} placeholder="Başlık" />
             {ibDetay.payload?.resim && <img src={ibDetay.payload.resim} alt="" style={{ maxWidth: '100%', borderRadius: 8, margin: '4px 0', display: 'block' }} />}
@@ -2249,8 +2249,8 @@ export default function Rite() {
         const paylasilamaz = isRit ? (o.kaynak === 'Meridyen' || o.kaynak === 'Program' || !!o.sablon_id) : !!o.sablon_id;
         const stilP = kCfg.stil ? STIL_LOOKUP[kCfg.stil] : null;
         return (
-        <div className="modal full" onClick={() => setDetay(null)}>
-          <div className="sheet fullsheet" onClick={(e) => e.stopPropagation()} style={stilP ? { borderTop: '4px solid ' + stilP.ac } : undefined}>
+        <div className="modal full" onMouseDown={() => setDetay(null)}>
+          <div className="sheet fullsheet" onMouseDown={(e) => e.stopPropagation()} style={stilP ? { borderTop: '4px solid ' + stilP.ac } : undefined}>
             <div className="sheetgrip" onClick={() => setDetay(null)} />
             <button className="x" onClick={() => setDetay(null)}>×</button>
             {isRit ? (
@@ -2349,8 +2349,8 @@ export default function Rite() {
             )}
 
             {isRit && zamanOpen && (
-              <div className="modal top2" onClick={() => setZamanOpen(false)}>
-              <div className="sheet" onClick={(e) => e.stopPropagation()}>
+              <div className="modal top2" onMouseDown={() => setZamanOpen(false)}>
+              <div className="sheet" onMouseDown={(e) => e.stopPropagation()}>
                 <button className="x" onClick={() => setZamanOpen(false)}>×</button>
                 <h3 style={{ marginBottom: 6 }}>🕐 Zamanlama</h3>
                 <div className="kv"><div className="k">Hangi güne taşı</div>
@@ -2381,7 +2381,6 @@ export default function Rite() {
                     })}
                   </div>
                 </div>
-                <div className="note" style={{ marginTop: 2 }}>Alışkanlık ve bildirim ayarları artık kart detayındaki 🎓 ve 🔔 ikonlarından yapılıyor.</div>
               </div>
               </div>
             )}
@@ -2417,8 +2416,8 @@ export default function Rite() {
             )}
 
             {paylasOpen && (
-              <div className="modal top2" onClick={() => setPaylasOpen(false)}>
-              <div className="sheet small" onClick={(e) => e.stopPropagation()}>
+              <div className="modal top2" onMouseDown={() => setPaylasOpen(false)}>
+              <div className="sheet small" onMouseDown={(e) => e.stopPropagation()}>
                 <button className="x" onClick={() => setPaylasOpen(false)}>×</button>
                 <h3 style={{ marginBottom: 4 }}>📤 Paylaş</h3>
                 <p className="note" style={{ marginTop: 0 }}><b>{o.ad}</b></p>
@@ -2450,8 +2449,8 @@ export default function Rite() {
       })()}
 
       {habitMenuFor && (
-        <div className="modal top2" onClick={() => setHabitMenuFor(null)}>
-          <div className="sheet small" onClick={(e) => e.stopPropagation()}>
+        <div className="modal top2" onMouseDown={() => setHabitMenuFor(null)}>
+          <div className="sheet small" onMouseDown={(e) => e.stopPropagation()}>
             <button className="x" onClick={() => setHabitMenuFor(null)}>×</button>
             <h3 style={{ marginBottom: 2 }}>🎓 {habitMenuFor.ad}</h3>
             <p className="note" style={{ marginTop: 0 }}>Bu bir alışkanlık — ne yapmak istersin?</p>
@@ -2466,8 +2465,8 @@ export default function Rite() {
       )}
 
       {remMenuFor && (
-        <div className="modal top2" onClick={() => setRemMenuFor(null)}>
-          <div className="sheet small" onClick={(e) => e.stopPropagation()}>
+        <div className="modal top2" onMouseDown={() => setRemMenuFor(null)}>
+          <div className="sheet small" onMouseDown={(e) => e.stopPropagation()}>
             <button className="x" onClick={() => setRemMenuFor(null)}>×</button>
             <h3 style={{ marginBottom: 2 }}>🔔 {remMenuFor.ad}</h3>
             <p className="note" style={{ marginTop: 0 }}>{remMenuFor._randevu ? 'Randevu saati' : 'Günlük hatırlatma saati'}</p>
@@ -2485,8 +2484,8 @@ export default function Rite() {
       )}
 
       {mezunModal && (
-        <div className="modal top2" onClick={() => setMezunModal(null)}>
-          <div className="sheet small" onClick={(e) => e.stopPropagation()}>
+        <div className="modal top2" onMouseDown={() => setMezunModal(null)}>
+          <div className="sheet small" onMouseDown={(e) => e.stopPropagation()}>
             <button className="x" onClick={() => setMezunModal(null)}>×</button>
             <h3 style={{ marginBottom: 2 }}>🎓 Mezun et</h3>
             <p className="note" style={{ marginTop: 0 }}><b>{mezunModal.ad}</b> — bu alışkanlık ne kadar yararlı/tatmin ediciydi? Puanla, havuzuna bu bilgiyle dönsün.</p>
@@ -2503,8 +2502,8 @@ export default function Rite() {
       )}
 
       {studioOpen && (
-        <div className="modal" onClick={() => { studioReset(); setStudioOpen(false); }}>
-          <div className="sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="modal" onMouseDown={() => { studioReset(); setStudioOpen(false); }}>
+          <div className="sheet" onMouseDown={(e) => e.stopPropagation()}>
             <button className="x" onClick={() => { studioReset(); setStudioOpen(false); }}>×</button>
             <h2>{kEditId ? 'Aktiviteyi düzenle' : 'Kişisel aktivite'}</h2>
             <p className="note" style={{ marginTop: 0 }}>Kendi aktiviteni notlarıyla oluştur; havuzuna kaydedersin, sonra ajandana eklersin.</p>
