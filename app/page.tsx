@@ -2260,7 +2260,7 @@ export default function Rite() {
               </div>
             ) : <h2 style={{ paddingRight: 34 }}>{o.ad}</h2>}
             <div className="m">
-              {isRit ? (o.kaynak || '') : (
+              {isRit ? null : (
                 personal ? (
                   <span style={{ cursor: 'pointer' }} onClick={() => { setGrupEditVal(personalGroupOf(o)); setGrupEditOpen(true); }}>{personalGroupOf(o)} · değiştir ✎</span>
                 ) : (o.grup || '')
@@ -2286,16 +2286,16 @@ export default function Rite() {
             ))}
 
             {isRit && (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, margin: '2px 0 10px' }}>
-                <div className="note" style={{ cursor: 'pointer' }} onClick={() => setZamanOpen(true)}>{gunOzet} · değiştir ✎</div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, margin: '2px 0 10px' }}>
                 <div style={{ display: 'flex', gap: 6, flex: '0 0 auto' }}>
+                  <button className="btn ghost sm" onClick={() => setZamanOpen(true)} title={gunOzet} aria-label="Zamanlama">🕐</button>
                   {!o.mezun && (o.aliskanlik ? (
                     <button className="btn ghost sm" onClick={() => setHabitMenuFor(o)} title="Alışkanlık seçenekleri" aria-label="Alışkanlık seçenekleri">🎓</button>
                   ) : (
                     <button className="btn ghost sm" style={{ opacity: .4 }} onClick={() => setRitAliskanlik(o.id, true)} title="Alışkanlık yap" aria-label="Alışkanlık yap">🎓</button>
                   ))}
                   {o.hatirlatma_saat ? (
-                    <button className="btn ghost sm" onClick={() => { setRemInput(o.hatirlatma_saat || ''); setRemMenuFor({ ...o, _randevu: kTip === 'randevu' || !!kCfg?.randevu }); }} title="Bildirim seçenekleri" aria-label="Bildirim seçenekleri">🔔</button>
+                    <button className="btn ghost sm" onClick={() => { setRemInput(o.hatirlatma_saat || ''); setRemMenuFor({ ...o, _randevu: kTip === 'randevu' || !!kCfg?.randevu }); }} title="Bildirim seçenekleri" aria-label="Bildirim seçenekleri">🔔 {o.hatirlatma_saat}</button>
                   ) : (
                     <button className="btn ghost sm" style={{ opacity: .4 }} onClick={() => { setRemInput(''); setRemMenuFor({ ...o, _randevu: kTip === 'randevu' || !!kCfg?.randevu }); }} title="Bildirim ekle" aria-label="Bildirim ekle">🔔</button>
                   )}
