@@ -1860,10 +1860,7 @@ export default function Rite() {
         {/* ---------- HAVUZ ---------- */}
         {screen === 'havuz' && (
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-              <h2 style={{ margin: 0 }}>Aktivite Havuzu</h2>
-              <button className="btn sm" onClick={() => setScreen('ajanda')}>＋ Ajandada oluştur</button>
-            </div>
+            <h2>Aktivite Havuzu</h2>
             <p className="sub">Yeni bir kişisel kart Ajanda&apos;daki <b>+</b> ile oluşturulur. Burada aktiviteler gruplar halinde durur.</p>
             <div className="tabs">
               {personalGroups.map((g) => <div key={g} className={'tab' + (actGroup === g ? ' on' : '')} onClick={() => setActGroup(g)}>{g}</div>)}
@@ -1893,21 +1890,14 @@ export default function Rite() {
         {screen === 'destek' && (
           <div>
             <h2>Destek</h2>
-            <p className="sub">Rite bir wellbeing merkezine ya da bağımsız uzmana bağlanır. Merkeze bağlıysan tüm hizmetler tek seferde açılır. Anonim kalırsın.</p>
-            <div className="prov">
-              <div className="ptop"><div className="pic">M</div><div><div className="pn">Meridyen Wellbeing Center</div><div className="pd">Beslenme + fitness + wellbeing + klinik kapı — koordineli</div></div><span className="pstat" style={{ color: 'var(--green)' }}>✓ bağlı</span></div>
-              <div className="rowbtns"><button className="btn ghost sm" onClick={() => setScreen('ogun')}>Öğün Planı →</button><button className="btn ghost sm" onClick={() => setScreen('gelisim')}>Gelişim →</button></div>
-            </div>
-            <div className="prov dim"><div className="ptop"><div className="pic" style={{ background: 'var(--green)' }}>D</div><div><div className="pn">Bağımsız diyetisyen</div><div className="pd">Tek hizmet — yalnız öğün planı</div></div><span className="pstat">yakında</span></div></div>
-            <div className="prov dim"><div className="ptop"><div className="pic">F</div><div><div className="pn">Fitness / Fizyo / Psikoloji</div><div className="pd">Program teslimatı</div></div><span className="pstat">yakında</span></div></div>
-            <div className="soul"><b>Rite seni bağlamaz.</b> Bağlantı opsiyonel; istediğinde <button className="linkbtn" onClick={cikis}>kes</button>, verin sende kalır.</div>
+            <div className="empty">🌱<br />Yakında burada yeni bir şeyler olacak.</div>
           </div>
         )}
 
         {/* ---------- ÖĞÜN PLANI ---------- */}
         {screen === 'ogun' && (
           <div>
-            <button className="linkbtn" onClick={() => setScreen('destek')}>‹ Destek</button>
+            <button className="linkbtn" onClick={() => setScreen('bilgi')}>‹ Ayarlar</button>
             <h2 style={{ marginTop: 6 }}>Öğün Planı</h2>
             {beslenmePlan ? (
               <>
@@ -2130,6 +2120,11 @@ export default function Rite() {
         {screen === 'bilgi' && (
           <div>
             <h2>Ayarlar</h2>
+            <div className="card"><h3>Bağlantı</h3>
+              <div className="ptop"><div className="pic">M</div><div><div className="pn">Meridyen Wellbeing Center</div><div className="pd">Beslenme + fitness + wellbeing + klinik kapı — koordineli</div></div><span className="pstat" style={{ color: 'var(--green)' }}>✓ bağlı</span></div>
+              <div className="rowbtns" style={{ marginTop: 8 }}><button className="btn ghost sm" onClick={() => setScreen('ogun')}>Öğün Planı →</button></div>
+              <p className="note" style={{ marginTop: 8, marginBottom: 0 }}>Rite seni bağlamaz. Bağlantı opsiyonel; istersen aşağıdan bağlantıyı kesebilirsin, verin sende kalır.</p>
+            </div>
             <div className="card"><h3>Profil</h3>
               <label className="fldlbl" style={{ marginTop: 0 }}>Görünen adın (paylaşımlarında "kimden" olarak görünür)</label>
               <div style={{ display: 'flex', gap: 8 }}>
