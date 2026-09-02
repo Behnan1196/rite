@@ -727,8 +727,9 @@ export default function Rite() {
   const [kiAd, setKiAd] = useState('');
   const [kiKod, setKiKod] = useState('');
   const [paylasSel, setPaylasSel] = useState('');
-  const [havuzEkleFor, setHavuzEkleFor] = useState<any>(null);
-  const [havuzEkleGrup, setHavuzEkleGrup] = useState('Genel');
+  const [yeniGrupOpen, setYeniGrupOpen] = useState(false);
+  const [yeniGrupAd, setYeniGrupAd] = useState('');
+  const [ekstraGruplar, setEkstraGruplar] = useState<string[]>([]);
 
   const today = iso(new Date());
   const day = selDate || today;
@@ -1001,20 +1002,6 @@ export default function Rite() {
   }
   function sureGun(rt: any): number { if (!rt.bitis) return 0; const b = parseD(rt.baslangic || today); const e = parseD(rt.bitis); return Math.round((e.getTime() - b.getTime()) / 86400000) + 1; }
   const patchDetay = (patch: any) => setDetay((d: any) => (d ? { ...d, obj: { ...d.obj, ...patch } } : d));
-  // Ajanda'da (hemenEkle ile) yaratılan, henüz havuza bağlı olmayan kişisel bir kartı havuza şablon olarak ekler —
-  // yeni bir dog_activities satırı açar ve ritüeli ona bağlar (activity_id), sonraki düzenlemeler ✎ Düzenle'den.
-  async function ritHavuzaEkle(o: any, grup: string) {
-    if (!client) return;
-    const g = grup.trim() || 'Genel';
-    const row: any = { client_id: client.id, tur: 'aktivite', ad: o.ad, grup: g, faydalar: o.faydalar || [], aciklama: o.aciklama || null, zaman: o.zaman || 'gün', zamanlar: [o.zaman || 'gün'], kart_tipi: o.kart_tipi || null, kart_config: o.kart_config || null, kaynak_etiket: 'Kendi', aktif: true };
-    const ins = await supabase.from('dog_activities').insert(row).select().single();
-    if (ins.error || !ins.data) return setKMsg('Hata: ' + (ins.error?.message || ''));
-    await supabase.from('dog_rituals').update({ activity_id: ins.data.id }).eq('id', o.id);
-    setDetayAct(ins.data);
-    patchDetay({ activity_id: ins.data.id });
-    setHavuzEkleFor(null);
-    loadActivities();
-  }
   // Tek detay kartı: hem ritüel (Ajanda) hem aktivite (Havuz) buradan açılır.
   async function openDetay(obj: any, tur: string) {
     setDetay({ obj, tur }); setGrupEditOpen(false); setGrupEditVal('');
@@ -1569,7 +1556,9 @@ export default function Rite() {
   // Havuz gruplama: Genel ve Meridyen her zaman seçenek olarak durur (boş bile olsalar), üstüne kullanıcının
   // kendi eklediği gruplar eklenir — sabit iki sekme yerine büyüyebilen bir chip listesi.
   const HAVUZ_VARSAYILAN_GRUPLAR = ['Genel', 'Meridyen'];
-  const personalGroups = Array.from(new Set([...HAVUZ_VARSAYILAN_GRUPLAR, ...personalActs.map(personalGroupOf)]));
+  // ekstraGruplar: "+ yeni grup" ile önceden açılmış ama henüz hiç aktivitesi olmayan gruplar (bu oturumda) —
+  // bir aktivite o gruba girince zaten personalActs üzerinden kalıcı olarak da gelir.
+  const personalGroups = Array.from(new Set([...HAVUZ_VARSAYILAN_GRUPLAR, ...personalActs.map(personalGroupOf), ...ekstraGruplar]));
 
   function RitItem({ rt }: { rt: any }) {
     const done = ritDone(rt.id);
@@ -1875,13 +1864,21 @@ export default function Rite() {
               <h2 style={{ margin: 0 }}>Aktivite Havuzu</h2>
               <button className="btn sm" onClick={() => setScreen('ajanda')}>＋ Ajandada oluştur</button>
             </div>
-            <p className="sub">Yeni bir kişisel kartı Ajanda&apos;daki <b>+</b> ile oluştur, sonra karttan <b>📥 Havuza ekle</b>&apos;yi kullan.</p>
+            <p className="sub">Yeni bir kişisel kart Ajanda&apos;daki <b>+</b> ile oluşturulur. Burada aktiviteler gruplar halinde durur.</p>
             <div className="tabs">
               {personalGroups.map((g) => <div key={g} className={'tab' + (actGroup === g ? ' on' : '')} onClick={() => setActGroup(g)}>{g}</div>)}
+              <div className="tab" onClick={() => { setYeniGrupAd(''); setYeniGrupOpen((o) => !o); }}>＋ yeni grup</div>
             </div>
+            {yeniGrupOpen && (
+              <div style={{ display: 'flex', gap: 6, margin: '0 0 10px' }}>
+                <input value={yeniGrupAd} onChange={(e) => setYeniGrupAd(e.target.value)} placeholder="ör. Beslenme" style={{ flex: 1 }} autoFocus />
+                <button className="btn sm" onClick={() => { const g = yeniGrupAd.trim(); if (!g) return; setEkstraGruplar((a) => Array.from(new Set([...a, g]))); setActGroup(g); setYeniGrupOpen(false); setYeniGrupAd(''); }}>Ekle</button>
+                <button className="btn ghost sm" onClick={() => setYeniGrupOpen(false)}>Vazgeç</button>
+              </div>
+            )}
             <div className="card">
               {personalActs.filter((a) => personalGroupOf(a) === actGroup).length === 0 ? (
-                <div className="note">Bu grupta aktivite yok. Ajanda&apos;dan bir kart oluşturup <b>📥 Havuza ekle</b> ile buraya ekleyebilirsin.</div>
+                <div className="note">Bu grupta aktivite yok.</div>
               ) : personalActs.filter((a) => personalGroupOf(a) === actGroup).map((a) => (
                 <div key={a.id} className="actcard" onClick={() => openDetay(a, 'aktivite')}>
                   <div style={{ flex: 1 }}><div className="n">{a.tur === 'program' ? '🧩 ' : ''}{a.ad}{a.puan ? <span className="puanp"> {'★'.repeat(a.puan)}</span> : ''}</div><div className="o">{a.tur === 'program' ? (a.adimlar || []).length + ' adım' + (a.sure_gun ? ' · ' + a.sure_gun + ' gün' : '') : (a.kaynak_etiket === 'Mezun' ? 'Mezun · ' : '') + Array.from(new Set((a.faydalar || []).map((k: string) => faydaMap[k]?.alan).filter(Boolean))).join(' · ')}</div></div>
@@ -2392,12 +2389,11 @@ export default function Rite() {
             {isProg && <button className="btn" style={{ width: '100%', marginTop: 14 }} onClick={() => { programBaslat(o); setDetay(null); setScreen('ajanda'); }}>Ajandama başlat{o.sure_gun ? ' (' + o.sure_gun + ' gün)' : ''}</button>}
             {!isRit && !isProg && <button className="btn" style={{ width: '100%', marginTop: 14 }} onClick={() => { aktiviteEkleSlotlar(o); setDetay(null); setScreen('ajanda'); }}>Ajandama ekle</button>}
 
-            {(!isRit || (personal && !isProg) || (isRit && o.kaynak === 'Kendi' && !o.activity_id && !o.sablon_id)) && (
+            {(!isRit || (personal && !isProg)) && (
               <div className="dettoolbar">
                 {!isRit && !paylasilamaz && <button className="tbtn" onClick={() => { setPaylasOpen(true); setKMsg(''); }}><span className="tbic">↪️</span>Paylaş</button>}
                 {personal && !isProg && <button className="tbtn" onClick={() => { setDetay(null); openStudioEdit(act); }}><span className="tbic">✎</span>Düzenle</button>}
                 {!isRit && personal && <button className="tbtn danger" onClick={() => silAktivite(o)}><span className="tbic">🗑</span>Sil</button>}
-                {isRit && o.kaynak === 'Kendi' && !o.activity_id && !o.sablon_id && <button className="tbtn" onClick={() => { setHavuzEkleGrup('Genel'); setHavuzEkleFor(o); }}><span className="tbic">📥</span>Havuza ekle</button>}
               </div>
             )}
           </div>
@@ -2436,23 +2432,6 @@ export default function Rite() {
               {remMenuFor.hatirlatma_saat && <button className="btn ghost sm" onClick={() => { setRitReminder(remMenuFor.id, ''); setRemMenuFor(null); }}>Bildirimi kapat</button>}
               <button className="btn ghost sm" onClick={() => setRemMenuFor(null)}>Vazgeç</button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {havuzEkleFor && (
-        <div className="modal top2" onMouseDown={() => setHavuzEkleFor(null)}>
-          <div className="sheet small" onMouseDown={(e) => e.stopPropagation()}>
-            <button className="x" onClick={() => setHavuzEkleFor(null)}>×</button>
-            <h3 style={{ marginBottom: 2 }}>📥 Havuza ekle</h3>
-            <p className="note" style={{ marginTop: 0 }}><b>{havuzEkleFor.ad}</b> — hangi grupta dursun?</p>
-            {personalGroups.length > 0 && <div style={{ margin: '6px 0' }}>{personalGroups.map((g) => <span key={g} className={'chip' + (havuzEkleGrup === g ? ' on' : '')} onClick={() => setHavuzEkleGrup(g)}>{g}</span>)}</div>}
-            <input value={havuzEkleGrup} onChange={(e) => setHavuzEkleGrup(e.target.value)} placeholder="yeni grup için yaz" style={{ marginTop: 4 }} />
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
-              <button className="btn" onClick={() => ritHavuzaEkle(havuzEkleFor, havuzEkleGrup)}>Havuza kaydet</button>
-              <button className="btn ghost sm" onClick={() => setHavuzEkleFor(null)}>Vazgeç</button>
-            </div>
-            <div className="note" style={{ marginTop: 8 }}>Bu kart artık havuzunda da bir şablon olarak durur — düzenlemek için karttaki ✎ Düzenle&apos;yi kullanabilirsin.</div>
           </div>
         </div>
       )}
