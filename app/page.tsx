@@ -714,15 +714,11 @@ export default function Rite() {
   const [faydaList, setFaydaList] = useState<any[]>([]);
   const [alanList, setAlanList] = useState<string[]>([]);
   const [kZamanlar, setKZamanlar] = useState<string[]>(['gün']);
-  const [kGunler, setKGunler] = useState<number[]>([]);
-  const [kSure, setKSure] = useState('');
   const [kEditId, setKEditId] = useState<string | null>(null);
   const [studioOpen, setStudioOpen] = useState(false);
   const [kAd, setKAd] = useState('');
   const [kAcik, setKAcik] = useState('');
   const [kGrup, setKGrup] = useState('Genel');
-  const [kFaydalar, setKFaydalar] = useState<string[]>([]);
-  const [kVids, setKVids] = useState<any[]>([]);
   const [kVin, setKVin] = useState({ baslik: '', url: '' });
   const [kMsg, setKMsg] = useState('');
   const [kShareTo, setKShareTo] = useState('');
@@ -731,18 +727,8 @@ export default function Rite() {
   const [kiAd, setKiAd] = useState('');
   const [kiKod, setKiKod] = useState('');
   const [paylasSel, setPaylasSel] = useState('');
-  // Studio program modu (Faz B): çok adımlı, adım-bazlı slot/gün.
-  const [stMode, setStMode] = useState<'aktivite' | 'program'>('aktivite');
-  const [stAdimlar, setStAdimlar] = useState<any[]>([]);
-  const [adAd, setAdAd] = useState('');
-  const [adZ, setAdZ] = useState<string[]>(['gün']);
-  const [adG, setAdG] = useState<number[]>([]);
-  const [adU, setAdU] = useState('');
-  const [adBas, setAdBas] = useState('');
-  const [adSure, setAdSure] = useState('');
-  const [adArd, setAdArd] = useState(false);
-  const [adZinc, setAdZinc] = useState(false);
-  const [adEdit, setAdEdit] = useState<number | null>(null);
+  const [havuzEkleFor, setHavuzEkleFor] = useState<any>(null);
+  const [havuzEkleGrup, setHavuzEkleGrup] = useState('Genel');
 
   const today = iso(new Date());
   const day = selDate || today;
@@ -944,26 +930,11 @@ export default function Rite() {
     }
     loadData(client.id);
   }
-  function kToggleFayda(kod: string) { setKFaydalar((a) => (a.includes(kod) ? a.filter((x) => x !== kod) : [...a, kod])); }
-  function kVidEkle() { if (!kVin.baslik.trim()) return; setKVids((a) => [...a, { baslik: kVin.baslik.trim(), url: kVin.url.trim() }]); setKVin({ baslik: '', url: '' }); }
-  const kVidSil = (i: number) => setKVids((a) => a.filter((_, j) => j !== i));
-  function studioReset() { setKAd(''); setKAcik(''); setKGrup('Genel'); setKFaydalar([]); setKVids([]); setKVin({ baslik: '', url: '' }); setKZamanlar(['gün']); setKGunler([]); setKSure(''); setKEditId(null); setKMsg(''); setStMode('aktivite'); setStAdimlar([]); setAdAd(''); setAdZ(['gün']); setAdG([]); setAdU(''); setAdBas(''); setAdSure(''); setAdArd(false); setAdZinc(false); setAdEdit(null); }
-  function openStudioNew(grup?: string) { studioReset(); if (grup) setKGrup(grup); setStudioOpen(true); }
+  function studioReset() { setKAd(''); setKAcik(''); setKGrup('Genel'); setKVin({ baslik: '', url: '' }); setKZamanlar(['gün']); setKEditId(null); setKMsg(''); }
   function openStudioEdit(a: any) {
     studioReset();
     setKAd(a.ad || ''); setKAcik(a.aciklama || ''); setKGrup(a.grup && a.grup !== 'Kişisel' ? a.grup : 'Genel'); setKVin({ baslik: '', url: (a.videolar && a.videolar[0]?.url) || '' }); setKZamanlar(a.zamanlar && a.zamanlar.length ? [a.zamanlar[0]] : [a.zaman || 'gün']); setKEditId(a.id);
     setStudioOpen(true);
-  }
-  const slotToggle = (arr: string[], set: (f: (c: string[]) => string[]) => void, z: string) => set((c) => c.includes(z) ? (c.length > 1 ? c.filter((x) => x !== z) : c) : [...c, z]);
-  const gunToggle = (set: (f: (c: number[]) => number[]) => void, n: number) => set((c) => c.includes(n) ? c.filter((x) => x !== n) : [...c, n]);
-  function adimResetDraft() { setAdAd(''); setAdZ(['gün']); setAdG([]); setAdU(''); setAdBas(''); setAdSure(''); setAdArd(false); setAdZinc(false); setAdEdit(null); setKMsg(''); }
-  function adimDuzenle(i: number) { const st = stAdimlar[i]; setAdAd(st.ad || ''); setAdZ(st.zamanlar && st.zamanlar.length ? st.zamanlar : ['gün']); setAdG(st.gunler || []); setAdU(st.url || ''); setAdBas(st.baslaGun ? String(st.baslaGun) : ''); setAdSure(st.sureGun ? String(st.sureGun) : ''); setAdArd(!!st.ardisik); setAdZinc(!!st.zincirli); setAdEdit(i); setKMsg(''); }
-  function adimEkle() {
-    if (!adAd.trim()) return setKMsg('Adım adı gir');
-    const zinc = adZinc && (adEdit != null ? adEdit > 0 : stAdimlar.length > 0);
-    const yeni = { ad: adAd.trim(), zamanlar: adZ, gunler: adG.length > 0 && adG.length < 7 ? adG : null, url: adU.trim() || null, faydalar: adEdit != null ? (stAdimlar[adEdit].faydalar || []) : [], zincirli: zinc, ardisik: !zinc && adArd, baslaGun: (zinc || adArd) ? 0 : (parseInt(adBas) > 0 ? parseInt(adBas) : 0), sureGun: parseInt(adSure) > 0 ? parseInt(adSure) : null };
-    setStAdimlar((a) => (adEdit != null ? a.map((x, j) => (j === adEdit ? yeni : x)) : [...a, yeni]));
-    adimResetDraft();
   }
   // Adım zamanlama özeti: "↳ ardından · M gün" / "başla +Ng · M gün"
   function adimZamanOzet(st: any): string {
@@ -972,9 +943,7 @@ export default function Rite() {
     const s = st.sureGun ? st.sureGun + ' gün' : '';
     return [b, s].filter(Boolean).join(' · ');
   }
-  const adimSil = (i: number) => setStAdimlar((a) => a.filter((_, j) => j !== i));
-  const adimMove = (i: number, dir: number) => setStAdimlar((a) => { const j = i + dir; if (j < 0 || j >= a.length) return a; const b = [...a]; [b[i], b[j]] = [b[j], b[i]]; return b; });
-  // Rite: basit kişisel aktivite kaydet (create/update). Program tasarımı Meridyen'de.
+  // Havuzdaki bir aktiviteyi düzenlemek için (create akışı Ajanda'da — bkz hemenEkle). Program tasarımı Meridyen'de.
   async function studioKaydet() {
     if (!client) return;
     if (!kAd.trim()) return setKMsg('Ad gir');
@@ -1032,6 +1001,20 @@ export default function Rite() {
   }
   function sureGun(rt: any): number { if (!rt.bitis) return 0; const b = parseD(rt.baslangic || today); const e = parseD(rt.bitis); return Math.round((e.getTime() - b.getTime()) / 86400000) + 1; }
   const patchDetay = (patch: any) => setDetay((d: any) => (d ? { ...d, obj: { ...d.obj, ...patch } } : d));
+  // Ajanda'da (hemenEkle ile) yaratılan, henüz havuza bağlı olmayan kişisel bir kartı havuza şablon olarak ekler —
+  // yeni bir dog_activities satırı açar ve ritüeli ona bağlar (activity_id), sonraki düzenlemeler ✎ Düzenle'den.
+  async function ritHavuzaEkle(o: any, grup: string) {
+    if (!client) return;
+    const g = grup.trim() || 'Genel';
+    const row: any = { client_id: client.id, tur: 'aktivite', ad: o.ad, grup: g, faydalar: o.faydalar || [], aciklama: o.aciklama || null, zaman: o.zaman || 'gün', zamanlar: [o.zaman || 'gün'], kart_tipi: o.kart_tipi || null, kart_config: o.kart_config || null, kaynak_etiket: 'Kendi', aktif: true };
+    const ins = await supabase.from('dog_activities').insert(row).select().single();
+    if (ins.error || !ins.data) return setKMsg('Hata: ' + (ins.error?.message || ''));
+    await supabase.from('dog_rituals').update({ activity_id: ins.data.id }).eq('id', o.id);
+    setDetayAct(ins.data);
+    patchDetay({ activity_id: ins.data.id });
+    setHavuzEkleFor(null);
+    loadActivities();
+  }
   // Tek detay kartı: hem ritüel (Ajanda) hem aktivite (Havuz) buradan açılır.
   async function openDetay(obj: any, tur: string) {
     setDetay({ obj, tur }); setGrupEditOpen(false); setGrupEditVal('');
@@ -1890,16 +1873,15 @@ export default function Rite() {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
               <h2 style={{ margin: 0 }}>Aktivite Havuzu</h2>
-              <button className="btn sm" onClick={() => openStudioNew(actGroup !== 'Genel' ? actGroup : undefined)}>＋ Yeni</button>
+              <button className="btn sm" onClick={() => setScreen('ajanda')}>＋ Ajandada oluştur</button>
             </div>
-            <p className="sub">Kendi aktiviteni <b>＋ Yeni</b> ile oluştur ya da gruplardan seç.</p>
+            <p className="sub">Yeni bir kişisel kartı Ajanda&apos;daki <b>+</b> ile oluştur, sonra karttan <b>📥 Havuza ekle</b>&apos;yi kullan.</p>
             <div className="tabs">
               {personalGroups.map((g) => <div key={g} className={'tab' + (actGroup === g ? ' on' : '')} onClick={() => setActGroup(g)}>{g}</div>)}
-              <div className="tab" onClick={() => openStudioNew()}>＋ yeni grup</div>
             </div>
             <div className="card">
               {personalActs.filter((a) => personalGroupOf(a) === actGroup).length === 0 ? (
-                <div className="note">Bu grupta aktivite yok. <button className="linkbtn" onClick={() => openStudioNew(actGroup)}>＋ Tasarla</button> ile oluştur.</div>
+                <div className="note">Bu grupta aktivite yok. Ajanda&apos;dan bir kart oluşturup <b>📥 Havuza ekle</b> ile buraya ekleyebilirsin.</div>
               ) : personalActs.filter((a) => personalGroupOf(a) === actGroup).map((a) => (
                 <div key={a.id} className="actcard" onClick={() => openDetay(a, 'aktivite')}>
                   <div style={{ flex: 1 }}><div className="n">{a.tur === 'program' ? '🧩 ' : ''}{a.ad}{a.puan ? <span className="puanp"> {'★'.repeat(a.puan)}</span> : ''}</div><div className="o">{a.tur === 'program' ? (a.adimlar || []).length + ' adım' + (a.sure_gun ? ' · ' + a.sure_gun + ' gün' : '') : (a.kaynak_etiket === 'Mezun' ? 'Mezun · ' : '') + Array.from(new Set((a.faydalar || []).map((k: string) => faydaMap[k]?.alan).filter(Boolean))).join(' · ')}</div></div>
@@ -2410,11 +2392,12 @@ export default function Rite() {
             {isProg && <button className="btn" style={{ width: '100%', marginTop: 14 }} onClick={() => { programBaslat(o); setDetay(null); setScreen('ajanda'); }}>Ajandama başlat{o.sure_gun ? ' (' + o.sure_gun + ' gün)' : ''}</button>}
             {!isRit && !isProg && <button className="btn" style={{ width: '100%', marginTop: 14 }} onClick={() => { aktiviteEkleSlotlar(o); setDetay(null); setScreen('ajanda'); }}>Ajandama ekle</button>}
 
-            {(!isRit || (personal && !isProg)) && (
+            {(!isRit || (personal && !isProg) || (isRit && o.kaynak === 'Kendi' && !o.activity_id && !o.sablon_id)) && (
               <div className="dettoolbar">
                 {!isRit && !paylasilamaz && <button className="tbtn" onClick={() => { setPaylasOpen(true); setKMsg(''); }}><span className="tbic">↪️</span>Paylaş</button>}
                 {personal && !isProg && <button className="tbtn" onClick={() => { setDetay(null); openStudioEdit(act); }}><span className="tbic">✎</span>Düzenle</button>}
                 {!isRit && personal && <button className="tbtn danger" onClick={() => silAktivite(o)}><span className="tbic">🗑</span>Sil</button>}
+                {isRit && o.kaynak === 'Kendi' && !o.activity_id && !o.sablon_id && <button className="tbtn" onClick={() => { setHavuzEkleGrup('Genel'); setHavuzEkleFor(o); }}><span className="tbic">📥</span>Havuza ekle</button>}
               </div>
             )}
           </div>
@@ -2457,6 +2440,23 @@ export default function Rite() {
         </div>
       )}
 
+      {havuzEkleFor && (
+        <div className="modal top2" onMouseDown={() => setHavuzEkleFor(null)}>
+          <div className="sheet small" onMouseDown={(e) => e.stopPropagation()}>
+            <button className="x" onClick={() => setHavuzEkleFor(null)}>×</button>
+            <h3 style={{ marginBottom: 2 }}>📥 Havuza ekle</h3>
+            <p className="note" style={{ marginTop: 0 }}><b>{havuzEkleFor.ad}</b> — hangi grupta dursun?</p>
+            {personalGroups.length > 0 && <div style={{ margin: '6px 0' }}>{personalGroups.map((g) => <span key={g} className={'chip' + (havuzEkleGrup === g ? ' on' : '')} onClick={() => setHavuzEkleGrup(g)}>{g}</span>)}</div>}
+            <input value={havuzEkleGrup} onChange={(e) => setHavuzEkleGrup(e.target.value)} placeholder="yeni grup için yaz" style={{ marginTop: 4 }} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
+              <button className="btn" onClick={() => ritHavuzaEkle(havuzEkleFor, havuzEkleGrup)}>Havuza kaydet</button>
+              <button className="btn ghost sm" onClick={() => setHavuzEkleFor(null)}>Vazgeç</button>
+            </div>
+            <div className="note" style={{ marginTop: 8 }}>Bu kart artık havuzunda da bir şablon olarak durur — düzenlemek için karttaki ✎ Düzenle&apos;yi kullanabilirsin.</div>
+          </div>
+        </div>
+      )}
+
       {mezunModal && (
         <div className="modal top2" onMouseDown={() => setMezunModal(null)}>
           <div className="sheet small" onMouseDown={(e) => e.stopPropagation()}>
@@ -2479,8 +2479,8 @@ export default function Rite() {
         <div className="modal" onMouseDown={() => { studioReset(); setStudioOpen(false); }}>
           <div className="sheet" onMouseDown={(e) => e.stopPropagation()}>
             <button className="x" onClick={() => { studioReset(); setStudioOpen(false); }}>×</button>
-            <h2>{kEditId ? 'Aktiviteyi düzenle' : 'Kişisel aktivite'}</h2>
-            <p className="note" style={{ marginTop: 0 }}>Kendi aktiviteni notlarıyla oluştur; havuzuna kaydedersin, sonra ajandana eklersin.</p>
+            <h2>Aktiviteyi düzenle</h2>
+            <p className="note" style={{ marginTop: 0 }}>Havuzdaki bu aktivitenin ad, grup, not ve bağlantısını düzenle.</p>
             <label>Ad</label>
             <input value={kAd} onChange={(e) => setKAd(e.target.value)} placeholder="ör. Badem'le sabah parkı" />
             <label className="fldlbl">Grup (havuzunda gruplamak için — var olanı seç ya da yeni yaz)</label>
@@ -2493,10 +2493,9 @@ export default function Rite() {
             <label className="fldlbl">Zaman dilimi</label>
             <div>{TODS.map(([z, l]) => <span key={z} className={'chip' + (kZamanlar[0] === z ? ' on' : '')} onClick={() => setKZamanlar([z])}>{l}</span>)}</div>
             <div className="rowbtns" style={{ marginTop: 14 }}>
-              <button className="btn" onClick={studioKaydet}>{kEditId ? 'Kaydet' : 'Havuza kaydet'}</button>
+              <button className="btn" onClick={studioKaydet}>Kaydet</button>
               <button className="btn ghost sm" onClick={() => { studioReset(); setStudioOpen(false); }}>Vazgeç</button>
             </div>
-            <p className="note" style={{ marginTop: 6 }}>Günler, süre ve hatırlatmayı ajandaya ekledikten sonra kartından ayarlarsın.</p>
             <div className="msg">{kMsg}</div>
           </div>
         </div>
