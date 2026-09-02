@@ -660,8 +660,7 @@ export default function Rite() {
   const [ajView, setAjView] = useState<'gun' | 'ay'>('gun');
   const [selDate, setSelDate] = useState('');
   const [activities, setActivities] = useState<any[]>([]);
-  const [actGroup, setActGroup] = useState('');
-  const [havuzTop, setHavuzTop] = useState<'kisisel' | 'wellbeing'>('wellbeing');
+  const [actGroup, setActGroup] = useState('Genel');
   const [rituals, setRituals] = useState<any[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
   const [ep, setEp] = useState<any>(null);
@@ -820,10 +819,7 @@ export default function Rite() {
   }
   async function loadActivities() {
     const r = await supabase.from('dog_activities').select('*').eq('aktif', true).order('grup').order('sira');
-    const data = r.data || [];
-    setActivities(data);
-    const gs = data.filter((a: any) => !a.client_id && a.tur !== 'program').map((a: any) => a.grup).filter((v: string, i: number, arr: string[]) => arr.indexOf(v) === i);
-    if (gs.length) { setHavuzTop((t) => t || 'wellbeing'); setActGroup((g) => g || gs[0]); }
+    setActivities(r.data || []);
   }
 
   async function loadData(clientId: string) {
@@ -987,7 +983,7 @@ export default function Rite() {
     const r = kEditId ? await supabase.from('dog_activities').update(row).eq('id', kEditId) : await supabase.from('dog_activities').insert(row);
     if (r.error) return setKMsg('Hata: ' + r.error.message);
     const savedGrup = row.grup;
-    studioReset(); loadActivities(); setStudioOpen(false); setHavuzTop('kisisel'); setActGroup(savedGrup);
+    studioReset(); loadActivities(); setStudioOpen(false); setActGroup(savedGrup);
   }
   async function loadKisiler(cid: string) {
     const r = await supabase.from('dog_clients').select('kisiler,profil_ad').eq('id', cid).single();
@@ -1585,11 +1581,12 @@ export default function Rite() {
   const weekHabits = rituals.filter((r) => r.aliskanlik && weekArr.some((d) => activeOn(r, d)));
   const beslenmePlan = plans.find((p) => p.vertical === 'beslenme');
   const ibBadge = inbox.filter((x) => x.durum === 'yeni').length;
-  const curatedActs = activities.filter((a) => !a.client_id && a.tur !== 'program');
   const personalActs = activities.filter((a) => a.client_id === client.id);
-  const actGroups = curatedActs.map((a) => a.grup).filter((v, i, arr) => arr.indexOf(v) === i);
   const personalGroupOf = (a: any) => a.grup && a.grup !== 'Kişisel' ? a.grup : 'Genel';
-  const personalGroups = personalActs.map(personalGroupOf).filter((v, i, arr) => arr.indexOf(v) === i);
+  // Havuz gruplama: Genel ve Meridyen her zaman seçenek olarak durur (boş bile olsalar), üstüne kullanıcının
+  // kendi eklediği gruplar eklenir — sabit iki sekme yerine büyüyebilen bir chip listesi.
+  const HAVUZ_VARSAYILAN_GRUPLAR = ['Genel', 'Meridyen'];
+  const personalGroups = Array.from(new Set([...HAVUZ_VARSAYILAN_GRUPLAR, ...personalActs.map(personalGroupOf)]));
 
   function RitItem({ rt }: { rt: any }) {
     const done = ritDone(rt.id);
@@ -1893,46 +1890,23 @@ export default function Rite() {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
               <h2 style={{ margin: 0 }}>Aktivite Havuzu</h2>
-              <button className="btn sm" onClick={() => openStudioNew(havuzTop === 'kisisel' && actGroup !== 'Genel' ? actGroup : undefined)}>＋ Yeni</button>
+              <button className="btn sm" onClick={() => openStudioNew(actGroup !== 'Genel' ? actGroup : undefined)}>＋ Yeni</button>
             </div>
-            <p className="sub">Kendi aktiviteni <b>＋ Yeni</b> ile oluştur ya da hazır gruplardan seç.</p>
-            <div className="vswitch">
-              <div className={'vseg' + (havuzTop === 'kisisel' ? ' on' : '')} onClick={() => { setHavuzTop('kisisel'); setActGroup(personalGroups[0] || 'Genel'); }}>Kişisel</div>
-              <div className={'vseg' + (havuzTop === 'wellbeing' ? ' on' : '')} onClick={() => { setHavuzTop('wellbeing'); setActGroup(actGroups[0] || ''); }}>Well-being</div>
+            <p className="sub">Kendi aktiviteni <b>＋ Yeni</b> ile oluştur ya da gruplardan seç.</p>
+            <div className="tabs">
+              {personalGroups.map((g) => <div key={g} className={'tab' + (actGroup === g ? ' on' : '')} onClick={() => setActGroup(g)}>{g}</div>)}
+              <div className="tab" onClick={() => openStudioNew()}>＋ yeni grup</div>
             </div>
-            {havuzTop === 'kisisel' ? (
-              <>
-                <div className="tabs">
-                  {personalGroups.map((g) => <div key={g} className={'tab' + (actGroup === g ? ' on' : '')} onClick={() => setActGroup(g)}>{g}</div>)}
-                  <div className="tab" onClick={() => openStudioNew()}>＋ yeni grup</div>
+            <div className="card">
+              {personalActs.filter((a) => personalGroupOf(a) === actGroup).length === 0 ? (
+                <div className="note">Bu grupta aktivite yok. <button className="linkbtn" onClick={() => openStudioNew(actGroup)}>＋ Tasarla</button> ile oluştur.</div>
+              ) : personalActs.filter((a) => personalGroupOf(a) === actGroup).map((a) => (
+                <div key={a.id} className="actcard" onClick={() => openDetay(a, 'aktivite')}>
+                  <div style={{ flex: 1 }}><div className="n">{a.tur === 'program' ? '🧩 ' : ''}{a.ad}{a.puan ? <span className="puanp"> {'★'.repeat(a.puan)}</span> : ''}</div><div className="o">{a.tur === 'program' ? (a.adimlar || []).length + ' adım' + (a.sure_gun ? ' · ' + a.sure_gun + ' gün' : '') : (a.kaynak_etiket === 'Mezun' ? 'Mezun · ' : '') + Array.from(new Set((a.faydalar || []).map((k: string) => faydaMap[k]?.alan).filter(Boolean))).join(' · ')}</div></div>
+                  <span className="go">›</span>
                 </div>
-                <div className="card">
-                  {personalActs.filter((a) => personalGroupOf(a) === actGroup).length === 0 ? (
-                    <div className="note">Bu grupta kişisel aktivite yok. <button className="linkbtn" onClick={() => openStudioNew(actGroup)}>＋ Tasarla</button> ile oluştur.</div>
-                  ) : personalActs.filter((a) => personalGroupOf(a) === actGroup).map((a) => (
-                    <div key={a.id} className="actcard" onClick={() => openDetay(a, 'aktivite')}>
-                      <div style={{ flex: 1 }}><div className="n">{a.tur === 'program' ? '🧩 ' : ''}{a.ad}{a.puan ? <span className="puanp"> {'★'.repeat(a.puan)}</span> : ''}</div><div className="o">{a.tur === 'program' ? (a.adimlar || []).length + ' adım' + (a.sure_gun ? ' · ' + a.sure_gun + ' gün' : '') : (a.kaynak_etiket === 'Mezun' ? 'Mezun · ' : '') + Array.from(new Set((a.faydalar || []).map((k: string) => faydaMap[k]?.alan).filter(Boolean))).join(' · ')}</div></div>
-                      <span className="go">›</span>
-                    </div>
-                  ))}
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="tabs">
-                  {actGroups.map((g) => <div key={g} className={'tab' + (actGroup === g ? ' on' : '')} onClick={() => setActGroup(g)}>{g}</div>)}
-                </div>
-                <div className="card">
-                  {curatedActs.filter((a) => a.grup === actGroup).map((a) => (
-                    <div key={a.id} className="actcard" onClick={() => openDetay(a, 'aktivite')}>
-                      <div style={{ flex: 1 }}><div className="n">{a.ad}</div><div className="o">{a.ozet || ''}</div></div>
-                      <span className="go">›</span>
-                    </div>
-                  ))}
-                  {curatedActs.filter((a) => a.grup === actGroup).length === 0 && <div className="note">Bu grupta aktivite yok.</div>}
-                </div>
-              </>
-            )}
+              ))}
+            </div>
           </div>
         )}
 
