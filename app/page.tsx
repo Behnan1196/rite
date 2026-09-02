@@ -665,7 +665,6 @@ export default function Rite() {
   const [logs, setLogs] = useState<any[]>([]);
   const [ep, setEp] = useState<any>(null);
   const [anchors, setAnchors] = useState<string[]>([]);
-  const [plans, setPlans] = useState<any[]>([]);
   const [meas, setMeas] = useState<any[]>([]);
   const [cNot, setCNot] = useState<string>('');
   const [yeniRit, setYeniRit] = useState('');
@@ -820,11 +819,9 @@ export default function Rite() {
     if (epRow) {
       const a = await supabase.from('dog_anchors').select('etiket').eq('episode_id', epRow.id);
       setAnchors((a.data || []).map((x: any) => x.etiket));
-      const pl = await supabase.from('dog_plans').select('vertical,params,status').eq('episode_id', epRow.id);
-      setPlans(pl.data || []);
       const se = await supabase.from('dog_sessions').select('notlar,tarih').eq('episode_id', epRow.id).order('tarih', { ascending: false }).limit(1);
       setCNot((se.data && se.data[0] && se.data[0].notlar) || '');
-    } else { setAnchors([]); setPlans([]); setCNot(''); }
+    } else { setAnchors([]); setCNot(''); }
     const m = await supabase.from('dog_measurements').select('tarih,anahtar,deger,birim').eq('client_id', clientId).order('tarih', { ascending: true }).limit(80);
     setMeas(m.data || []);
   }
@@ -1549,7 +1546,6 @@ export default function Rite() {
   const gelHabits = rituals;
   const uyumHabits = rituals.filter((r) => r.aliskanlik && !r.mezun);
   const weekHabits = rituals.filter((r) => r.aliskanlik && weekArr.some((d) => activeOn(r, d)));
-  const beslenmePlan = plans.find((p) => p.vertical === 'beslenme');
   const ibBadge = inbox.filter((x) => x.durum === 'yeni').length;
   const personalActs = activities.filter((a) => a.client_id === client.id);
   const personalGroupOf = (a: any) => a.grup && a.grup !== 'Kişisel' ? a.grup : 'Genel';
@@ -1894,29 +1890,6 @@ export default function Rite() {
           </div>
         )}
 
-        {/* ---------- ÖĞÜN PLANI ---------- */}
-        {screen === 'ogun' && (
-          <div>
-            <button className="linkbtn" onClick={() => setScreen('bilgi')}>‹ Ayarlar</button>
-            <h2 style={{ marginTop: 6 }}>Öğün Planı</h2>
-            {beslenmePlan ? (
-              <>
-                <div className="card">
-                  <h3>Program</h3>
-                  <div style={{ fontSize: 14, fontWeight: 700 }}>{ep?.program_ad || 'Beslenme'}</div>
-                  {(beslenmePlan.params?.mufredat || []).map((u: any, i: number) => (
-                    <div key={i} className="meal"><div className="mt">{u.ad}{u.odak ? ' — ' + u.odak : ''}</div>{(u.maddeler || []).map((m: string, j: number) => <div key={j} className="mi">• {m}</div>)}</div>
-                  ))}
-                </div>
-                {cNot && <div className="card" style={{ background: 'var(--green2)', borderColor: '#bfe2d4' }}><h3>Koç notu</h3><p style={{ fontSize: 12, color: '#256b53', lineHeight: 1.55 }}>{cNot}</p></div>}
-                <div className="soul">Beğenmediğin öğünü ileride <b>eşdeğeriyle değiştir</b> — plan bozulmaz (çıpa + makro içinde). Ayrıntılı tabak düzeni koçta; sende yalnız güvenli takas. (Ayrıntılı menü Beslenme modülü üretince dolar.)</div>
-              </>
-            ) : (
-              <div className="empty">🍽<br />Henüz beslenme planı yok.<br /><span>Koçun plan açınca burada görünür.</span></div>
-            )}
-          </div>
-        )}
-
         {/* ---------- GELİŞİM ---------- */}
         {screen === 'gelisim' && (
           <div>
@@ -2122,7 +2095,6 @@ export default function Rite() {
             <h2>Ayarlar</h2>
             <div className="card"><h3>Bağlantı</h3>
               <div className="ptop"><div className="pic">M</div><div><div className="pn">Meridyen Wellbeing Center</div><div className="pd">Beslenme + fitness + wellbeing + klinik kapı — koordineli</div></div><span className="pstat" style={{ color: 'var(--green)' }}>✓ bağlı</span></div>
-              <div className="rowbtns" style={{ marginTop: 8 }}><button className="btn ghost sm" onClick={() => setScreen('ogun')}>Öğün Planı →</button></div>
               <p className="note" style={{ marginTop: 8, marginBottom: 0 }}>Rite seni bağlamaz. Bağlantı opsiyonel; istersen aşağıdan bağlantıyı kesebilirsin, verin sende kalır.</p>
             </div>
             <div className="card"><h3>Profil</h3>
@@ -2144,14 +2116,11 @@ export default function Rite() {
                 <div style={{ display: 'flex', gap: 6 }}><input value={kiKod} onChange={(e) => setKiKod(e.target.value)} placeholder="RT-XXXXX" autoCapitalize="characters" /><button className="btn sm" onClick={kisiEkle}>Ekle</button></div>
               </div>
             </div>
-            <div className="card"><h3>Gizlilik-önce</h3><p className="note">Anonim. Hesap yok, e-posta yok. Reklam/veri satışı yok — Rite bir hediye.</p></div>
-            <div className="card"><h3>Anti-retention</h3><p className="note">Olgunlaşan ritüelleri emekli eder; seni bağımlı değil özerk kılar. Düşük uyumu suçlamaz, sinyal sayar.</p></div>
             <div className="card"><h3>Bildirimler</h3>
               <p className="note">Ana ekrana eklersen uygulama kapalıyken de hatırlatma alırsın.</p>
               <div className="rowbtns"><button className="btn ghost sm" onClick={enableNotifs}>{pushOn ? '🔔 Açık' : '🔔 Bildirimleri aç'}</button><button className="btn ghost sm" onClick={testPush}>Test gönder</button></div>
               {pushMsg && <div className="msg">{pushMsg}</div>}
             </div>
-            <div className="card"><h3>Güvenlik</h3><p className="note">Bazı ritüeller hekim onayı ister (⚠). Rite teşhis/tedavi aracı değildir; doğru kapıyı gösterir.</p></div>
             <div className="card"><h3>Test</h3>
               <div className="note" style={{ marginTop: 0 }}>Ajandayı sıfırla: tüm ritüeller ve işaretler silinir (kişisel aktiviteler havuzda kalır).</div>
               <div className="rowbtns"><button className="btn ghost sm" style={{ color: 'var(--red)', borderColor: '#e6c4bd' }} onClick={resetAjanda}>Ajandayı sıfırla</button></div>
