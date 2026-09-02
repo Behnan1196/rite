@@ -2094,8 +2094,19 @@ export default function Rite() {
           <div>
             <h2>Ayarlar</h2>
             <div className="card"><h3>Bağlantı</h3>
-              <div className="ptop"><div className="pic">M</div><div><div className="pn">Meridyen Wellbeing Center</div><div className="pd">Beslenme + fitness + wellbeing + klinik kapı — koordineli</div></div><span className="pstat" style={{ color: 'var(--green)' }}>✓ bağlı</span></div>
-              <p className="note" style={{ marginTop: 8, marginBottom: 0 }}>Rite seni bağlamaz. Bağlantı opsiyonel; istersen aşağıdan bağlantıyı kesebilirsin, verin sende kalır.</p>
+              <div className="mrow" style={{ borderTop: 'none' }}>
+                <span>Meridyen</span>
+                {client.code ? <span className="pstat" style={{ color: 'var(--green)' }}>✓ bağlı</span> : <span className="pstat">bağlı değil</span>}
+              </div>
+              {client.code ? (
+                <div className="rowbtns" style={{ marginTop: 6 }}><button className="btn ghost sm" onClick={cikis}>Bağlantıyı kes</button></div>
+              ) : (
+                <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                  <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="RITE-AB12C" autoCapitalize="characters" style={{ flex: 1 }} />
+                  <button className="btn sm" onClick={pair}>Bağlan</button>
+                </div>
+              )}
+              {msg && <div className="msg">{msg}</div>}
             </div>
             <div className="card"><h3>Profil</h3>
               <label className="fldlbl" style={{ marginTop: 0 }}>Görünen adın (paylaşımlarında "kimden" olarak görünür)</label>
@@ -2125,7 +2136,6 @@ export default function Rite() {
               <div className="note" style={{ marginTop: 0 }}>Ajandayı sıfırla: tüm ritüeller ve işaretler silinir (kişisel aktiviteler havuzda kalır).</div>
               <div className="rowbtns"><button className="btn ghost sm" style={{ color: 'var(--red)', borderColor: '#e6c4bd' }} onClick={resetAjanda}>Ajandayı sıfırla</button></div>
             </div>
-            <div style={{ textAlign: 'center', marginTop: 6 }}><button className="btn ghost sm" onClick={cikis}>Bağlantıyı kes / çıkış</button></div>
           </div>
         )}
       </div>
