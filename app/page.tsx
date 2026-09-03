@@ -16,7 +16,7 @@ function SortableRow({ id, disabled, children }: { id: string; disabled?: boolea
   return <div ref={setNodeRef} style={{ ...style, touchAction: 'none' }} {...attributes} {...listeners}>{children}</div>;
 }
 
-type Client = { id: string; ad: string; code?: string | null; share_code?: string; auth_id?: string | null; meridyen_bagli?: boolean; email?: string };
+type Client = { id: string; ad: string; share_code?: string; auth_id?: string | null; meridyen_bagli?: boolean; email?: string };
 const LS = 'rite_client';
 
 const POOL: Record<string, { ad: string; dsc: string; zaman: string; flag?: string }[]> = {
@@ -630,6 +630,7 @@ function InboxNot({ v, onOpen }: { v: any; onOpen: () => void }) {
     </div>
   );
 }
+const AVATARLAR = ['🌿', '🌸', '🌙', '☀️', '🍃', '🌾', '🍄', '🪴', '🦋', '⭐'];
 const WD = ['Pz', 'Pt', 'Sa', 'Ça', 'Pe', 'Cu', 'Ct'];
 const WDFULL = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
 const MONTHS = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
@@ -652,7 +653,6 @@ function urlB64ToUint8(base64String: string) {
 
 export default function Rite() {
   const [client, setClient] = useState<Client | null>(null);
-  const [code, setCode] = useState('');
   const [screen, setScreen] = useState('ajanda');
   const [inboxOpen, setInboxOpen] = useState(false);
   const [ibGrupSec, setIbGrupSec] = useState<string | null>(null); // havuza eklerken grup seçimi açık olan inbox öğesi
@@ -731,9 +731,16 @@ export default function Rite() {
   const [ekstraGruplar, setEkstraGruplar] = useState<string[]>([]);
   const [authEmail, setAuthEmail] = useState('');
   const [authPass, setAuthPass] = useState('');
-  const [authMode, setAuthMode] = useState<'kayit' | 'giris'>('kayit');
+  const [authPass2, setAuthPass2] = useState('');
+  const [showPass, setShowPass] = useState(false);
+  const [showPass2, setShowPass2] = useState(false);
+  const [authView, setAuthView] = useState<'hos' | 'kayit' | 'giris'>('hos');
   const [authMsg, setAuthMsg] = useState('');
-  const [kodFormOpen, setKodFormOpen] = useState(false);
+  const [profilEditOpen, setProfilEditOpen] = useState(false);
+  const [baglantiOpen, setBaglantiOpen] = useState(false);
+  const [paylasimAyarOpen, setPaylasimAyarOpen] = useState(false);
+  const [avatarSec, setAvatarSec] = useState('');
+  const [profilMsg, setProfilMsg] = useState('');
 
   const today = iso(new Date());
   const day = selDate || today;
@@ -831,20 +838,9 @@ export default function Rite() {
     setMeas(m.data || []);
   }
 
-  async function pair() {
-    const c = code.trim().toUpperCase();
-    if (!c) return setMsg('Kod gir');
-    const r = await supabase.from('dog_clients').select('id,ad,code,share_code,auth_id,meridyen_bagli').eq('code', c).limit(1);
-    if (r.error) return setMsg('Hata: ' + r.error.message);
-    if (!r.data || !r.data.length) return setMsg('Kod bulunamadı (ör. RITE-AB12C).');
-    const cli = r.data[0] as Client;
-    setClient(cli); localStorage.setItem(LS, JSON.stringify(cli)); setMsg('');
-    loadData(cli.id); loadInbox(cli.id); loadKisiler(cli.id); ensureShareCode(cli); reassignPush(cli.id);
-  }
-
   // ---------- e-posta ile kendi hesabını aç / giriş yap ----------
   async function fetchClientByAuth(userId: string, emailHint?: string): Promise<Client | null> {
-    const r = await supabase.from('dog_clients').select('id,ad,code,share_code,auth_id,meridyen_bagli').eq('auth_id', userId).limit(1);
+    const r = await supabase.from('dog_clients').select('id,ad,share_code,auth_id,meridyen_bagli').eq('auth_id', userId).limit(1);
     if (r.error || !r.data || !r.data.length) return null;
     return { ...(r.data[0] as Client), email: emailHint };
   }
@@ -866,6 +862,7 @@ export default function Rite() {
     const email = authEmail.trim();
     if (!email || !authPass) return setAuthMsg('E-posta ve şifre gir.');
     if (authPass.length < 6) return setAuthMsg('Şifre en az 6 karakter olmalı.');
+    if (authPass !== authPass2) return setAuthMsg('Şifreler eşleşmiyor.');
     setAuthMsg('Hesap oluşturuluyor…');
     const { data, error } = await supabase.auth.signUp({ email, password: authPass });
     if (error) return setAuthMsg('Hata: ' + error.message);
@@ -894,7 +891,6 @@ export default function Rite() {
   }
   async function meridyenBaglantiKes() {
     if (!client) return;
-    if (!client.auth_id) { await cikis(); return; } // eski tip (yalnız kodla eşleşmiş) hesapta ayrı profil yok
     await supabase.from('dog_clients').update({ meridyen_bagli: false }).eq('id', client.id);
     const nc = { ...client, meridyen_bagli: false };
     setClient(nc); localStorage.setItem(LS, JSON.stringify(nc));
@@ -917,8 +913,8 @@ export default function Rite() {
     await removePushForDevice();
     try { await supabase.auth.signOut(); } catch (_) {}
     localStorage.removeItem(LS);
-    setClient(null); setCode(''); setPushOn(false);
-    setAuthEmail(''); setAuthPass(''); setAuthMsg('');
+    setClient(null); setPushOn(false);
+    setAuthEmail(''); setAuthPass(''); setAuthPass2(''); setAuthMsg('');
   }
   async function resetAjanda() {
     if (!client) return;
@@ -1022,14 +1018,16 @@ export default function Rite() {
     studioReset(); loadActivities(); setStudioOpen(false); setActGroup(savedGrup);
   }
   async function loadKisiler(cid: string) {
-    const r = await supabase.from('dog_clients').select('kisiler,profil_ad').eq('id', cid).single();
+    const r = await supabase.from('dog_clients').select('kisiler,profil_ad,avatar').eq('id', cid).single();
     setKisiler((r.data?.kisiler as any[]) || []);
     setProfilAd((r.data?.profil_ad as string) || '');
+    setAvatarSec((r.data?.avatar as string) || '');
   }
   async function profilKaydet() {
     if (!client) return;
-    await supabase.from('dog_clients').update({ profil_ad: profilAd.trim() || null }).eq('id', client.id);
-    setKMsg('Profil adı kaydedildi');
+    await supabase.from('dog_clients').update({ profil_ad: profilAd.trim() || null, avatar: avatarSec || null }).eq('id', client.id);
+    setProfilMsg('Kaydedildi ✓');
+    setTimeout(() => { setProfilEditOpen(false); setProfilMsg(''); }, 500);
   }
   async function kisilerKaydet(next: any[]) {
     if (!client) return;
@@ -1564,38 +1562,54 @@ export default function Rite() {
       <div className="app">
         <div className="hd"><div className="b">Rite <span>· daily rites</span></div><span style={{ marginLeft: 'auto', fontSize: 11, color: '#bfe2b0' }}>● anonim</span></div>
         <div className="main">
-          <div className="card" style={{ marginTop: 26 }}>
-            <h2>{authMode === 'kayit' ? 'Hesap oluştur' : 'Giriş yap'}</h2>
-            <p className="sub">E-posta ve şifrenle kendi Rite hesabını {authMode === 'kayit' ? 'oluştur' : 'aç'}. Meridyen&apos;e bağlanmak istersen bunu daha sonra Ayarlar&apos;dan yaparsın.</p>
-            <label>E-posta</label>
-            <input value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} placeholder="ornek@eposta.com" type="email" autoCapitalize="none" />
-            <label style={{ marginTop: 8 }}>Şifre</label>
-            <input value={authPass} onChange={(e) => setAuthPass(e.target.value)} placeholder="En az 6 karakter" type="password" />
-            <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
-              <button className="btn" onClick={authMode === 'kayit' ? authKayit : authGiris}>{authMode === 'kayit' ? 'Hesap oluştur' : 'Giriş yap'}</button>
-              <button className="btn ghost" onClick={() => { setAuthMode(authMode === 'kayit' ? 'giris' : 'kayit'); setAuthMsg(''); }}>{authMode === 'kayit' ? 'Zaten hesabım var' : 'Hesabım yok, oluştur'}</button>
-            </div>
-            {authMsg && <div className="msg">{authMsg}</div>}
-          </div>
-          <div className="card" style={{ marginTop: 12 }}>
-            <button className="linkbtn" onClick={() => setKodFormOpen((o) => !o)}>{kodFormOpen ? '‹ Kapat' : 'Merkezinden bir eşleştirme kodu aldıysan →'}</button>
-            {kodFormOpen && (
-              <div style={{ marginTop: 10 }}>
-                <p className="sub" style={{ marginTop: 0 }}>Merkezinden/koçundan aldığın eşleştirme kodunu gir.</p>
-                <label>Eşleştirme kodu</label>
-                <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="RITE-AB12C" autoCapitalize="characters" />
-                <div style={{ marginTop: 12 }}><button className="btn" onClick={pair}>Bağlan</button></div>
-                {msg && <div className="msg">{msg}</div>}
+          {authView === 'hos' && (
+            <div className="authhero">
+              <div className="authmark">
+                <div className="ic">🌿</div>
+                <div className="word">Rite</div>
+                <div className="tag">günlük ritüellerin, tek yerde</div>
               </div>
-            )}
-          </div>
+              <div className="authbtns">
+                <button className="btn" onClick={() => { setAuthView('kayit'); setAuthMsg(''); }}>Hesap oluştur</button>
+                <button className="btn ghost" onClick={() => { setAuthView('giris'); setAuthMsg(''); }}>Giriş yap</button>
+              </div>
+            </div>
+          )}
+          {(authView === 'giris' || authView === 'kayit') && (
+            <div className="card" style={{ marginTop: 26 }}>
+              <button className="linkbtn" onClick={() => { setAuthView('hos'); setAuthMsg(''); }}>‹ Geri</button>
+              <h2 style={{ marginTop: 10 }}>{authView === 'kayit' ? 'Hesap oluştur' : 'Giriş yap'}</h2>
+              <p className="sub">{authView === 'kayit' ? 'E-posta ve şifrenle kendi Rite hesabını oluştur.' : 'E-posta ve şifrenle giriş yap.'}</p>
+              <label>E-posta</label>
+              <input value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} placeholder="ornek@eposta.com" type="email" autoCapitalize="none" autoComplete="email" />
+              <label style={{ marginTop: 10 }}>Şifre</label>
+              <div className="pwwrap">
+                <input value={authPass} onChange={(e) => setAuthPass(e.target.value)} placeholder="En az 6 karakter" type={showPass ? 'text' : 'password'} autoComplete={authView === 'kayit' ? 'new-password' : 'current-password'} />
+                <button type="button" className="pweye" onClick={() => setShowPass((s) => !s)}>{showPass ? '🙈' : '👁'}</button>
+              </div>
+              {authView === 'kayit' && (
+                <>
+                  <label style={{ marginTop: 10 }}>Şifre (tekrar)</label>
+                  <div className="pwwrap">
+                    <input value={authPass2} onChange={(e) => setAuthPass2(e.target.value)} placeholder="Şifreni tekrar gir" type={showPass2 ? 'text' : 'password'} autoComplete="new-password" />
+                    <button type="button" className="pweye" onClick={() => setShowPass2((s) => !s)}>{showPass2 ? '🙈' : '👁'}</button>
+                  </div>
+                </>
+              )}
+              <div style={{ marginTop: 16 }}><button className="btn" onClick={authView === 'kayit' ? authKayit : authGiris}>{authView === 'kayit' ? 'Hesap oluştur' : 'Giriş yap'}</button></div>
+              {authMsg && <div className="msg">{authMsg}</div>}
+              <div style={{ textAlign: 'center', marginTop: 12 }}>
+                <button className="linkbtn" onClick={() => { setAuthView(authView === 'kayit' ? 'giris' : 'kayit'); setAuthMsg(''); }}>{authView === 'kayit' ? 'Zaten hesabın var mı? Giriş yap' : 'Hesabın yok mu? Hesap oluştur'}</button>
+              </div>
+            </div>
+          )}
           <p className="note" style={{ textAlign: 'center', marginTop: 8 }}>Telefonda: tarayıcı menüsü → &quot;Ana ekrana ekle&quot;.</p>
         </div>
       </div>
     );
   }
 
-  const bagli = !!(client.code || client.meridyen_bagli);
+  const bagli = !!client.meridyen_bagli;
   const wday = (d: string) => new Date(d + 'T00:00:00').getDay();
   // Tarihsiz (baslangic yok) ritüel = Inbox kartı; ajandada görünmez.
   const activeOn = (r: any, d: string) => !!r.baslangic && r.baslangic <= d && (!r.bitis || d <= r.bitis) && (!r.gunler || r.gunler.length === 0 || r.gunler.includes(wday(d)));
@@ -2180,48 +2194,32 @@ export default function Rite() {
         {screen === 'bilgi' && (
           <div>
             <h2>Ayarlar</h2>
-            <div className="card"><h3>Bağlantı</h3>
+
+            <div className="card profilcard">
+              <div className="avatar">{avatarSec || (profilAd || client.ad || 'R').trim().charAt(0).toUpperCase()}</div>
+              <div className="pinfo">
+                <div className="pname">{profilAd || client.ad || 'Kullanıcı'}</div>
+                {client.email && <div className="note" style={{ margin: '2px 0 0' }}>{client.email}</div>}
+              </div>
+              <button className="btn ghost sm" onClick={() => setProfilEditOpen(true)}>Değiştir</button>
+            </div>
+
+            <div className="card">
               <div className="mrow" style={{ borderTop: 'none' }}>
-                <span>Meridyen</span>
+                <span>Meridyen bağlantısı</span>
                 {bagli ? <span className="pstat" style={{ color: 'var(--green)' }}>✓ bağlı</span> : <span className="pstat">bağlı değil</span>}
               </div>
-              {bagli ? (
-                <div className="rowbtns" style={{ marginTop: 6 }}><button className="btn ghost sm" onClick={meridyenBaglantiKes}>Bağlantıyı kes</button></div>
-              ) : client.auth_id ? (
-                <div className="rowbtns" style={{ marginTop: 6 }}><button className="btn sm" onClick={meridyeneBaglan}>Meridyen&apos;e bağlan</button></div>
-              ) : (
-                <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-                  <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="RITE-AB12C" autoCapitalize="characters" style={{ flex: 1 }} />
-                  <button className="btn sm" onClick={pair}>Bağlan</button>
-                </div>
-              )}
-              {msg && <div className="msg">{msg}</div>}
-              {client.auth_id && (
-                <div className="mrow" style={{ marginTop: 10 }}>
-                  <span className="note" style={{ margin: 0 }}>{client.email || 'Hesabın'}</span>
-                  <button className="btn ghost sm" onClick={cikis}>Hesaptan çıkış</button>
-                </div>
-              )}
+              <div className="rowbtns" style={{ marginTop: 6 }}><button className="btn ghost sm" onClick={() => setBaglantiOpen(true)}>{bagli ? 'Yönet' : 'Bağlan'}</button></div>
             </div>
-            <div className="card"><h3>Profil</h3>
-              <label className="fldlbl" style={{ marginTop: 0 }}>Görünen adın (paylaşımlarında "kimden" olarak görünür)</label>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <input value={profilAd} onChange={(e) => setProfilAd(e.target.value)} placeholder="ör. Behnan" />
-                <button className="btn sm" style={{ whiteSpace: 'nowrap' }} onClick={profilKaydet}>Kaydet</button>
+
+            <div className="card">
+              <div className="mrow" style={{ borderTop: 'none' }}>
+                <span>Paylaşım</span>
+                <span className="pstat">{kisiler.length > 0 ? kisiler.length + ' kişi' : 'kimse yok'}</span>
               </div>
+              <div className="rowbtns" style={{ marginTop: 6 }}><button className="btn ghost sm" onClick={() => setPaylasimAyarOpen(true)}>Yönet</button></div>
             </div>
-            <div className="card"><h3>Paylaşım</h3>
-              <div className="mrow" style={{ borderTop: 'none' }}><span>Paylaşım kodun</span><b style={{ letterSpacing: 1 }}>{client.share_code || '…'}</b></div>
-              <div className="note" style={{ marginTop: 2 }}>Bu kodu verdiğin kişiler sana ritüel/aktivite yollayabilir; sen de aşağıda tanımladığın kişilere paylaşırsın.</div>
-              <label className="fldlbl">Kişiler</label>
-              {kisiler.length === 0 ? <div className="note" style={{ marginTop: 0 }}>Henüz kişi yok.</div> : kisiler.map((ki, i) => (
-                <div key={i} className="mrow"><span>{ki.ad} <span className="note" style={{ margin: 0 }}>· {ki.kod}</span></span><button className="btn ghost sm" style={{ color: 'var(--red)', borderColor: '#e6c4bd' }} onClick={() => kisiSil(i)}>Sil</button></div>
-              ))}
-              <div className="grid" style={{ marginTop: 6 }}>
-                <div><input value={kiAd} onChange={(e) => setKiAd(e.target.value)} placeholder="Ad (ör. Eşim)" /></div>
-                <div style={{ display: 'flex', gap: 6 }}><input value={kiKod} onChange={(e) => setKiKod(e.target.value)} placeholder="RT-XXXXX" autoCapitalize="characters" /><button className="btn sm" onClick={kisiEkle}>Ekle</button></div>
-              </div>
-            </div>
+
             <div className="card"><h3>Bildirimler</h3>
               <p className="note">Ana ekrana eklersen uygulama kapalıyken de hatırlatma alırsın.</p>
               <div className="rowbtns"><button className="btn ghost sm" onClick={enableNotifs}>{pushOn ? '🔔 Açık' : '🔔 Bildirimleri aç'}</button><button className="btn ghost sm" onClick={testPush}>Test gönder</button></div>
@@ -2231,6 +2229,8 @@ export default function Rite() {
               <div className="note" style={{ marginTop: 0 }}>Ajandayı sıfırla: tüm ritüeller ve işaretler silinir (kişisel aktiviteler havuzda kalır).</div>
               <div className="rowbtns"><button className="btn ghost sm" style={{ color: 'var(--red)', borderColor: '#e6c4bd' }} onClick={resetAjanda}>Ajandayı sıfırla</button></div>
             </div>
+
+            <button className="linkbtn" style={{ display: 'block', margin: '20px auto 6px', color: 'var(--red)' }} onClick={cikis}>Hesaptan çıkış</button>
           </div>
         )}
       </div>
@@ -2545,6 +2545,65 @@ export default function Rite() {
               <button className="btn ghost sm" onClick={() => { studioReset(); setStudioOpen(false); }}>Vazgeç</button>
             </div>
             <div className="msg">{kMsg}</div>
+          </div>
+        </div>
+      )}
+
+      {profilEditOpen && (
+        <div className="modal" onMouseDown={() => setProfilEditOpen(false)}>
+          <div className="sheet" onMouseDown={(e) => e.stopPropagation()}>
+            <button className="x" onClick={() => setProfilEditOpen(false)}>×</button>
+            <h2>Profili düzenle</h2>
+            <label style={{ marginTop: 0 }}>Kullanıcı adın</label>
+            <input value={profilAd} onChange={(e) => setProfilAd(e.target.value)} placeholder="ör. Behnan" />
+            <label className="fldlbl">Avatar</label>
+            <div className="avpick">
+              {AVATARLAR.map((a) => (
+                <button key={a} type="button" className={'avopt' + (avatarSec === a ? ' on' : '')} onClick={() => setAvatarSec(a)}>{a}</button>
+              ))}
+            </div>
+            <div className="card" style={{ marginTop: 14, opacity: .55 }}>
+              <div className="mrow" style={{ borderTop: 'none' }}><span>Tema</span><span className="note" style={{ margin: 0 }}>yakında</span></div>
+            </div>
+            <div className="rowbtns" style={{ marginTop: 14 }}><button className="btn" onClick={profilKaydet}>Kaydet</button></div>
+            {profilMsg && <div className="msg">{profilMsg}</div>}
+          </div>
+        </div>
+      )}
+
+      {baglantiOpen && (
+        <div className="modal" onMouseDown={() => setBaglantiOpen(false)}>
+          <div className="sheet" onMouseDown={(e) => e.stopPropagation()}>
+            <button className="x" onClick={() => setBaglantiOpen(false)}>×</button>
+            <h2>Meridyen bağlantısı</h2>
+            <div className="mrow" style={{ borderTop: 'none' }}>
+              <span>Durum</span>
+              {bagli ? <span className="pstat" style={{ color: 'var(--green)' }}>✓ bağlı</span> : <span className="pstat">bağlı değil</span>}
+            </div>
+            <p className="note" style={{ marginTop: 6 }}>{bagli ? 'Bağlantıyı kesersen hesabın ve kişisel kartların olduğu gibi kalır, yalnız merkezinle ilişiğin kapanır.' : 'Merkezinle bağlantı kurarsan üyeliğin kontrol edilir, üyeysen anında bağlanırsın.'}</p>
+            <div className="rowbtns" style={{ marginTop: 10 }}>
+              {bagli ? <button className="btn ghost sm" onClick={meridyenBaglantiKes}>Bağlantıyı kes</button> : <button className="btn sm" onClick={meridyeneBaglan}>Meridyen&apos;e bağlan</button>}
+            </div>
+            {msg && <div className="msg">{msg}</div>}
+          </div>
+        </div>
+      )}
+
+      {paylasimAyarOpen && (
+        <div className="modal" onMouseDown={() => setPaylasimAyarOpen(false)}>
+          <div className="sheet" onMouseDown={(e) => e.stopPropagation()}>
+            <button className="x" onClick={() => setPaylasimAyarOpen(false)}>×</button>
+            <h2>Paylaşım</h2>
+            <div className="mrow" style={{ borderTop: 'none' }}><span>Paylaşım kodun</span><b style={{ letterSpacing: 1 }}>{client.share_code || '…'}</b></div>
+            <div className="note" style={{ marginTop: 2 }}>Bu kodu verdiğin kişiler sana ritüel/aktivite yollayabilir; sen de aşağıda tanımladığın kişilere paylaşırsın.</div>
+            <label className="fldlbl">Kişiler</label>
+            {kisiler.length === 0 ? <div className="note" style={{ marginTop: 0 }}>Henüz kişi yok.</div> : kisiler.map((ki, i) => (
+              <div key={i} className="mrow"><span>{ki.ad} <span className="note" style={{ margin: 0 }}>· {ki.kod}</span></span><button className="btn ghost sm" style={{ color: 'var(--red)', borderColor: '#e6c4bd' }} onClick={() => kisiSil(i)}>Sil</button></div>
+            ))}
+            <div className="grid" style={{ marginTop: 6 }}>
+              <div><input value={kiAd} onChange={(e) => setKiAd(e.target.value)} placeholder="Ad (ör. Eşim)" /></div>
+              <div style={{ display: 'flex', gap: 6 }}><input value={kiKod} onChange={(e) => setKiKod(e.target.value)} placeholder="RT-XXXXX" autoCapitalize="characters" /><button className="btn sm" onClick={kisiEkle}>Ekle</button></div>
+            </div>
           </div>
         </div>
       )}
