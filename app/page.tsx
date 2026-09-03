@@ -741,6 +741,11 @@ export default function Rite() {
   const [paylasimAyarOpen, setPaylasimAyarOpen] = useState(false);
   const [avatarSec, setAvatarSec] = useState('');
   const [profilMsg, setProfilMsg] = useState('');
+  const [newPass, setNewPass] = useState('');
+  const [newPass2, setNewPass2] = useState('');
+  const [showNewPass, setShowNewPass] = useState(false);
+  const [showNewPass2, setShowNewPass2] = useState(false);
+  const [pwMsg, setPwMsg] = useState('');
 
   const today = iso(new Date());
   const day = selDate || today;
@@ -1028,6 +1033,13 @@ export default function Rite() {
     await supabase.from('dog_clients').update({ profil_ad: profilAd.trim() || null, avatar: avatarSec || null }).eq('id', client.id);
     setProfilMsg('Kaydedildi ✓');
     setTimeout(() => { setProfilEditOpen(false); setProfilMsg(''); }, 500);
+  }
+  async function sifreDegistir() {
+    if (!newPass || newPass.length < 6) return setPwMsg('Şifre en az 6 karakter olmalı.');
+    if (newPass !== newPass2) return setPwMsg('Şifreler eşleşmiyor.');
+    const { error } = await supabase.auth.updateUser({ password: newPass });
+    if (error) return setPwMsg('Hata: ' + error.message);
+    setNewPass(''); setNewPass2(''); setPwMsg('Şifren değişti ✓');
   }
   async function kisilerKaydet(next: any[]) {
     if (!client) return;
@@ -2201,7 +2213,7 @@ export default function Rite() {
                 <div className="pname">{profilAd || client.ad || 'Kullanıcı'}</div>
                 {client.email && <div className="note" style={{ margin: '2px 0 0' }}>{client.email}</div>}
               </div>
-              <button className="btn ghost sm" onClick={() => setProfilEditOpen(true)}>Değiştir</button>
+              <button className="btn ghost sm" onClick={() => { setNewPass(''); setNewPass2(''); setPwMsg(''); setProfilEditOpen(true); }}>Değiştir</button>
             </div>
 
             <div className="card">
@@ -2567,6 +2579,18 @@ export default function Rite() {
             </div>
             <div className="rowbtns" style={{ marginTop: 14 }}><button className="btn" onClick={profilKaydet}>Kaydet</button></div>
             {profilMsg && <div className="msg">{profilMsg}</div>}
+
+            <label className="fldlbl" style={{ marginTop: 18 }}>Şifreni değiştir</label>
+            <div className="pwwrap">
+              <input value={newPass} onChange={(e) => setNewPass(e.target.value)} placeholder="Yeni şifre (en az 6 karakter)" type={showNewPass ? 'text' : 'password'} autoComplete="new-password" />
+              <button type="button" className="pweye" onClick={() => setShowNewPass((s) => !s)}>{showNewPass ? '🙈' : '👁'}</button>
+            </div>
+            <div className="pwwrap" style={{ marginTop: 8 }}>
+              <input value={newPass2} onChange={(e) => setNewPass2(e.target.value)} placeholder="Yeni şifre (tekrar)" type={showNewPass2 ? 'text' : 'password'} autoComplete="new-password" />
+              <button type="button" className="pweye" onClick={() => setShowNewPass2((s) => !s)}>{showNewPass2 ? '🙈' : '👁'}</button>
+            </div>
+            <div className="rowbtns" style={{ marginTop: 8 }}><button className="btn ghost sm" onClick={sifreDegistir}>Şifreyi güncelle</button></div>
+            {pwMsg && <div className="msg">{pwMsg}</div>}
           </div>
         </div>
       )}
