@@ -16,7 +16,7 @@ function SortableRow({ id, disabled, children }: { id: string; disabled?: boolea
   return <div ref={setNodeRef} style={{ ...style, touchAction: 'none' }} {...attributes} {...listeners}>{children}</div>;
 }
 
-type Client = { id: string; ad: string; code: string; share_code?: string };
+type Client = { id: string; ad: string; code?: string | null; share_code?: string; auth_id?: string | null; meridyen_bagli?: boolean; email?: string };
 const LS = 'rite_client';
 
 const POOL: Record<string, { ad: string; dsc: string; zaman: string; flag?: string }[]> = {
@@ -729,6 +729,11 @@ export default function Rite() {
   const [yeniGrupOpen, setYeniGrupOpen] = useState(false);
   const [yeniGrupAd, setYeniGrupAd] = useState('');
   const [ekstraGruplar, setEkstraGruplar] = useState<string[]>([]);
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPass, setAuthPass] = useState('');
+  const [authMode, setAuthMode] = useState<'kayit' | 'giris'>('kayit');
+  const [authMsg, setAuthMsg] = useState('');
+  const [kodFormOpen, setKodFormOpen] = useState(false);
 
   const today = iso(new Date());
   const day = selDate || today;
@@ -829,12 +834,70 @@ export default function Rite() {
   async function pair() {
     const c = code.trim().toUpperCase();
     if (!c) return setMsg('Kod gir');
-    const r = await supabase.from('dog_clients').select('id,ad,code,share_code').eq('code', c).limit(1);
+    const r = await supabase.from('dog_clients').select('id,ad,code,share_code,auth_id,meridyen_bagli').eq('code', c).limit(1);
     if (r.error) return setMsg('Hata: ' + r.error.message);
     if (!r.data || !r.data.length) return setMsg('Kod bulunamadı (ör. RITE-AB12C).');
     const cli = r.data[0] as Client;
     setClient(cli); localStorage.setItem(LS, JSON.stringify(cli)); setMsg('');
-    loadData(cli.id); loadInbox(cli.id); ensureShareCode(cli); reassignPush(cli.id);
+    loadData(cli.id); loadInbox(cli.id); loadKisiler(cli.id); ensureShareCode(cli); reassignPush(cli.id);
+  }
+
+  // ---------- e-posta ile kendi hesabını aç / giriş yap ----------
+  async function fetchClientByAuth(userId: string, emailHint?: string): Promise<Client | null> {
+    const r = await supabase.from('dog_clients').select('id,ad,code,share_code,auth_id,meridyen_bagli').eq('auth_id', userId).limit(1);
+    if (r.error || !r.data || !r.data.length) return null;
+    return { ...(r.data[0] as Client), email: emailHint };
+  }
+  async function girisSonrasiYukle(cli: Client) {
+    setClient(cli); localStorage.setItem(LS, JSON.stringify(cli)); setAuthMsg('');
+    loadData(cli.id); loadInbox(cli.id); loadKisiler(cli.id); ensureShareCode(cli); reassignPush(cli.id);
+  }
+  async function authGiris() {
+    const email = authEmail.trim();
+    if (!email || !authPass) return setAuthMsg('E-posta ve şifre gir.');
+    setAuthMsg('Giriş yapılıyor…');
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password: authPass });
+    if (error) return setAuthMsg('Hata: ' + error.message);
+    const cli = await fetchClientByAuth(data.user!.id, data.user!.email || email);
+    if (!cli) return setAuthMsg('Hesap bulundu ama profil bulunamadı, tekrar dener misin?');
+    girisSonrasiYukle(cli);
+  }
+  async function authKayit() {
+    const email = authEmail.trim();
+    if (!email || !authPass) return setAuthMsg('E-posta ve şifre gir.');
+    if (authPass.length < 6) return setAuthMsg('Şifre en az 6 karakter olmalı.');
+    setAuthMsg('Hesap oluşturuluyor…');
+    const { data, error } = await supabase.auth.signUp({ email, password: authPass });
+    if (error) return setAuthMsg('Hata: ' + error.message);
+    if (!data.user || !data.session) return setAuthMsg('Hesabın oluşturuldu. E-postana gelen bağlantıyla onaylayıp tekrar giriş yap.');
+    let cli: Client | null = null;
+    for (let i = 0; i < 5 && !cli; i++) {
+      cli = await fetchClientByAuth(data.user.id, data.user.email || email);
+      if (!cli) await new Promise((res) => setTimeout(res, 400));
+    }
+    if (!cli) return setAuthMsg('Hesap oluştu ama profilin hazırlanamadı, birazdan tekrar dener misin?');
+    girisSonrasiYukle(cli);
+  }
+  // ---------- Meridyen bağlantısı (hesap ile bağlantı ayrı şeyler) ----------
+  async function meridyeneBaglan() {
+    if (!client) return;
+    setMsg('Kontrol ediliyor…');
+    const u = await supabase.from('dog_meridyen_uyelik').select('id,bitis').eq('client_id', client.id).order('created_at', { ascending: false }).limit(1);
+    if (u.error) return setMsg('Hata: ' + u.error.message);
+    const uy = u.data && u.data[0];
+    const aktif = uy && (!uy.bitis || uy.bitis > new Date().toISOString());
+    if (!aktif) return setMsg('Meridyen üyeliğin bulunamadı — merkezinle iletişime geç.');
+    await supabase.from('dog_clients').update({ meridyen_bagli: true }).eq('id', client.id);
+    const nc = { ...client, meridyen_bagli: true };
+    setClient(nc); localStorage.setItem(LS, JSON.stringify(nc)); setMsg('');
+    loadData(client.id); loadInbox(client.id);
+  }
+  async function meridyenBaglantiKes() {
+    if (!client) return;
+    if (!client.auth_id) { await cikis(); return; } // eski tip (yalnız kodla eşleşmiş) hesapta ayrı profil yok
+    await supabase.from('dog_clients').update({ meridyen_bagli: false }).eq('id', client.id);
+    const nc = { ...client, meridyen_bagli: false };
+    setClient(nc); localStorage.setItem(LS, JSON.stringify(nc));
   }
   async function currentSub() {
     try { if (!('serviceWorker' in navigator)) return null; const reg = await navigator.serviceWorker.ready; return await reg.pushManager.getSubscription(); } catch (_) { return null; }
@@ -850,7 +913,13 @@ export default function Rite() {
     const j: any = sub.toJSON();
     await supabase.from('dog_push_subs').delete().eq('endpoint', j.endpoint);
   }
-  async function cikis() { await removePushForDevice(); localStorage.removeItem(LS); setClient(null); setCode(''); setPushOn(false); }
+  async function cikis() {
+    await removePushForDevice();
+    try { await supabase.auth.signOut(); } catch (_) {}
+    localStorage.removeItem(LS);
+    setClient(null); setCode(''); setPushOn(false);
+    setAuthEmail(''); setAuthPass(''); setAuthMsg('');
+  }
   async function resetAjanda() {
     if (!client) return;
     if (!confirm('Ajandadaki TÜM ritüeller ve işaretler silinsin mi? (Kişisel aktiviteler havuzda kalır; geri alınamaz)')) return;
@@ -1489,19 +1558,36 @@ export default function Rite() {
     setPushMsg(j.error ? 'Hata: ' + j.error : 'Gönderildi: ' + j.sent + '/' + j.total);
   }
 
-  // ---------- pairing ----------
+  // ---------- giriş / hesap oluşturma ----------
   if (!client) {
     return (
       <div className="app">
         <div className="hd"><div className="b">Rite <span>· daily rites</span></div><span style={{ marginLeft: 'auto', fontSize: 11, color: '#bfe2b0' }}>● anonim</span></div>
         <div className="main">
           <div className="card" style={{ marginTop: 26 }}>
-            <h2>Merkeze bağlan</h2>
-            <p className="sub">Merkezinden/koçundan aldığın <b>eşleştirme kodunu</b> gir. Hesap yok, e-posta yok — kod yalnızca yerel bir anahtar.</p>
-            <label>Eşleştirme kodu</label>
-            <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="RITE-AB12C" autoCapitalize="characters" />
-            <div style={{ marginTop: 12 }}><button className="btn" onClick={pair}>Bağlan</button></div>
-            <div className="msg">{msg}</div>
+            <h2>{authMode === 'kayit' ? 'Hesap oluştur' : 'Giriş yap'}</h2>
+            <p className="sub">E-posta ve şifrenle kendi Rite hesabını {authMode === 'kayit' ? 'oluştur' : 'aç'}. Meridyen&apos;e bağlanmak istersen bunu daha sonra Ayarlar&apos;dan yaparsın.</p>
+            <label>E-posta</label>
+            <input value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} placeholder="ornek@eposta.com" type="email" autoCapitalize="none" />
+            <label style={{ marginTop: 8 }}>Şifre</label>
+            <input value={authPass} onChange={(e) => setAuthPass(e.target.value)} placeholder="En az 6 karakter" type="password" />
+            <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
+              <button className="btn" onClick={authMode === 'kayit' ? authKayit : authGiris}>{authMode === 'kayit' ? 'Hesap oluştur' : 'Giriş yap'}</button>
+              <button className="btn ghost" onClick={() => { setAuthMode(authMode === 'kayit' ? 'giris' : 'kayit'); setAuthMsg(''); }}>{authMode === 'kayit' ? 'Zaten hesabım var' : 'Hesabım yok, oluştur'}</button>
+            </div>
+            {authMsg && <div className="msg">{authMsg}</div>}
+          </div>
+          <div className="card" style={{ marginTop: 12 }}>
+            <button className="linkbtn" onClick={() => setKodFormOpen((o) => !o)}>{kodFormOpen ? '‹ Kapat' : 'Merkezinden bir eşleştirme kodu aldıysan →'}</button>
+            {kodFormOpen && (
+              <div style={{ marginTop: 10 }}>
+                <p className="sub" style={{ marginTop: 0 }}>Merkezinden/koçundan aldığın eşleştirme kodunu gir.</p>
+                <label>Eşleştirme kodu</label>
+                <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="RITE-AB12C" autoCapitalize="characters" />
+                <div style={{ marginTop: 12 }}><button className="btn" onClick={pair}>Bağlan</button></div>
+                {msg && <div className="msg">{msg}</div>}
+              </div>
+            )}
           </div>
           <p className="note" style={{ textAlign: 'center', marginTop: 8 }}>Telefonda: tarayıcı menüsü → &quot;Ana ekrana ekle&quot;.</p>
         </div>
@@ -1509,6 +1595,7 @@ export default function Rite() {
     );
   }
 
+  const bagli = !!(client.code || client.meridyen_bagli);
   const wday = (d: string) => new Date(d + 'T00:00:00').getDay();
   // Tarihsiz (baslangic yok) ritüel = Inbox kartı; ajandada görünmez.
   const activeOn = (r: any, d: string) => !!r.baslangic && r.baslangic <= d && (!r.bitis || d <= r.bitis) && (!r.gunler || r.gunler.length === 0 || r.gunler.includes(wday(d)));
@@ -2096,10 +2183,12 @@ export default function Rite() {
             <div className="card"><h3>Bağlantı</h3>
               <div className="mrow" style={{ borderTop: 'none' }}>
                 <span>Meridyen</span>
-                {client.code ? <span className="pstat" style={{ color: 'var(--green)' }}>✓ bağlı</span> : <span className="pstat">bağlı değil</span>}
+                {bagli ? <span className="pstat" style={{ color: 'var(--green)' }}>✓ bağlı</span> : <span className="pstat">bağlı değil</span>}
               </div>
-              {client.code ? (
-                <div className="rowbtns" style={{ marginTop: 6 }}><button className="btn ghost sm" onClick={cikis}>Bağlantıyı kes</button></div>
+              {bagli ? (
+                <div className="rowbtns" style={{ marginTop: 6 }}><button className="btn ghost sm" onClick={meridyenBaglantiKes}>Bağlantıyı kes</button></div>
+              ) : client.auth_id ? (
+                <div className="rowbtns" style={{ marginTop: 6 }}><button className="btn sm" onClick={meridyeneBaglan}>Meridyen&apos;e bağlan</button></div>
               ) : (
                 <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
                   <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="RITE-AB12C" autoCapitalize="characters" style={{ flex: 1 }} />
@@ -2107,6 +2196,12 @@ export default function Rite() {
                 </div>
               )}
               {msg && <div className="msg">{msg}</div>}
+              {client.auth_id && (
+                <div className="mrow" style={{ marginTop: 10 }}>
+                  <span className="note" style={{ margin: 0 }}>{client.email || 'Hesabın'}</span>
+                  <button className="btn ghost sm" onClick={cikis}>Hesaptan çıkış</button>
+                </div>
+              )}
             </div>
             <div className="card"><h3>Profil</h3>
               <label className="fldlbl" style={{ marginTop: 0 }}>Görünen adın (paylaşımlarında "kimden" olarak görünür)</label>
