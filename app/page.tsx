@@ -2780,7 +2780,10 @@ export default function Rite() {
             {!preview && (!isRit || (personal && !isProg)) && (
               <div className="dettoolbar">
                 {!isRit && !paylasilamaz && <button className="tbtn" onClick={() => { setPaylasOpen(true); setKMsg(''); }}><span className="tbic">↪️</span>Paylaş</button>}
-                {personal && !isProg && <button className="tbtn" onClick={() => { closeDetay(); openStudioEdit(act); }}><span className="tbic">✎</span>Düzenle</button>}
+                {/* Eski "Düzenle" formu (openStudioEdit) kart_tipi='bilgi' yapısını (kart_config: videolar/icerik/randevu…)
+                    hiç bilmiyor — üstüne yazarsa veri kaybına yol açar. Bilgi kartları için düzenleme henüz yok,
+                    o yüzden bu buton bilgi kartlarında hiç gösterilmiyor (kullanıcı bildirdi: eski formda geliyordu). */}
+                {personal && !isProg && kTip !== 'bilgi' && <button className="tbtn" onClick={() => { closeDetay(); openStudioEdit(act); }}><span className="tbic">✎</span>Düzenle</button>}
                 {!isRit && personal && <button className="tbtn danger" onClick={() => silAktivite(o)}><span className="tbic">🗑</span>Sil</button>}
               </div>
             )}
