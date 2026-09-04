@@ -1210,6 +1210,28 @@ export default function Rite() {
     // tekrar dokunulamıyor.
     setTimeout(() => { setPaylasOpen(false); setKMsg(''); setPaylasBusy(false); }, 900);
   }
+  // Ajanda'da doğrudan yaratılmış bir kartı (isRit) kimseye göndermeden kendi Havuzuna al — Paylaş penceresindeki
+  // ikinci bir seçenek (kullanıcı isteği). Alan eşlemesi paylas()'ın isRit dalıyla aynı mantık, sadece dog_inbox
+  // yerine doğrudan dog_activities'e yazıyor (alıcı/kabul adımı yok). Randevu hariç — tek bir tarihe/saate bağlı
+  // olduğu için Havuz'un tarihsiz şablon kavramına uymuyor (kullanıcının "Havuzuma ekle" için verdiği karar).
+  async function ritHavuzaAl(o: any) {
+    if (!client || paylasBusy) return;
+    setPaylasBusy(true);
+    const alan0 = o.faydalar?.length ? faydaMap[o.faydalar[0]]?.alan || null : null;
+    const ins = await supabase.from('dog_activities').insert({
+      client_id: client.id, tur: 'aktivite', ad: o.ad, grup: alan0 || 'Genel',
+      faydalar: o.faydalar || [], aciklama: o.aciklama || null,
+      videolar: o.url ? [{ baslik: o.ad, url: o.url }] : [],
+      zaman: o.zaman || 'gün', zamanlar: null, gunler: o.gunler || null,
+      sure_gun: o.bitis ? sureGun(o) : null,
+      kart_tipi: o.kart_tipi || null, kart_config: o.kart_config || null,
+      kaynak_etiket: 'Kendi', aktif: true,
+    }).select().single();
+    if (ins.error) { setKMsg('Havuza eklenemedi: ' + ins.error.message); setPaylasBusy(false); return; }
+    setKMsg('✓ Havuzuna eklendi');
+    loadActivities();
+    setTimeout(() => { setPaylasOpen(false); setKMsg(''); setPaylasBusy(false); }, 900);
+  }
   async function silAktivite(act: any) {
     if (!confirm('Bu kişisel aktivite havuzdan silinsin mi? (Ajandadaki ritüeller kalır)')) return;
     const r = await supabase.from('dog_activities').delete().eq('id', act.id);
@@ -2838,6 +2860,16 @@ export default function Rite() {
                 <label className="fldlbl">Kod (ops., ek bir kişi için)</label>
                 <input value={kShareTo} onChange={(e) => setKShareTo(e.target.value)} placeholder="RT-XXXXX" autoCapitalize="characters" />
                 <div style={{ marginTop: 10 }}><button className="btn" disabled={paylasBusy} onClick={() => paylas(o, isRit, [...paylasSel, kShareTo])}>{paylasBusy ? 'Paylaşılıyor…' : 'Paylaş' + (paylasSel.length > 1 ? ' (' + paylasSel.length + ' kişi)' : '')}</button></div>
+                {/* Kimseye göndermeden, doğrudan kendi Havuzuna al — Ajanda'da direkt yaratılmış bir kart (ör.
+                    alışkanlık) için paylaşım/kabul turuna hiç gerek kalmadan Havuz'a şablon olarak eklenir.
+                    Randevu hariç — Havuz'un tarihsiz şablon kavramına uymuyor. Zaten Havuz'daki bir karta
+                    (isRit=false) bu seçenek anlamsız, orada gösterilmiyor. */}
+                {isRit && !kCfg?.randevu && (
+                  <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--line)' }}>
+                    <button className="btn ghost" style={{ width: '100%' }} disabled={paylasBusy} onClick={() => ritHavuzaAl(o)}>📥 Kendi Havuzuma al</button>
+                    <div className="note" style={{ marginTop: 4, marginBottom: 0 }}>Kimseye göndermeden, bu kartı doğrudan kendi Havuz'una (şablon olarak) ekler.</div>
+                  </div>
+                )}
                 {kMsg && <div className="msg">{kMsg}</div>}
               </div>
               </div>
