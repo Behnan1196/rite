@@ -1219,7 +1219,7 @@ export default function Rite() {
     }).select().single();
     if (ins.error) { alert('Kaydedilemedi: ' + ins.error.message); return; }
     loadData(client.id);
-    if (ins.data) { openRit(ins.data); setTaze(ins.data.id); }
+    closeDetay(); // her şeyi zaten bu ekranda yazdın — tekrar aynı ekranı açmaya gerek yok
   }
   // Ayraç: isimli bir bölüm başlığı — bugünden itibaren, siz silene kadar her gün aynı şekilde görünür,
   // sıradan bir kart gibi sürüklenir; gunSiraMap/dog_gun_duzeni onun da yerini günden güne hatırlar.
@@ -1754,13 +1754,17 @@ export default function Rite() {
     const cfg = rt.kart_config || {};
     const noDone = tip === 'anket' || tip === 'coktan' || tip === 'nefes' || tip === 'ruhhali' || tip === 'tarif' || tip === 'sukran' || tip === 'topraklama' || tip === 'pomodoro' || tip === 'beden' || tip === 'uykuoncesi' || tip === 'su' || tip === 'maruz' || tip === 'niyet' || tip === 'workout' || (tip === 'video' && cfg.done === false) || (tip === 'randevu' && cfg.done === false);
     const vurl = tip === 'video' ? (cfg.url || rt.url) : rt.url;
-    const ipucu = tip === 'anket' ? '📋 doldur' : tip === 'coktan' ? '❓ yanıtla' : tip === 'diyet' ? '🍽 öğün' : tip === 'tarif' ? '🍳 tarif' : tip === 'video' ? '🎬 izle' : tip === 'nefes' ? '🫁 nefes' : tip === 'ruhhali' ? '🙂 check-in' : tip === 'workout' ? '🏋️ egzersiz' : tip === 'bilgi' ? '📄 oku' : tip === 'sukran' ? '🙏 şükran' : tip === 'topraklama' ? '🖐 topraklan' : tip === 'pomodoro' ? '🍅 odaklan' : tip === 'beden' ? '🧘 taransın' : tip === 'uykuoncesi' ? '🌙 hazırlan' : tip === 'su' ? '💧 iç' : tip === 'maruz' ? '🎯 uygula' : tip === 'niyet' ? '🧭 niyet belirle' : tip === 'randevu' ? '📅 randevu' : '';
+    // Kişisel bilgi kartları (Not/Randevu/Alışkanlık) hepsi aynı kart_tipi='bilgi' altında — görsel olarak
+    // birbirinden ayrışsınlar diye burada alt tipe göre farklı ipucu gösteriliyor (kullanıcı isteği).
+    const bilgiIkon = tip === 'bilgi' ? (cfg.randevu ? '📅' : rt.aliskanlik ? '🎓' : '📄') : null;
+    const bilgiAltTip = bilgiIkon ? bilgiIkon + (cfg.randevu ? ' randevu' : rt.aliskanlik ? ' alışkanlık' : ' not') : null;
+    const ipucu = tip === 'anket' ? '📋 doldur' : tip === 'coktan' ? '❓ yanıtla' : tip === 'diyet' ? '🍽 öğün' : tip === 'tarif' ? '🍳 tarif' : tip === 'video' ? '🎬 izle' : tip === 'nefes' ? '🫁 nefes' : tip === 'ruhhali' ? '🙂 check-in' : tip === 'workout' ? '🏋️ egzersiz' : bilgiAltTip ? bilgiAltTip : tip === 'sukran' ? '🙏 şükran' : tip === 'topraklama' ? '🖐 topraklan' : tip === 'pomodoro' ? '🍅 odaklan' : tip === 'beden' ? '🧘 taransın' : tip === 'uykuoncesi' ? '🌙 hazırlan' : tip === 'su' ? '💧 iç' : tip === 'maruz' ? '🎯 uygula' : tip === 'niyet' ? '🧭 niyet belirle' : tip === 'randevu' ? '📅 randevu' : '';
     const meridyen = rt.kaynak === 'Meridyen'; // sağlayıcı-kaynaklı kart — kişisel kartlardan çerçeveyle ayrıştır
     const stilP = cfg.stil ? STIL_LOOKUP[cfg.stil] : null;
     return (
       <div>
         <div className={'rit' + (meridyen && !stilP ? ' rit-mer' : '')} style={stilP ? { borderLeft: '3px solid ' + stilP.ac, paddingLeft: 9 } : undefined}>
-          <div className={'chk' + (done ? ' on' : '')} onClick={() => (noDone ? openRit(rt) : toggleRit(rt.id))} title={noDone ? 'Aç' : 'Yaptım'}>{done ? '✓' : (noDone ? kartIkon(tip) : '')}</div>
+          <div className={'chk' + (done ? ' on' : '')} onClick={() => (noDone ? openRit(rt) : toggleRit(rt.id))} title={noDone ? 'Aç' : 'Yaptım'}>{done ? '✓' : (noDone ? kartIkon(tip) : (bilgiIkon || ''))}</div>
           <div style={{ flex: 1, cursor: 'pointer' }} onClick={() => openRit(rt)}>
             <div className="t">{rt.ad}
               {ritAreas(rt).map((a) => <span key={a} className="tagp p-alan">{a}</span>)}
