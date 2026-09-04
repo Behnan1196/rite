@@ -183,7 +183,7 @@ function BilgiKartEdit({ cfg, onSave, randevu }: { cfg: any; onSave: (cfg: any) 
   return (
     <div className="howto">
       <div className="bilgi">
-        {randevu ? (
+        {randevu && (
           <div style={{ margin: '0 0 10px' }}>
             <div className="k">📅 Görüşme randevusu</div>
             <div style={{ margin: '2px 0 8px' }}>{RANDEVU_FORMAT.map(([f, l]) => <span key={f} className={'chip' + (format === f ? ' on' : '')} onClick={() => formatKaydet(f)}>{l}</span>)}</div>
@@ -191,40 +191,44 @@ function BilgiKartEdit({ cfg, onSave, randevu }: { cfg: any; onSave: (cfg: any) 
             <input value={resimUrl} onChange={(e) => setResimUrl(e.target.value)} onBlur={resimKaydet} placeholder="Resim linki (ops.)…" style={{ width: '100%', marginTop: 8 }} />
             {resimUrl.trim() && <img src={resimUrl.trim()} alt="" style={{ maxWidth: '100%', borderRadius: 8, margin: '8px 0 0', display: 'block' }} />}
           </div>
-        ) : (
-          <>
-            <div style={{ margin: '0 0 6px', display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
-              {videolar.map((v, i) => (
-                <span key={i} className={'chip' + (i === vidSec ? ' on' : '')} onClick={() => setVidSec(i)}>
-                  {v.baslik || ('Video ' + (i + 1))}{(v.bas || v.bit) ? ` ⏱${v.bas || 0}–${v.bit || '…'}sn` : ''}
-                  <span style={{ marginLeft: 6, opacity: 0.55 }} onClick={(e) => { e.stopPropagation(); videoSil(i); }}>✕</span>
-                </span>
-              ))}
-              <span className="chip" style={{ borderStyle: 'dashed' }} onClick={() => setVidEkleOpen((o) => !o)}>+ Link ekle</span>
-            </div>
-            {vidEkleOpen && (
-              <div className="daterow" style={{ margin: '0 0 8px', flexWrap: 'wrap', gap: 6 }}>
-                <input value={vAd} onChange={(e) => setVAd(e.target.value)} placeholder="Video adı (ops.)" style={{ flex: 1, minWidth: 100 }} />
-                <input value={vUrl} onChange={(e) => setVUrl(e.target.value)} placeholder="https://…" style={{ flex: 2, minWidth: 140 }} />
-                <input value={vBas} onChange={(e) => setVBas(e.target.value.replace(/\D/g, ''))} placeholder="Başlangıç sn (ops., YouTube)" style={{ flex: 1, minWidth: 110 }} />
-                <input value={vBit} onChange={(e) => setVBit(e.target.value.replace(/\D/g, ''))} placeholder="Bitiş sn (ops., YouTube)" style={{ flex: 1, minWidth: 130 }} />
-                <input value={vNot} onChange={(e) => setVNot(e.target.value)} placeholder="Bu videoya özel not (ops.)" style={{ flex: 2, minWidth: 160 }} />
-                <button className="btn sm" onClick={videoEkle} disabled={!vUrl.trim()}>Ekle</button>
-              </div>
-            )}
-            {secili && <div style={{ margin: '0 0 4px' }}><EmbedVideo url={secili.url} bas={secili.bas} bit={secili.bit} /></div>}
-            {secili && (
-              <input value={ozelNotVal} onChange={(e) => setOzelNotVal(e.target.value)} onBlur={ozelNotKaydet} placeholder="Bu videoya özel not (ops.)" style={{ width: '100%', margin: '0 0 10px', fontSize: 12.5, fontStyle: 'italic' }} />
-            )}
-          </>
         )}
-        <div className="k">Açıklama</div>
+        {/* Açıklama artık gri bölümün en üstünde — asıl içerik bu. Video linki eklemek ikincil bir eylem olduğu
+            için tam bir satır kaplayan "+ Link ekle" yerine, Açıklama başlığının sağında küçük bir simge oldu
+            (kullanıcı isteği: video üstte değil, Açıklama üstte olsun). */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+          <div className="k" style={{ margin: 0 }}>Açıklama</div>
+          {!randevu && <span className="chip" style={{ borderStyle: 'dashed', fontSize: 11, flex: '0 0 auto' }} onClick={() => setVidEkleOpen((o) => !o)} title="Video linki ekle">🔗 Video</span>}
+        </div>
+        {!randevu && vidEkleOpen && (
+          <div className="daterow" style={{ margin: '6px 0 8px', flexWrap: 'wrap', gap: 6 }}>
+            <input value={vAd} onChange={(e) => setVAd(e.target.value)} placeholder="Video adı (ops.)" style={{ flex: 1, minWidth: 100 }} />
+            <input value={vUrl} onChange={(e) => setVUrl(e.target.value)} placeholder="https://…" style={{ flex: 2, minWidth: 140 }} />
+            <input value={vBas} onChange={(e) => setVBas(e.target.value.replace(/\D/g, ''))} placeholder="Başlangıç sn (ops., YouTube)" style={{ flex: 1, minWidth: 110 }} />
+            <input value={vBit} onChange={(e) => setVBit(e.target.value.replace(/\D/g, ''))} placeholder="Bitiş sn (ops., YouTube)" style={{ flex: 1, minWidth: 130 }} />
+            <input value={vNot} onChange={(e) => setVNot(e.target.value)} placeholder="Bu videoya özel not (ops.)" style={{ flex: 2, minWidth: 160 }} />
+            <button className="btn sm" onClick={videoEkle} disabled={!vUrl.trim()}>Ekle</button>
+          </div>
+        )}
         {icerikEdit ? (
           <textarea autoFocus value={icerikVal} onChange={(e) => setIcerikVal(e.target.value)} onBlur={icerikKaydet} placeholder={'# Başlık\nNotun…\n- madde\n**kalın**'} style={{ width: '100%', minHeight: 100 }} />
         ) : (
           <div onClick={() => setIcerikEdit(true)} style={{ cursor: 'text', minHeight: 24 }}>
             {icerikVal.trim() ? renderMetin(icerikVal) : <div className="note" style={{ marginTop: 0 }}>Yazmak için dokun…</div>}
           </div>
+        )}
+        {!randevu && videolar.length > 0 && (
+          <div style={{ margin: '10px 0 6px', display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+            {videolar.map((v, i) => (
+              <span key={i} className={'chip' + (i === vidSec ? ' on' : '')} onClick={() => setVidSec(i)}>
+                {v.baslik || ('Video ' + (i + 1))}{(v.bas || v.bit) ? ` ⏱${v.bas || 0}–${v.bit || '…'}sn` : ''}
+                <span style={{ marginLeft: 6, opacity: 0.55 }} onClick={(e) => { e.stopPropagation(); videoSil(i); }}>✕</span>
+              </span>
+            ))}
+          </div>
+        )}
+        {!randevu && secili && <div style={{ margin: '0 0 4px' }}><EmbedVideo url={secili.url} bas={secili.bas} bit={secili.bit} /></div>}
+        {!randevu && secili && (
+          <input value={ozelNotVal} onChange={(e) => setOzelNotVal(e.target.value)} onBlur={ozelNotKaydet} placeholder="Bu videoya özel not (ops.)" style={{ width: '100%', margin: '0 0 10px', fontSize: 12.5, fontStyle: 'italic' }} />
         )}
       </div>
     </div>
@@ -2451,7 +2455,7 @@ export default function Rite() {
             {isRit ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 {kTip === 'bilgi' && !isDraft && <div className={'chk' + (ritDone(o.id) ? ' on' : '')} onClick={() => toggleRit(o.id)} title="Yaptım">{ritDone(o.id) ? '✓' : ''}</div>}
-                <input className="detbaslik" value={adInput} onChange={(e) => setAdInput(e.target.value)} onBlur={() => { if (adInput.trim() && adInput.trim() !== (o.ad || '')) setRitAd(o.id, adInput); }} style={{ flex: 1 }} />
+                <input className="detbaslik" value={adInput} autoFocus={isDraft} onFocus={(e) => e.target.select()} onChange={(e) => setAdInput(e.target.value)} onBlur={() => { if (adInput.trim() && adInput.trim() !== (o.ad || '')) setRitAd(o.id, adInput); }} style={{ flex: 1 }} />
               </div>
             ) : <h2 style={{ paddingRight: 34 }}>{o.ad}</h2>}
             <div className="m">
