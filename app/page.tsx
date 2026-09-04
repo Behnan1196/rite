@@ -808,6 +808,7 @@ export default function Rite() {
   const [kGrup, setKGrup] = useState('Genel');
   const [kVin, setKVin] = useState({ baslik: '', url: '' });
   const [kMsg, setKMsg] = useState('');
+  const [paylasBusy, setPaylasBusy] = useState(false);
   const [kShareTo, setKShareTo] = useState('');
   const [kisiler, setKisiler] = useState<any[]>([]);
   const [profilAd, setProfilAd] = useState('');
@@ -1164,20 +1165,32 @@ export default function Rite() {
   const kisiAd = (kod: string) => kisiler.find((x) => x.kod === kod)?.ad;
   // Ritüel / aktivite / programı bir paylaşım koduna yolla (dog_inbox).
   async function paylas(o: any, isRit: boolean, kod: string) {
+    if (paylasBusy) return; // çift dokunma/çift paylaşımı önle (kullanıcı geri bildirimi)
     const k = (kod || '').trim().toUpperCase();
     if (!k) return setKMsg('Kişi seç ya da kod gir');
+    setPaylasBusy(true);
     const rc = await supabase.from('dog_clients').select('id').eq('share_code', k).limit(1);
-    if (rc.error || !rc.data || !rc.data.length) return setKMsg('Kod bulunamadı: ' + k);
+    if (rc.error || !rc.data || !rc.data.length) { setPaylasBusy(false); return setKMsg('Kod bulunamadı: ' + k); }
     let payload: any;
     if (!isRit && o.tur === 'program') payload = { tur: 'program', ad: o.ad, adimlar: o.adimlar || [], sure_gun: o.sure_gun || null };
     else if (!isRit) payload = { tur: 'aktivite', ad: o.ad, faydalar: o.faydalar || [], aciklama: o.aciklama || null, videolar: o.videolar || [], zaman: o.zaman || 'gün', zamanlar: o.zamanlar || null, gunler: o.gunler || null, sure_gun: o.sure_gun || null, kartTipi: o.kart_tipi || null, kartConfig: o.kart_config || null, aliskanlik: o.aliskanlik };
-    else payload = { tur: 'aktivite', ad: o.ad, faydalar: o.faydalar || [], url: o.url || null, zaman: o.zaman || 'gün', zamanlar: [o.zaman || 'gün'], gunler: o.gunler || null, sure_gun: null, kartTipi: o.kart_tipi || null, kartConfig: o.kart_config || null, aliskanlik: o.aliskanlik };
+    else {
+      payload = { tur: 'aktivite', ad: o.ad, faydalar: o.faydalar || [], url: o.url || null, zaman: o.zaman || 'gün', zamanlar: [o.zaman || 'gün'], gunler: o.gunler || null, sure_gun: null, kartTipi: o.kart_tipi || null, kartConfig: o.kart_config || null, aliskanlik: o.aliskanlik };
+      // Süregelen olmayan kişisel bilgi kartları (Not/Randevu) tek bir güne ait — paylaşırken o tarih de gitsin,
+      // yoksa alıcı tarafında "bugüne" düşer (randevu için özellikle yanlış olur). Alışkanlık/rutin paylaşımında
+      // alıcı için "bugün başlasın" zaten doğru davranış, o yüzden bilerek dokunulmadı.
+      if (o.kart_tipi === 'bilgi' && !o.aliskanlik) { payload.baslangic = o.baslangic || null; payload.bitis = o.bitis || null; }
+    }
     const gonderen = profilAd.trim() || client?.ad || '';
     payload.from_ad = gonderen || null;
     const ins = await supabase.from('dog_inbox').insert({ client_id: rc.data[0].id, tur: 'aktivite', baslik: o.ad, payload, from_code: client?.share_code || null, durum: 'yeni' });
-    if (ins.error) return setKMsg('Hata: ' + ins.error.message);
+    if (ins.error) { setPaylasBusy(false); return setKMsg('Hata: ' + ins.error.message); }
     try { await fetch('/api/push/send', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ clientId: rc.data[0].id, title: gonderen ? '📩 ' + gonderen : '📩 Yeni paylaşım', body: (gonderen ? gonderen + ' paylaştı: ' : '') + o.ad, url: '/' }) }); } catch (_) { /* sessiz */ }
-    setKShareTo(''); setPaylasSel(''); setKMsg('Paylaşıldı → ' + (kisiAd(k) || k));
+    setKShareTo(''); setPaylasSel(''); setKMsg('✓ Paylaşıldı → ' + (kisiAd(k) || k));
+    // Küçük bir onay yazısı gözden kaçabiliyordu (kullanıcı geri bildirimi) — artık paylaşım tamamlanana kadar
+    // buton kilitli kalıyor, kısa bir gecikmeyle pencere kendiliğinden kapanıyor; "paylaştım mı" belirsizliğiyle
+    // tekrar dokunulamıyor.
+    setTimeout(() => { setPaylasOpen(false); setKMsg(''); setPaylasBusy(false); }, 900);
   }
   async function silAktivite(act: any) {
     if (!confirm('Bu kişisel aktivite havuzdan silinsin mi? (Ajandadaki ritüeller kalır)')) return;
@@ -1716,7 +1729,15 @@ export default function Rite() {
     } else {
       const alan0 = (p.faydalar && p.faydalar.length) ? (faydaList.find((f) => f.kod === p.faydalar[0])?.alan || null) : null;
       const slots = p.zamanlar && p.zamanlar.length ? p.zamanlar : [p.zaman || 'gün'];
-      for (const s of slots) await ritEkle(p.ad || item.baslik, s, 'Paylaşılan', 'aliskanlik', alan0, null, p.faydalar || [], (p.videolar && p.videolar[0]?.url) || null, p.gunler || null, p.sure_gun || null, null, null, false, 0, null, 0, p.kartTipi || null, p.kartConfig || null, typeof p.aliskanlik === 'boolean' ? p.aliskanlik : null);
+      // Kişisel bilgi kartları (Not/Randevu/Alışkanlık) her zaman kaynak='Kendi' ile eklenmeli — yoksa detay
+      // ekranı bunları düzenlenebilir BilgiKartEdit yerine eski/salt-okunur BilgiKart ile gösterir (kullanıcının
+      // bulduğu hata). Süregelen olmayanlar (Not/Randevu) için gönderenin tarihi de korunuyor — paylaş()'ta
+      // eklendiyse baslangic/bitis burada gün ofsetine/süreye çevriliyor; yoksa (rutin/alışkanlık paylaşımında
+      // olduğu gibi) alıcı için "bugün başlasın" davranışı aynen kalıyor.
+      const kisiselBilgi = p.kartTipi === 'bilgi';
+      const basGun = p.baslangic ? Math.round((parseD(p.baslangic).getTime() - parseD(today).getTime()) / 86400000) : 0;
+      const sureG = (p.baslangic && p.bitis) ? Math.round((parseD(p.bitis).getTime() - parseD(p.baslangic).getTime()) / 86400000) + 1 : (p.sure_gun || null);
+      for (const s of slots) await ritEkle(p.ad || item.baslik, s, kisiselBilgi ? 'Kendi' : 'Paylaşılan', 'aliskanlik', alan0, null, p.faydalar || [], (p.videolar && p.videolar[0]?.url) || null, p.gunler || null, sureG, null, null, false, basGun, null, 0, p.kartTipi || null, p.kartConfig || null, typeof p.aliskanlik === 'boolean' ? p.aliskanlik : null);
       loadData(client.id);
     }
     await supabase.from('dog_inbox').delete().eq('id', item.id);
@@ -2332,7 +2353,9 @@ export default function Rite() {
                         ? <span className="note" style={{ margin: 0, color: 'var(--green)', fontWeight: 700 }}>✓ Alındı</span>
                         : ibGrupSec !== v.id && <>
                             <button className="btn ghost sm" onClick={() => inboxAktiviteAjanda(v)}>Ajandama ekle</button>
-                            <button className="btn ghost sm" onClick={() => { setIbGrupSec(v.id); setIbGrupVal('Genel'); }}>Havuzuma ekle</button>
+                            {/* Randevu tek bir tarihe/saate bağlı — havuz (tekrarlanan/tarihsiz aktivite şablonu) kavramına uymuyor,
+                                o yüzden randevu paylaşımlarında bu seçenek hiç gösterilmiyor (kullanıcı isteği). */}
+                            {!v.payload?.kartConfig?.randevu && <button className="btn ghost sm" onClick={() => { setIbGrupSec(v.id); setIbGrupVal('Genel'); }}>Havuzuma ekle</button>}
                           </>}
                       <button className="btn ghost sm" style={{ color: 'var(--red)', borderColor: '#e6c4bd' }} onClick={() => inboxSil(v.id)}>Sil</button>
                     </div>
@@ -2661,9 +2684,9 @@ export default function Rite() {
             )}
 
             {paylasOpen && (
-              <div className="modal top2" onMouseDown={() => setPaylasOpen(false)}>
+              <div className="modal top2" onMouseDown={() => { setPaylasOpen(false); setPaylasBusy(false); }}>
               <div className="sheet small" onMouseDown={(e) => e.stopPropagation()}>
-                <button className="x" onClick={() => setPaylasOpen(false)}>×</button>
+                <button className="x" onClick={() => { setPaylasOpen(false); setPaylasBusy(false); }}>×</button>
                 <h3 style={{ marginBottom: 4 }}>📤 Paylaş</h3>
                 <p className="note" style={{ marginTop: 0 }}><b>{o.ad}</b></p>
                 {kisiler.length > 0 ? (<>
@@ -2672,7 +2695,7 @@ export default function Rite() {
                 </>) : <div className="note">Henüz kişi yok — Ayarlar → Paylaşım'dan ekle. Ya da kod gir:</div>}
                 <label className="fldlbl">Kod (ops.)</label>
                 <input value={kShareTo} onChange={(e) => { setKShareTo(e.target.value); setPaylasSel(''); }} placeholder="RT-XXXXX" autoCapitalize="characters" />
-                <div style={{ marginTop: 10 }}><button className="btn" onClick={() => paylas(o, isRit, paylasSel || kShareTo)}>Paylaş</button></div>
+                <div style={{ marginTop: 10 }}><button className="btn" disabled={paylasBusy} onClick={() => paylas(o, isRit, paylasSel || kShareTo)}>{paylasBusy ? 'Paylaşılıyor…' : 'Paylaş'}</button></div>
                 {kMsg && <div className="msg">{kMsg}</div>}
               </div>
               </div>
