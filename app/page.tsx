@@ -1196,6 +1196,14 @@ export default function Rite() {
     loadData(client.id);
     if (ins.data) openRit(ins.data);
   }
+  // Alışkanlık: Not ile aynı içerik kartı ama baştan süregelen (bitiş tarihsiz) başlar ve alışkanlık işaretlidir —
+  // zamanlama (günler/süre) ve mezun etme sadece bu şekilde oluşturulmuş kartlarda gösterilir (bkz. isRit araç çubuğu).
+  async function hemenEkleAliskanlik() {
+    if (!client) return;
+    const ins = await supabase.from('dog_rituals').insert({ client_id: client.id, ad: 'Yeni alışkanlık', zaman: 'gün', kaynak: 'Kendi', tip: 'aliskanlik', kart_tipi: 'bilgi', kart_config: { icerik: null, videolar: [] }, aliskanlik: true, aktif: true, mezun: false, baslangic: day, bitis: null, blok_sira: Date.now() }).select().single();
+    loadData(client.id);
+    if (ins.data) openRit(ins.data);
+  }
   // Ayraç: isimli bir bölüm başlığı — bugünden itibaren, siz silene kadar her gün aynı şekilde görünür,
   // sıradan bir kart gibi sürüklenir; gunSiraMap/dog_gun_duzeni onun da yerini günden güne hatırlar.
   async function ayracEkle(ad: string) {
@@ -1825,12 +1833,6 @@ export default function Rite() {
               );
             })}</div>}
 
-            {ajView === 'gun' && !linkMode && (
-              <div style={{ textAlign: 'right', margin: '2px 0 6px' }}>
-                <button className="btn ghost sm" onClick={startLink}>+ Rutin oluştur</button>
-              </div>
-            )}
-
             {ajView === 'gun' && (linkMode ? (
               <div className="card">
                 <h3>Rutin oluştur</h3>
@@ -2385,11 +2387,18 @@ export default function Rite() {
               aciklamaGoster && <div className="howto"><div className="k">📋 Nasıl yapılır</div><div className="v">{aciklamaGoster}</div></div>
             ))}
 
-            {isRit && (
+            {isRit && (() => {
+              // Zamanlama (🕐) ve mezun etme (🎓) artık sadece Alışkanlık tipinde kişisel kartlarda gösteriliyor —
+              // Not ve Randevu (ikisi de kart_tipi='bilgi', kaynak='Kendi', ama alışkanlık DEĞİL) bu ikisinden
+              // arındırıldı; alışkanlık artık oluşturulurken (＋ menüsünden) seçilen bir tip, sonradan dönüştürülen
+              // bir özellik değil (kullanıcı isteği).
+              const kisiselBilgi = o.kaynak === 'Kendi' && kTip === 'bilgi';
+              const zamanlamaGoster = !kisiselBilgi || o.aliskanlik;
+              return (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, margin: '2px 0 10px' }}>
                 <div style={{ display: 'flex', gap: 6, flex: '0 0 auto' }}>
-                  <button className="btn ghost sm" onClick={() => setZamanOpen(true)} title={gunOzet} aria-label="Zamanlama">🕐</button>
-                  {!o.mezun && (o.aliskanlik ? (
+                  {zamanlamaGoster && <button className="btn ghost sm" onClick={() => setZamanOpen(true)} title={gunOzet} aria-label="Zamanlama">🕐</button>}
+                  {zamanlamaGoster && !o.mezun && (o.aliskanlik ? (
                     <button className="btn ghost sm" onClick={() => setHabitMenuFor(o)} title="Alışkanlık seçenekleri" aria-label="Alışkanlık seçenekleri">🎓</button>
                   ) : (
                     <button className="btn ghost sm" style={{ opacity: .4 }} onClick={() => setRitAliskanlik(o.id, true)} title="Alışkanlık yap" aria-label="Alışkanlık yap">🎓</button>
@@ -2402,7 +2411,8 @@ export default function Rite() {
                   {!paylasilamaz && <button className="btn ghost sm" onClick={() => { setPaylasOpen(true); setKMsg(''); }} title="Paylaş" aria-label="Paylaş">↪️</button>}
                 </div>
               </div>
-            )}
+              );
+            })()}
             {/* Not eklerken/düzenlerken "bu bir randevu" seçme kutusu artık yok — Randevu, alttaki ＋ menüsünden
                 kendi başına oluşturuluyor. Bir kart zaten randevu olarak oluşturulduysa (kart_config.randevu),
                 burada sadece bilgilendirme gösterilir, dönüştürme seçeneği sunulmaz. */}
@@ -2702,8 +2712,10 @@ export default function Rite() {
             <h2>Ekle</h2>
             <div className="ekleGrid">
               <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); hemenEkle('gün'); }}><span className="ekic">📝</span>Not</button>
+              <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); hemenEkleAliskanlik(); }}><span className="ekic">🎓</span>Alışkanlık</button>
               <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); hemenEkleRandevu(); }}><span className="ekic">📅</span>Randevu</button>
               <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); setAyracAdVal(''); setAyracYeniOpen(true); }}><span className="ekic">➖</span>Ayraç</button>
+              <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); setScreen('ajanda'); setAjView('gun'); startLink(); }}><span className="ekic">🔗</span>Rutin</button>
             </div>
             <div className="note" style={{ textAlign: 'center', marginTop: 12 }}>Not içine bağlantı eklersen otomatik video kartına döner.</div>
           </div>
