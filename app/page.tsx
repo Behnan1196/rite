@@ -133,8 +133,12 @@ function BilgiKartEdit({ cfg, onSave, randevu }: { cfg: any; onSave: (cfg: any) 
   const [icerikEdit, setIcerikEdit] = useState(false);
   const [icerikVal, setIcerikVal] = useState(cfg?.icerik || '');
   const [resimUrl, setResimUrl] = useState(cfg?.resim || '');
+  const [format, setFormat] = useState(cfg?.format || 'online');
+  const [yer, setYer] = useState(cfg?.yer || '');
   useEffect(() => { setIcerikVal(cfg?.icerik || ''); }, [cfg?.icerik]);
   useEffect(() => { setResimUrl(cfg?.resim || ''); }, [cfg?.resim]);
+  useEffect(() => { setFormat(cfg?.format || 'online'); }, [cfg?.format]);
+  useEffect(() => { setYer(cfg?.yer || ''); }, [cfg?.yer]);
   const secili = videolar[Math.min(vidSec, videolar.length - 1)];
   const [ozelNotVal, setOzelNotVal] = useState(secili?.ozelNot || '');
   useEffect(() => { setOzelNotVal(secili?.ozelNot || ''); }, [vidSec, secili?.ozelNot]);
@@ -167,12 +171,24 @@ function BilgiKartEdit({ cfg, onSave, randevu }: { cfg: any; onSave: (cfg: any) 
     if (v === (cfg?.resim || null)) return;
     onSave({ ...cfg, resim: v });
   }
+  function formatKaydet(f: string) {
+    setFormat(f);
+    onSave({ ...cfg, format: f });
+  }
+  function yerKaydet() {
+    const v = yer.trim() || null;
+    if (v === (cfg?.yer || null)) return;
+    onSave({ ...cfg, yer: v });
+  }
   return (
     <div className="howto">
       <div className="bilgi">
         {randevu ? (
           <div style={{ margin: '0 0 10px' }}>
-            <input value={resimUrl} onChange={(e) => setResimUrl(e.target.value)} onBlur={resimKaydet} placeholder="Resim linki (ops.)…" style={{ width: '100%' }} />
+            <div className="k">📅 Görüşme randevusu</div>
+            <div style={{ margin: '2px 0 8px' }}>{RANDEVU_FORMAT.map(([f, l]) => <span key={f} className={'chip' + (format === f ? ' on' : '')} onClick={() => formatKaydet(f)}>{l}</span>)}</div>
+            <input value={yer} onChange={(e) => setYer(e.target.value)} onBlur={yerKaydet} placeholder={format === 'online' ? 'Görüşme linki (ops.)…' : 'Adres (ops.)…'} style={{ width: '100%' }} />
+            <input value={resimUrl} onChange={(e) => setResimUrl(e.target.value)} onBlur={resimKaydet} placeholder="Resim linki (ops.)…" style={{ width: '100%', marginTop: 8 }} />
             {resimUrl.trim() && <img src={resimUrl.trim()} alt="" style={{ maxWidth: '100%', borderRadius: 8, margin: '8px 0 0', display: 'block' }} />}
           </div>
         ) : (
@@ -1293,7 +1309,7 @@ export default function Rite() {
   // güne sıkıştırıyordu (karışıklığın asıl kaynağı buydu).
   async function ritTasi(id: string, hedefBas: string) {
     if (!client || !hedefBas) return;
-    const rt = rituals.find((r) => r.id === id);
+    const rt = id ? rituals.find((r) => r.id === id) : detay?.obj;
     const oldBas = (rt && rt.baslangic) || today;
     const oldBit = rt && rt.bitis;
     let yeniBit: string | null = null;
@@ -1302,6 +1318,7 @@ export default function Rite() {
       const e = parseD(hedefBas); e.setDate(e.getDate() + delta);
       yeniBit = iso(e);
     }
+    if (!id) { patchDetay({ baslangic: hedefBas, bitis: yeniBit }); return; } // taslak
     await supabase.from('dog_rituals').update({ baslangic: hedefBas, bitis: yeniBit }).eq('id', id);
     patchDetay({ baslangic: hedefBas, bitis: yeniBit });
     loadData(client.id);
@@ -1318,7 +1335,7 @@ export default function Rite() {
   }
   async function setRitSure(id: string, gun: number | null) {
     if (!client) return;
-    const rt = rituals.find((r) => r.id === id);
+    const rt = id ? rituals.find((r) => r.id === id) : detay?.obj;
     let patch: any;
     if (!gun) patch = { bitis: null };
     else {
@@ -1328,6 +1345,7 @@ export default function Rite() {
       const bas = ilkUygunGun(bas0, rt?.gunler || null);
       const e = parseD(bas); e.setDate(e.getDate() + gun - 1); patch = { baslangic: bas, bitis: iso(e) };
     }
+    if (!id) { patchDetay(patch); return; } // taslak
     await supabase.from('dog_rituals').update(patch).eq('id', id);
     patchDetay(patch);
     loadData(client.id);
@@ -1335,7 +1353,7 @@ export default function Rite() {
   async function setRitGunler(id: string, g: number[]) {
     if (!client) return;
     const arr = g.length === 0 || g.length === 7 ? null : g;
-    const rt = rituals.find((r) => r.id === id);
+    const rt = id ? rituals.find((r) => r.id === id) : detay?.obj;
     let patch: any = { gunler: arr };
     // Kart zaten süreliyse (bitiş tarihi var) ve yeni seçilen günler mevcut pencereye hiç denk gelmiyorsa, aynı
     // sorunu burada da önlemek için pencereyi (süresini koruyarak) ilk uygun güne kaydırıyoruz.
@@ -1349,6 +1367,7 @@ export default function Rite() {
         patch = { gunler: arr, baslangic: yeniBas, bitis: iso(e) };
       }
     }
+    if (!id) { patchDetay(patch); return; } // taslak
     await supabase.from('dog_rituals').update(patch).eq('id', id);
     patchDetay(patch);
     loadData(client.id);
@@ -2454,9 +2473,11 @@ export default function Rite() {
               // arındırıldı; alışkanlık artık oluşturulurken (＋ menüsünden) seçilen bir tip, sonradan dönüştürülen
               // bir özellik değil (kullanıcı isteği).
               const kisiselBilgi = o.kaynak === 'Kendi' && kTip === 'bilgi';
-              // Taslak (henüz kaydedilmemiş, o.id yok) iken zamanlama/mezun etme hiç gösterilmiyor — bunlar
-              // Kaydet'ten SONRA, kart zaten varken ayarlanır (kullanıcı isteği: önce sade bir taslak, sonrası sonra).
-              const zamanlamaGoster = (!kisiselBilgi || o.aliskanlik) && !isDraft;
+              // Taslak (henüz kaydedilmemiş, o.id yok) iken mezun etme/paylaşma hiç gösterilmiyor (isTaze, aşağıda) —
+              // ama Alışkanlık taslağı için Zamanlama (özellikle Günler) tam da oluşturma anında lazım, o yüzden
+              // Alışkanlık'ta taslakken de gösteriliyor (Not/Randevu taslağında zaten kisiselBilgi tek başına
+              // zamanlamayı gizliyor, isDraft'tan bağımsız olarak).
+              const zamanlamaGoster = !kisiselBilgi || o.aliskanlik;
               // Kart daha bu an ＋ menüsünden oluşturulduysa (taze) ya da hâlâ taslaksa, "zaten var olan bir kart"
               // için anlamlı mezun et / paylaş seçenekleri gizli kalır (kullanıcı isteği).
               const isTaze = isDraft || (!!o.id && taze === o.id);
@@ -2480,13 +2501,8 @@ export default function Rite() {
               );
             })()}
             {/* Not eklerken/düzenlerken "bu bir randevu" seçme kutusu artık yok — Randevu, alttaki ＋ menüsünden
-                kendi başına oluşturuluyor. Bir kart zaten randevu olarak oluşturulduysa (kart_config.randevu),
-                burada sadece bilgilendirme gösterilir, dönüştürme seçeneği sunulmaz. */}
-            {isRit && o.kaynak === 'Kendi' && kTip === 'bilgi' && !!kCfg?.randevu && (
-              <div style={{ margin: '-6px 0 10px' }}>
-                <span className="note" style={{ margin: 0 }}>📅 Bu bir randevu — saat için üstteki &quot;değiştir&quot;den hatırlatma, buluşma linki için aşağıdan &quot;+ Link ekle&quot;yi kullan.</span>
-              </div>
-            )}
+                kendi başına oluşturuluyor. Randevu saati 🔔 bildirim alanından ayarlanır; format (online/yüz yüze)
+                ve link/adres BilgiKartEdit içinde (randevu=true) gösteriliyor. */}
             {isRit && kTip === 'standart' && kCfg?.resim && <img src={kCfg.resim} alt="" style={{ maxWidth: '100%', borderRadius: 8, margin: '4px 0 8px', display: 'block' }} />}
             {isRit && kTip === 'bilgi' && (o.kaynak === 'Kendi' ? <BilgiKartEdit cfg={kCfg} onSave={bilgiKaydet} randevu={!!kCfg?.randevu} /> : <BilgiKart cfg={kCfg} onSave={bilgiKaydet} />)}
             {isDraft && <button className="btn" style={{ width: '100%', margin: '2px 0 8px' }} onClick={taslakKaydet}>Kaydet</button>}
