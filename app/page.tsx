@@ -121,15 +121,33 @@ function ProgramTimeline({ adimlar, sure }: { adimlar: any[]; sure?: number | nu
 // (playlist senaryosu — her videonun kendi notu) o video seçiliyken ayrı, isteğe bağlı "bu videoya özel not"
 // alanına yazarsın; o zaman ortak açıklamanın altında EK olarak görünür, ortak açıklamanın yerini almaz.
 // Randevu kartlarında (randevu=true) video yerine tek bir resim linki gösterilir.
+// sn (sayı) -> "dk:sn" gösterim string'i (input alanlarında ve şerit rozetinde kullanılır).
+function saniyeStr(sn?: number): string {
+  if (sn == null) return '';
+  const m = Math.floor(sn / 60), s = sn % 60;
+  return m > 0 ? `${m}:${String(s).padStart(2, '0')}` : String(s);
+}
+// "dk:sn" ya da düz saniye string'i -> sn (sayı). Boşsa undefined.
+function strSaniye(str: string): number | undefined {
+  const t = str.trim();
+  if (!t) return undefined;
+  if (t.includes(':')) {
+    const [mm, ss] = t.split(':');
+    return (parseInt(mm) || 0) * 60 + (parseInt(ss) || 0);
+  }
+  const n = parseInt(t);
+  return isNaN(n) ? undefined : n;
+}
 function BilgiKartEdit({ cfg, onSave, randevu }: { cfg: any; onSave: (cfg: any) => void; randevu?: boolean }) {
   const videolar: { baslik?: string; url: string; bas?: number; bit?: number; ozelNot?: string }[] = cfg?.videolar || [];
   const [vidSec, setVidSec] = useState(0);
-  const [vidEkleOpen, setVidEkleOpen] = useState(false);
+  // vidFormMode: 'add' = boş formla yeni video; 'edit' = seçili videoyu (secili) doldurup düzenler; null = kapalı.
+  const [vidFormMode, setVidFormMode] = useState<'add' | 'edit' | null>(null);
   const [vAd, setVAd] = useState('');
   const [vUrl, setVUrl] = useState('');
   const [vBas, setVBas] = useState('');
   const [vBit, setVBit] = useState('');
-  const [vNot, setVNot] = useState('');
+  const [vAciklama, setVAciklama] = useState('');
   const [icerikEdit, setIcerikEdit] = useState(false);
   const [icerikVal, setIcerikVal] = useState(cfg?.icerik || '');
   const [resimUrl, setResimUrl] = useState(cfg?.resim || '');
@@ -140,31 +158,39 @@ function BilgiKartEdit({ cfg, onSave, randevu }: { cfg: any; onSave: (cfg: any) 
   useEffect(() => { setFormat(cfg?.format || 'online'); }, [cfg?.format]);
   useEffect(() => { setYer(cfg?.yer || ''); }, [cfg?.yer]);
   const secili = videolar[Math.min(vidSec, videolar.length - 1)];
-  const [ozelNotVal, setOzelNotVal] = useState(secili?.ozelNot || '');
-  useEffect(() => { setOzelNotVal(secili?.ozelNot || ''); }, [vidSec, secili?.ozelNot]);
-  function videoEkle() {
+  // Video ekleme/düzenleme formunu aç: 'edit' iken seçili videonun alanlarıyla doldurur, 'add' iken boş açar.
+  function formuAc(mode: 'add' | 'edit') {
+    if (mode === 'edit' && secili) {
+      setVAd(secili.baslik || ''); setVUrl(secili.url); setVBas(saniyeStr(secili.bas)); setVBit(saniyeStr(secili.bit)); setVAciklama(secili.ozelNot || '');
+    } else {
+      setVAd(''); setVUrl(''); setVBas(''); setVBit(''); setVAciklama('');
+    }
+    setVidFormMode(mode);
+  }
+  function formuKapat() { setVidFormMode(null); }
+  // Link + ad + dk:sn aralığı + (md) açıklama — tek form hem "Ekle" hem "Kaydet" (düzenle) için kullanılıyor.
+  function videoKaydet() {
     if (!vUrl.trim()) return;
-    const bas = parseInt(vBas) > 0 ? parseInt(vBas) : undefined;
-    const bit = parseInt(vBit) > 0 ? parseInt(vBit) : undefined;
-    const yeni = [...videolar, { baslik: vAd.trim() || undefined, url: vUrl.trim(), bas, bit, ozelNot: vNot.trim() || undefined }];
+    const yeniVideo = { baslik: vAd.trim() || undefined, url: vUrl.trim(), bas: strSaniye(vBas), bit: strSaniye(vBit), ozelNot: vAciklama.trim() || undefined };
+    let yeni: typeof videolar;
+    if (vidFormMode === 'edit') {
+      yeni = videolar.map((vd, i) => (i === vidSec ? yeniVideo : vd));
+    } else {
+      yeni = [...videolar, yeniVideo];
+      setVidSec(yeni.length - 1);
+    }
     onSave({ ...cfg, videolar: yeni });
-    setVAd(''); setVUrl(''); setVBas(''); setVBit(''); setVNot(''); setVidEkleOpen(false); setVidSec(yeni.length - 1);
+    formuKapat();
   }
   function videoSil(i: number) {
     const yeni = videolar.filter((_, j) => j !== i);
     onSave({ ...cfg, videolar: yeni });
     setVidSec(0);
+    if (vidFormMode === 'edit') formuKapat();
   }
   function icerikKaydet() {
     setIcerikEdit(false);
     if (icerikVal.trim() !== (cfg?.icerik || '')) onSave({ ...cfg, icerik: icerikVal.trim() || null });
-  }
-  function ozelNotKaydet() {
-    if (!secili) return;
-    const v = ozelNotVal.trim() || undefined;
-    if (v === secili.ozelNot) return;
-    const yeni = videolar.map((vd, i) => (i === vidSec ? { ...vd, ozelNot: v } : vd));
-    onSave({ ...cfg, videolar: yeni });
   }
   function resimKaydet() {
     const v = resimUrl.trim() || null;
@@ -192,42 +218,52 @@ function BilgiKartEdit({ cfg, onSave, randevu }: { cfg: any; onSave: (cfg: any) 
             {resimUrl.trim() && <img src={resimUrl.trim()} alt="" style={{ maxWidth: '100%', borderRadius: 8, margin: '8px 0 0', display: 'block' }} />}
           </div>
         )}
-        {/* Video seçimi/oynatıcısı (varsa) Açıklama başlığının ÜZERİNDE duruyor; ekleme tetikleyicisi ise
-            (ikincil bir eylem olduğu için) tam satır kaplamak yerine Açıklama başlığının sağında küçük bir
-            simge (kullanıcı isteği: video seçimi/yerleşimi üstte, + Link ekle ise Açıklama satırında). */}
-        {!randevu && videolar.length > 0 && (
+        {/* Video şeridi Açıklama'nın ÜZERİNDE: videolar + (varsa seçili video için) ✎ düzenle + en sağda ＋ ekle
+            (kullanıcı isteği — düzenle, eklemenin solunda). Şerit videosuzken de görünür, tek bir ＋ olarak. */}
+        {!randevu && (
           <div style={{ margin: '0 0 6px', display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
             {videolar.map((v, i) => (
-              <span key={i} className={'chip' + (i === vidSec ? ' on' : '')} onClick={() => setVidSec(i)}>
-                {v.baslik || ('Video ' + (i + 1))}{(v.bas || v.bit) ? ` ⏱${v.bas || 0}–${v.bit || '…'}sn` : ''}
+              <span key={i} className={'chip' + (i === vidSec ? ' on' : '')} onClick={() => { setVidSec(i); if (vidFormMode) formuKapat(); }}>
+                {v.baslik || ('Video ' + (i + 1))}{(v.bas != null || v.bit != null) ? ` ⏱${saniyeStr(v.bas) || '0'}–${v.bit != null ? saniyeStr(v.bit) : '…'}` : ''}
                 <span style={{ marginLeft: 6, opacity: 0.55 }} onClick={(e) => { e.stopPropagation(); videoSil(i); }}>✕</span>
               </span>
             ))}
+            {secili && <span className="chip" style={{ borderStyle: 'dashed' }} onClick={() => (vidFormMode === 'edit' ? formuKapat() : formuAc('edit'))} title="Seçili videoyu düzenle">✎</span>}
+            <span className="chip" style={{ borderStyle: 'dashed' }} onClick={() => (vidFormMode === 'add' ? formuKapat() : formuAc('add'))} title="Video ekle">＋ Video</span>
+          </div>
+        )}
+        {!randevu && vidFormMode && (
+          <div style={{ margin: '0 0 10px', padding: 8, border: '1px solid var(--line)', borderRadius: 8 }}>
+            <div className="daterow" style={{ flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+              <input value={vUrl} onChange={(e) => setVUrl(e.target.value)} placeholder="https://… (şart)" style={{ flex: 2, minWidth: 160 }} />
+              <input value={vAd} onChange={(e) => setVAd(e.target.value)} placeholder="Video adı (ops.)" style={{ flex: 1, minWidth: 110 }} />
+            </div>
+            <div className="daterow" style={{ flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+              <input value={vBas} onChange={(e) => setVBas(e.target.value.replace(/[^\d:]/g, ''))} placeholder="Başlangıç dk:sn (ops.)" style={{ flex: 1, minWidth: 120 }} />
+              <input value={vBit} onChange={(e) => setVBit(e.target.value.replace(/[^\d:]/g, ''))} placeholder="Bitiş dk:sn (ops.)" style={{ flex: 1, minWidth: 120 }} />
+            </div>
+            <textarea value={vAciklama} onChange={(e) => setVAciklama(e.target.value)} placeholder={'Bu videoya özel açıklama (ops. — md: # başlık, **kalın**, - madde)'} style={{ width: '100%', minHeight: 70 }} />
+            <div className="rowbtns" style={{ marginTop: 6 }}>
+              <button className="btn sm" onClick={videoKaydet} disabled={!vUrl.trim()}>{vidFormMode === 'edit' ? 'Kaydet' : 'Ekle'}</button>
+              <button className="btn ghost sm" onClick={formuKapat}>Vazgeç</button>
+            </div>
           </div>
         )}
         {!randevu && secili && <div style={{ margin: '0 0 4px' }}><EmbedVideo url={secili.url} bas={secili.bas} bit={secili.bit} /></div>}
-        {!randevu && secili && (
-          <input value={ozelNotVal} onChange={(e) => setOzelNotVal(e.target.value)} onBlur={ozelNotKaydet} placeholder="Bu videoya özel not (ops.)" style={{ width: '100%', margin: '0 0 10px', fontSize: 12.5, fontStyle: 'italic' }} />
-        )}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-          <div className="k" style={{ margin: 0 }}>Açıklama</div>
-          {!randevu && <span className="chip" style={{ borderStyle: 'dashed', fontSize: 11, flex: '0 0 auto' }} onClick={() => setVidEkleOpen((o) => !o)} title="Video linki ekle">🔗 Video</span>}
-        </div>
-        {!randevu && vidEkleOpen && (
-          <div className="daterow" style={{ margin: '6px 0 8px', flexWrap: 'wrap', gap: 6 }}>
-            <input value={vAd} onChange={(e) => setVAd(e.target.value)} placeholder="Video adı (ops.)" style={{ flex: 1, minWidth: 100 }} />
-            <input value={vUrl} onChange={(e) => setVUrl(e.target.value)} placeholder="https://…" style={{ flex: 2, minWidth: 140 }} />
-            <input value={vBas} onChange={(e) => setVBas(e.target.value.replace(/\D/g, ''))} placeholder="Başlangıç sn (ops., YouTube)" style={{ flex: 1, minWidth: 110 }} />
-            <input value={vBit} onChange={(e) => setVBit(e.target.value.replace(/\D/g, ''))} placeholder="Bitiş sn (ops., YouTube)" style={{ flex: 1, minWidth: 130 }} />
-            <input value={vNot} onChange={(e) => setVNot(e.target.value)} placeholder="Bu videoya özel not (ops.)" style={{ flex: 2, minWidth: 160 }} />
-            <button className="btn sm" onClick={videoEkle} disabled={!vUrl.trim()}>Ekle</button>
-          </div>
-        )}
+        <div className="k">Açıklama</div>
         {icerikEdit ? (
           <textarea autoFocus value={icerikVal} onChange={(e) => setIcerikVal(e.target.value)} onBlur={icerikKaydet} placeholder={'# Başlık\nNotun…\n- madde\n**kalın**'} style={{ width: '100%', minHeight: 100 }} />
         ) : (
           <div onClick={() => setIcerikEdit(true)} style={{ cursor: 'text', minHeight: 24 }}>
             {icerikVal.trim() ? renderMetin(icerikVal) : <div className="note" style={{ marginTop: 0 }}>Yazmak için dokun…</div>}
+          </div>
+        )}
+        {/* Videoya özel açıklama: genel açıklamadan SONRA, salt okunur (düzenlemesi ✎'den) — genel açıklamayla
+            karışmasın diye küçük bir "Bu videoya özel" etiketiyle ayrıştırılıyor. */}
+        {!randevu && secili?.ozelNot && (
+          <div style={{ margin: '10px 0 0' }}>
+            <div className="note" style={{ margin: '0 0 2px', fontWeight: 700 }}>🎬 Bu videoya özel</div>
+            {renderMetin(secili.ozelNot)}
           </div>
         )}
       </div>
