@@ -746,6 +746,9 @@ export default function Rite() {
   const [showNewPass, setShowNewPass] = useState(false);
   const [showNewPass2, setShowNewPass2] = useState(false);
   const [pwMsg, setPwMsg] = useState('');
+  // Günün kendi kart sırası — dokunulmamış günlerde boş/undefined kalır ve blok_sira'ya (varsayılan sıra) düşülür;
+  // bir günde sürükle-bırak yapılınca o günün tam sırası (üst düzey anahtarlar) burada saklanır (bkz dog_gun_duzeni).
+  const [gunSiraMap, setGunSiraMap] = useState<Record<string, string[]>>({});
 
   const today = iso(new Date());
   const day = selDate || today;
@@ -812,6 +815,15 @@ export default function Rite() {
   }
 
   useEffect(() => { loadActivities(); loadFaydalar(); loadAreas(); }, []);
+  useEffect(() => {
+    if (!client || !day) return;
+    loadGunSira(client.id, day);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client, day]);
+  async function loadGunSira(clientId: string, tarih: string) {
+    const r = await supabase.from('dog_gun_duzeni').select('sira').eq('client_id', clientId).eq('tarih', tarih).maybeSingle();
+    setGunSiraMap((m) => ({ ...m, [tarih]: (r.data?.sira as string[]) || [] }));
+  }
   async function loadFaydalar() {
     const r = await supabase.from('dog_faydalar').select('kod,ad,alan,kanit_duzeyi,sira').eq('aktif', true).order('sira');
     setFaydaList(r.data || []);
@@ -1382,23 +1394,21 @@ export default function Rite() {
     const topNewIndex = topRows.findIndex((r) => r.key === over.id);
     if (topOldIndex < 0 || topNewIndex < 0) return;
     const moved = arrayMove(topRows, topOldIndex, topNewIndex);
+    // Artık sıra bu güne özel kaydediliyor (dog_gun_duzeni) — blok_sira'ya dokunmuyoruz, o dokunulmamış
+    // günler için varsayılan sıra olarak kalıyor. Zaman dilimi çizgisini geçenlerin zaman alanı yine güncellenir.
     let curZ = SLOTS[0][0];
-    const groups: Record<string, any[]> = {};
+    const gunSirasi: string[] = [];
+    const updates: any[] = [];
     moved.forEach((r) => {
       if (r.kind === 'divider') { curZ = r.z; return; }
-      (groups[curZ] = groups[curZ] || []).push(r);
-    });
-    const updates: any[] = [];
-    Object.entries(groups).forEach(([z, arr]) => {
-      arr.forEach((it, idx) => {
-        it.members.forEach((m: any) => {
-          const patch: any = { blok_sira: idx };
-          if ((m.zaman || 'gün') !== z) patch.zaman = z;
-          updates.push(supabase.from('dog_rituals').update(patch).eq('id', m.id));
-        });
+      gunSirasi.push(r.key);
+      r.members.forEach((m: any) => {
+        if ((m.zaman || 'gün') !== curZ) updates.push(supabase.from('dog_rituals').update({ zaman: curZ }).eq('id', m.id));
       });
     });
     await Promise.all(updates);
+    await supabase.from('dog_gun_duzeni').upsert({ client_id: client.id, tarih: day, sira: gunSirasi }, { onConflict: 'client_id,tarih' });
+    setGunSiraMap((mp) => ({ ...mp, [day]: gunSirasi }));
     loadData(client.id);
   }
   async function rutinBoz(name: string) {
@@ -1808,6 +1818,8 @@ export default function Rite() {
                   // 'member' satırı olarak eklenir — böylece hem üst düzey sürükleme hem rutin-içi sürükleme AYNI
                   // düz listede, tek DndContext ile çözülüyor (bkz. onDragEndDay).
                   const rows: any[] = [];
+                  const gunOrder = gunSiraMap[day]; // bu güne özel kaydedilmiş sıra (yoksa/boşsa blok_sira'ya düşülür)
+                  const blokSira = (it: any) => Number(it.members[0].blok_sira) || 0;
                   SLOTS.forEach(([z, lbl]) => {
                     rows.push({ key: 'div:' + z, kind: 'divider', z, lbl });
                     const slotRits = habits.filter((r) => (r.zaman || 'gün') === z);
@@ -1819,7 +1831,17 @@ export default function Rite() {
                     }
                     const items = Array.from(map.values());
                     for (const it of items) it.members.sort((a: any, b: any) => (a.sira || 0) - (b.sira || 0));
-                    items.sort((a, b) => (Number(a.members[0].blok_sira) || 0) - (Number(b.members[0].blok_sira) || 0));
+                    if (gunOrder && gunOrder.length) {
+                      items.sort((a, b) => {
+                        const ia = gunOrder.indexOf(a.key), ib = gunOrder.indexOf(b.key);
+                        if (ia === -1 && ib === -1) return blokSira(a) - blokSira(b);
+                        if (ia === -1) return 1;
+                        if (ib === -1) return -1;
+                        return ia - ib;
+                      });
+                    } else {
+                      items.sort((a, b) => blokSira(a) - blokSira(b));
+                    }
                     items.forEach((it) => {
                       if (it.rutin) {
                         rows.push({ key: it.key, kind: 'rutinHead', z, rutin: it.rutin, rutinAd: it.rutinAd, members: it.members });
