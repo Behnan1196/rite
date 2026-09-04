@@ -821,7 +821,12 @@ export default function Rite() {
   useEffect(() => { loadActivities(); loadFaydalar(); loadAreas(); }, []);
   useEffect(() => {
     if (!client || !day) return;
-    loadGunSira(client.id, day);
+    // Bu günü bu oturumda daha önce hiç çekmediysek sunucudan al. Zaten yerelde varsa (ilk yüklemeden ya da
+    // az önce sürükleyip bıraktığımızdan) TEKRAR ÇEKMİYORUZ — yoksa az önce kaydettiğimiz sıralama henüz
+    // sunucuya ulaşmadan bu günü tekrar okursak, eski (henüz kaydedilmemiş) sırayı üzerine yazıp kullanıcının
+    // az önce yaptığı sıralamayı geri alabiliyorduk (kullanıcı geri bildirimi: "başka güne gidip gelince eski
+    // sırasına dönüyor").
+    if (!(day in gunSiraMap)) loadGunSira(client.id, day);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client, day]);
   async function loadGunSira(clientId: string, tarih: string) {
@@ -1429,7 +1434,8 @@ export default function Rite() {
     // geri zıplayıp, kayıt bittiğinde yeni yerine atlıyordu; art arda sürüklemede bu "stabil değil" gibi
     // hissettiriyordu (kullanıcı geri bildirimi). Kayıt arka planda devam ediyor, sonucunu beklemeye gerek yok.
     setGunSiraMap((mp) => ({ ...mp, [day]: gunSirasi }));
-    supabase.from('dog_gun_duzeni').upsert({ client_id: client.id, tarih: day, sira: gunSirasi }, { onConflict: 'client_id,tarih' });
+    supabase.from('dog_gun_duzeni').upsert({ client_id: client.id, tarih: day, sira: gunSirasi }, { onConflict: 'client_id,tarih' })
+      .then(({ error }) => { if (error) console.error('gün sırası kaydedilemedi:', error); });
   }
   async function rutinBoz(name: string) {
     if (!client) return;
