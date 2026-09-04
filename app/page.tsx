@@ -151,11 +151,9 @@ function BilgiKartEdit({ cfg, onSave, randevu }: { cfg: any; onSave: (cfg: any) 
   const [icerikEdit, setIcerikEdit] = useState(false);
   const [icerikVal, setIcerikVal] = useState(cfg?.icerik || '');
   const [resimUrl, setResimUrl] = useState(cfg?.resim || '');
-  const [format, setFormat] = useState(cfg?.format || 'online');
   const [yer, setYer] = useState(cfg?.yer || '');
   useEffect(() => { setIcerikVal(cfg?.icerik || ''); }, [cfg?.icerik]);
   useEffect(() => { setResimUrl(cfg?.resim || ''); }, [cfg?.resim]);
-  useEffect(() => { setFormat(cfg?.format || 'online'); }, [cfg?.format]);
   useEffect(() => { setYer(cfg?.yer || ''); }, [cfg?.yer]);
   const secili = videolar[Math.min(vidSec, videolar.length - 1)];
   // Video ekleme/düzenleme formunu aç: 'edit' iken seçili videonun alanlarıyla doldurur, 'add' iken boş açar.
@@ -197,10 +195,6 @@ function BilgiKartEdit({ cfg, onSave, randevu }: { cfg: any; onSave: (cfg: any) 
     if (v === (cfg?.resim || null)) return;
     onSave({ ...cfg, resim: v });
   }
-  function formatKaydet(f: string) {
-    setFormat(f);
-    onSave({ ...cfg, format: f });
-  }
   function yerKaydet() {
     const v = yer.trim() || null;
     if (v === (cfg?.yer || null)) return;
@@ -211,9 +205,8 @@ function BilgiKartEdit({ cfg, onSave, randevu }: { cfg: any; onSave: (cfg: any) 
       <div className="bilgi">
         {randevu && (
           <div style={{ margin: '0 0 10px' }}>
-            <div className="k">📅 Görüşme randevusu</div>
-            <div style={{ margin: '2px 0 8px' }}>{RANDEVU_FORMAT.map(([f, l]) => <span key={f} className={'chip' + (format === f ? ' on' : '')} onClick={() => formatKaydet(f)}>{l}</span>)}</div>
-            <input value={yer} onChange={(e) => setYer(e.target.value)} onBlur={yerKaydet} placeholder={format === 'online' ? 'Görüşme linki (ops.)…' : 'Adres (ops.)…'} style={{ width: '100%' }} />
+            <div className="k">📅 Randevu</div>
+            <input value={yer} onChange={(e) => setYer(e.target.value)} onBlur={yerKaydet} placeholder="Detay / yer (ops.) — link, adres, doktor adı…" style={{ width: '100%' }} />
             <input value={resimUrl} onChange={(e) => setResimUrl(e.target.value)} onBlur={resimKaydet} placeholder="Resim linki (ops.)…" style={{ width: '100%', marginTop: 8 }} />
             {resimUrl.trim() && <img src={resimUrl.trim()} alt="" style={{ maxWidth: '100%', borderRadius: 8, margin: '8px 0 0', display: 'block' }} />}
           </div>
