@@ -750,6 +750,7 @@ export default function Rite() {
   const [mezunModal, setMezunModal] = useState<any>(null);
   const [mezunPuan, setMezunPuan] = useState(0);
   const [remInput, setRemInput] = useState('');
+  const [remTarihInput, setRemTarihInput] = useState('');
   // 🎓/🔔 ikonları artık Zamanlama formundaki checkbox/saat alanlarının yerini alıyor — dolu ikon zaten
   // açık olan bir şeyi (alışkanlık/bildirim) temsil ediyor, dokununca küçük bir seçenek menüsü açılıyor
   // (kapat vs. daha ağır bir işlem gibi mezun et); boş/soluk ikon dokununca direkt açıyor, çünkü o zararsız.
@@ -1392,6 +1393,18 @@ export default function Rite() {
     patchDetay({ hatirlatma_saat: saat || null, son_bildirim: null });
     loadData(client.id);
   }
+  // Randevu bildirimi: randevunun kendi tarihi/saatinden bağımsız — bildirim ayrı bir tarih+saatte gelebilir
+  // (ör. randevudan bir gün önce). Tarih kart_config.hatirlatma_tarih'te tutulur (cron bunu, varsa,
+  // baslangic/bitis penceresi yerine kullanır — bkz. app/api/cron/reminders/route.ts).
+  async function setRandevuBildirim(id: string, saat: string, tarih: string) {
+    if (!client) return;
+    const cfg = { ...(detay?.obj?.kart_config || {}), hatirlatma_tarih: tarih || null };
+    const patch: any = { hatirlatma_saat: saat || null, son_bildirim: null, kart_config: cfg };
+    if (!id) { patchDetay(patch); return; } // taslak
+    await supabase.from('dog_rituals').update(patch).eq('id', id);
+    patchDetay(patch);
+    loadData(client.id);
+  }
   async function ritSil(id: string) {
     if (!client) return;
     const rt = rituals.find((r) => r.id === id);
@@ -1824,7 +1837,7 @@ export default function Rite() {
               {ritAreas(rt).map((a) => <span key={a} className="tagp p-alan">{a}</span>)}
               {cfg.dikey && DIKEY_LABEL[cfg.dikey] && <span className="tagp p-dikey">{DIKEY_LABEL[cfg.dikey]}</span>}
             </div>
-            <div className="m">{[rt.hatirlatma_saat && '🔔 ' + rt.hatirlatma_saat, rt.bitis && 'bitiş ' + kisaTarih(rt.bitis), ipucu].filter(Boolean).join(' · ')}</div>
+            <div className="m">{[cfg.randevu && cfg.saat && '🕑 ' + cfg.saat, rt.hatirlatma_saat && '🔔 ' + rt.hatirlatma_saat, rt.bitis && 'bitiş ' + kisaTarih(rt.bitis), ipucu].filter(Boolean).join(' · ')}</div>
           </div>
           {vurl && <a className="playbtn" href={vurl} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} title="Aç">▶</a>}
           <button className="rmx" onClick={() => ritSil(rt.id)} title="Kaldır">✕</button>
@@ -2491,9 +2504,9 @@ export default function Rite() {
                     <button className="btn ghost sm" style={{ opacity: .4 }} onClick={() => setRitAliskanlik(o.id, true)} title="Alışkanlık yap" aria-label="Alışkanlık yap">🎓</button>
                   ))}
                   {o.hatirlatma_saat ? (
-                    <button className="btn ghost sm" onClick={() => { setRemInput(o.hatirlatma_saat || ''); setRemMenuFor({ ...o, _randevu: kTip === 'randevu' || !!kCfg?.randevu }); }} title="Bildirim seçenekleri" aria-label="Bildirim seçenekleri">🔔 {o.hatirlatma_saat}</button>
+                    <button className="btn ghost sm" onClick={() => { setRemInput(o.hatirlatma_saat || ''); setRemTarihInput(kCfg?.hatirlatma_tarih || o.baslangic || ''); setRemMenuFor({ ...o, _randevu: kTip === 'randevu' || !!kCfg?.randevu }); }} title="Bildirim seçenekleri" aria-label="Bildirim seçenekleri">🔔 {o.hatirlatma_saat}</button>
                   ) : (
-                    <button className="btn ghost sm" style={{ opacity: .4 }} onClick={() => { setRemInput(''); setRemMenuFor({ ...o, _randevu: kTip === 'randevu' || !!kCfg?.randevu }); }} title="Bildirim ekle" aria-label="Bildirim ekle">🔔</button>
+                    <button className="btn ghost sm" style={{ opacity: .4 }} onClick={() => { setRemInput(''); setRemTarihInput(kCfg?.hatirlatma_tarih || o.baslangic || ''); setRemMenuFor({ ...o, _randevu: kTip === 'randevu' || !!kCfg?.randevu }); }} title="Bildirim ekle" aria-label="Bildirim ekle">🔔</button>
                   )}
                   {!paylasilamaz && !isTaze && <button className="btn ghost sm" onClick={() => { setPaylasOpen(true); setKMsg(''); }} title="Paylaş" aria-label="Paylaş">↪️</button>}
                 </div>
@@ -2501,8 +2514,17 @@ export default function Rite() {
               );
             })()}
             {/* Not eklerken/düzenlerken "bu bir randevu" seçme kutusu artık yok — Randevu, alttaki ＋ menüsünden
-                kendi başına oluşturuluyor. Randevu saati 🔔 bildirim alanından ayarlanır; format (online/yüz yüze)
-                ve link/adres BilgiKartEdit içinde (randevu=true) gösteriliyor. */}
+                kendi başına oluşturuluyor. Randevunun kendi tarihi/saati burada (kart_config.saat, baslangic);
+                bildirimin ne zaman geleceği ayrı — 🔔'den, farklı bir tarih/saat olarak ayarlanabilir (kullanıcı isteği). */}
+            {isRit && o.kaynak === 'Kendi' && kTip === 'bilgi' && !!kCfg?.randevu && (
+              <div className="kv" style={{ margin: '4px 0 10px' }}>
+                <div className="k">📅 Randevu ne zaman</div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <input type="date" value={o.baslangic || ''} onChange={(e) => e.target.value && ritTasi(o.id, e.target.value)} style={{ width: 'auto' }} />
+                  <input type="time" value={kCfg?.saat || ''} onChange={(e) => bilgiKaydet({ ...kCfg, saat: e.target.value || null })} style={{ width: 'auto' }} />
+                </div>
+              </div>
+            )}
             {isRit && kTip === 'standart' && kCfg?.resim && <img src={kCfg.resim} alt="" style={{ maxWidth: '100%', borderRadius: 8, margin: '4px 0 8px', display: 'block' }} />}
             {isRit && kTip === 'bilgi' && (o.kaynak === 'Kendi' ? <BilgiKartEdit cfg={kCfg} onSave={bilgiKaydet} randevu={!!kCfg?.randevu} /> : <BilgiKart cfg={kCfg} onSave={bilgiKaydet} />)}
             {isDraft && <button className="btn" style={{ width: '100%', margin: '2px 0 8px' }} onClick={taslakKaydet}>Kaydet</button>}
@@ -2659,13 +2681,18 @@ export default function Rite() {
           <div className="sheet small" onMouseDown={(e) => e.stopPropagation()}>
             <button className="x" onClick={() => setRemMenuFor(null)}>×</button>
             <h3 style={{ marginBottom: 2 }}>🔔 {remMenuFor.ad}</h3>
-            <p className="note" style={{ marginTop: 0 }}>{remMenuFor._randevu ? 'Randevu saati' : 'Günlük hatırlatma saati'}</p>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '8px 0' }}>
+            <p className="note" style={{ marginTop: 0 }}>{remMenuFor._randevu ? 'Bildirim ne zaman gelsin — randevunun kendi tarih/saatinden bağımsız' : 'Günlük hatırlatma saati'}</p>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '8px 0', flexWrap: 'wrap' }}>
+              {remMenuFor._randevu && <input type="date" style={{ width: 'auto' }} value={remTarihInput} onChange={(e) => setRemTarihInput(e.target.value)} />}
               <input type="time" style={{ width: 'auto' }} value={remInput} onChange={(e) => setRemInput(e.target.value)} />
             </div>
             <div className="note" style={{ marginBottom: 10 }}>Uygulama kapalıyken de bildirim gelir (push açıksa). Saat: Türkiye saati.</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <button className="btn" disabled={!remInput || remInput === (remMenuFor.hatirlatma_saat || '')} onClick={() => { setRitReminder(remMenuFor.id, remInput); setRemMenuFor(null); }}>Kaydet</button>
+              <button
+                className="btn"
+                disabled={!remInput || (remMenuFor._randevu ? (remInput === (remMenuFor.hatirlatma_saat || '') && remTarihInput === (remMenuFor.kart_config?.hatirlatma_tarih || remMenuFor.baslangic || '')) : remInput === (remMenuFor.hatirlatma_saat || ''))}
+                onClick={() => { if (remMenuFor._randevu) setRandevuBildirim(remMenuFor.id, remInput, remTarihInput); else setRitReminder(remMenuFor.id, remInput); setRemMenuFor(null); }}
+              >Kaydet</button>
               {remMenuFor.hatirlatma_saat && <button className="btn ghost sm" onClick={() => { setRitReminder(remMenuFor.id, ''); setRemMenuFor(null); }}>Bildirimi kapat</button>}
               <button className="btn ghost sm" onClick={() => setRemMenuFor(null)}>Vazgeç</button>
             </div>
