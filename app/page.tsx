@@ -138,7 +138,7 @@ function strSaniye(str: string): number | undefined {
   const n = parseInt(t);
   return isNaN(n) ? undefined : n;
 }
-function BilgiKartEdit({ cfg, onSave, randevu }: { cfg: any; onSave: (cfg: any) => void; randevu?: boolean }) {
+function BilgiKartEdit({ cfg, onSave, randevu, readOnly }: { cfg: any; onSave: (cfg: any) => void; randevu?: boolean; readOnly?: boolean }) {
   const videolar: { baslik?: string; url: string; bas?: number; bit?: number; ozelNot?: string }[] = cfg?.videolar || [];
   const [vidSec, setVidSec] = useState(0);
   // vidFormMode: 'add' = boş formla yeni video; 'edit' = seçili videoyu (secili) doldurup düzenler; null = kapalı.
@@ -206,26 +206,33 @@ function BilgiKartEdit({ cfg, onSave, randevu }: { cfg: any; onSave: (cfg: any) 
         {randevu && (
           <div style={{ margin: '0 0 10px' }}>
             <div className="k">📅 Randevu</div>
-            <input value={yer} onChange={(e) => setYer(e.target.value)} onBlur={yerKaydet} placeholder="Detay / yer (ops.) — link, adres, doktor adı…" style={{ width: '100%' }} />
-            <input value={resimUrl} onChange={(e) => setResimUrl(e.target.value)} onBlur={resimKaydet} placeholder="Resim linki (ops.)…" style={{ width: '100%', marginTop: 8 }} />
+            {readOnly ? (
+              <>
+                {yer.trim() && <div style={{ marginTop: 2 }}>{yer}</div>}
+              </>
+            ) : (
+              <input value={yer} onChange={(e) => setYer(e.target.value)} onBlur={yerKaydet} placeholder="Detay / yer (ops.) — link, adres, doktor adı…" style={{ width: '100%' }} />
+            )}
+            {!readOnly && <input value={resimUrl} onChange={(e) => setResimUrl(e.target.value)} onBlur={resimKaydet} placeholder="Resim linki (ops.)…" style={{ width: '100%', marginTop: 8 }} />}
             {resimUrl.trim() && <img src={resimUrl.trim()} alt="" style={{ maxWidth: '100%', borderRadius: 8, margin: '8px 0 0', display: 'block' }} />}
           </div>
         )}
         {/* Video şeridi Açıklama'nın ÜZERİNDE: videolar + (varsa seçili video için) ✎ düzenle + en sağda ＋ ekle
-            (kullanıcı isteği — düzenle, eklemenin solunda). Şerit videosuzken de görünür, tek bir ＋ olarak. */}
-        {!randevu && (
+            (kullanıcı isteği — düzenle, eklemenin solunda). Şerit videosuzken de görünür, tek bir ＋ olarak.
+            readOnly: sadece görüntüleme — ✕/✎/＋ ikonları gizlenir, chip'ler yalnız video seçmek için tıklanabilir kalır. */}
+        {!randevu && (videolar.length > 0 || !readOnly) && (
           <div style={{ margin: '0 0 6px', display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
             {videolar.map((v, i) => (
               <span key={i} className={'chip' + (i === vidSec ? ' on' : '')} onClick={() => { setVidSec(i); if (vidFormMode) formuKapat(); }}>
                 {v.baslik || ('Video ' + (i + 1))}{(v.bas != null || v.bit != null) ? ` ⏱${saniyeStr(v.bas) || '0'}–${v.bit != null ? saniyeStr(v.bit) : '…'}` : ''}
-                <span style={{ marginLeft: 6, opacity: 0.55 }} onClick={(e) => { e.stopPropagation(); videoSil(i); }}>✕</span>
+                {!readOnly && <span style={{ marginLeft: 6, opacity: 0.55 }} onClick={(e) => { e.stopPropagation(); videoSil(i); }}>✕</span>}
               </span>
             ))}
-            {secili && <span className="chip" style={{ borderStyle: 'dashed' }} onClick={() => (vidFormMode === 'edit' ? formuKapat() : formuAc('edit'))} title="Seçili videoyu düzenle">✎</span>}
-            <span className="chip" style={{ borderStyle: 'dashed' }} onClick={() => (vidFormMode === 'add' ? formuKapat() : formuAc('add'))} title="Video ekle">＋ Video</span>
+            {!readOnly && secili && <span className="chip" style={{ borderStyle: 'dashed' }} onClick={() => (vidFormMode === 'edit' ? formuKapat() : formuAc('edit'))} title="Seçili videoyu düzenle">✎</span>}
+            {!readOnly && <span className="chip" style={{ borderStyle: 'dashed' }} onClick={() => (vidFormMode === 'add' ? formuKapat() : formuAc('add'))} title="Video ekle">＋ Video</span>}
           </div>
         )}
-        {!randevu && vidFormMode && (
+        {!randevu && !readOnly && vidFormMode && (
           <div style={{ margin: '0 0 10px', padding: 8, border: '1px solid var(--line)', borderRadius: 8 }}>
             <div className="daterow" style={{ flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
               <input value={vUrl} onChange={(e) => setVUrl(e.target.value)} placeholder="https://… (şart)" style={{ flex: 2, minWidth: 160 }} />
@@ -243,8 +250,10 @@ function BilgiKartEdit({ cfg, onSave, randevu }: { cfg: any; onSave: (cfg: any) 
           </div>
         )}
         {!randevu && secili && <div style={{ margin: '0 0 4px' }}><EmbedVideo url={secili.url} bas={secili.bas} bit={secili.bit} /></div>}
-        <div className="k">Açıklama</div>
-        {icerikEdit ? (
+        {(!readOnly || icerikVal.trim()) && <div className="k">Açıklama</div>}
+        {readOnly ? (
+          icerikVal.trim() ? <div>{renderMetin(icerikVal)}</div> : null
+        ) : icerikEdit ? (
           <textarea autoFocus value={icerikVal} onChange={(e) => setIcerikVal(e.target.value)} onBlur={icerikKaydet} placeholder={'# Başlık\nNotun…\n- madde\n**kalın**'} style={{ width: '100%', minHeight: 100 }} />
         ) : (
           <div onClick={() => setIcerikEdit(true)} style={{ cursor: 'text', minHeight: 24 }}>
@@ -1210,8 +1219,8 @@ export default function Rite() {
   function sureGun(rt: any): number { if (!rt.bitis) return 0; const b = parseD(rt.baslangic || today); const e = parseD(rt.bitis); return Math.round((e.getTime() - b.getTime()) / 86400000) + 1; }
   const patchDetay = (patch: any) => setDetay((d: any) => (d ? { ...d, obj: { ...d.obj, ...patch } } : d));
   // Tek detay kartı: hem ritüel (Ajanda) hem aktivite (Havuz) buradan açılır.
-  async function openDetay(obj: any, tur: string) {
-    setDetay({ obj, tur }); setGrupEditOpen(false); setGrupEditVal('');
+  async function openDetay(obj: any, tur: string, extra?: any) {
+    setDetay({ obj, tur, ...(extra || {}) }); setGrupEditOpen(false); setGrupEditVal('');
     if (tur === 'ritual') {
       setAdInput(obj.ad || ''); setRemInput(obj.hatirlatma_saat || ''); setUrlInput(obj.url || ''); setAciklamaInput(obj.aciklama || ''); setKartUrlInput((obj.kart_config && obj.kart_config.url) || obj.url || ''); setKisiselNotInput(obj.kisisel_not || '');
       const n = sureGun(obj); setSureInput(n > 0 ? String(n) : '21');
@@ -1220,6 +1229,24 @@ export default function Rite() {
       if (obj.sablon_id) { const s = await supabase.from('dog_activities').select('id,adimlar').eq('id', obj.sablon_id).single(); setDetaySablon(s.data || null); }
       else setDetaySablon(null);
     } else { setDetayAct(obj); setDetaySablon(null); }
+  }
+  // Inbox'a gelen (henüz kabul edilmemiş) bir paylaşımı, gerçek karta eklemeden Havuz görünümüyle önizle —
+  // "Ajandama ekle" burada gösterilmiyor (kabul, Inbox listesindeki asıl butonlardan yapılır); preview:true
+  // detay ekranındaki düzenleme/paylaşım/sil gibi kalıcı işlemleri devre dışı bırakıyor.
+  function openInboxPreview(v: any) {
+    const p = v.payload || {};
+    const obj: any = {
+      ad: p.ad || v.baslik || 'Paylaşım',
+      tur: p.tur === 'program' ? 'program' : undefined,
+      adimlar: p.adimlar || [],
+      kart_tipi: p.kartTipi || null, kart_config: p.kartConfig || null,
+      aliskanlik: p.aliskanlik || false, faydalar: p.faydalar || [],
+      aciklama: p.aciklama || null, videolar: p.videolar || null,
+      zaman: p.zaman || 'gün', zamanlar: p.zamanlar || null, gunler: p.gunler || null, sure_gun: p.sure_gun || null,
+      baslangic: p.baslangic || null, bitis: p.bitis || null,
+      grup: null,
+    };
+    openDetay(obj, 'aktivite', { preview: true });
   }
   function openRit(rt: any) { openDetay(rt, 'ritual'); }
   function closeDetay() { setDetay(null); setTaze(null); }
@@ -2342,25 +2369,24 @@ export default function Rite() {
               <div key={v.id} className="card">
                 {(
                   <>
-                    <div style={{ fontSize: 13, fontWeight: 700 }}>🎁 {v.baslik || v.payload?.ad}</div>
-                    <div className="note" style={{ margin: '2px 0' }}>{v.payload?.from_ad ? 'Kimden: ' + v.payload.from_ad : 'Paylaşım'}{v.from_code ? ' · ' + v.from_code : ''}</div>
-                    {(v.payload?.faydalar || []).length > 0 && <div>{Array.from(new Set((v.payload.faydalar || []).map((k: string) => faydaMap[k]?.alan).filter(Boolean))).map((a: any) => <span key={a} className="tagp p-alan">{a}</span>)}</div>}
-                    {v.payload?.aciklama && <div className="note" style={{ marginTop: 4 }}>{v.payload.aciklama}</div>}
-                    {/* Kişisel bilgi kartları (Not/Randevu/Alışkanlık) için gerçek önizleme — kabul etmeden önce ne
-                        geldiğini görüp gerekirse hemen silebilsin diye (kullanıcı isteği: "gereksiz paylaşım"lar). */}
-                    {v.payload?.kartTipi === 'bilgi' && (
-                      <div style={{ margin: '4px 0 0' }}>
-                        {v.payload?.kartConfig?.randevu && (
-                          <div className="note" style={{ margin: '0 0 2px' }}>
-                            📅{v.payload.baslangic ? ' ' + kisaTarih(v.payload.baslangic) : ''}{v.payload.kartConfig?.saat ? ' · 🕑 ' + v.payload.kartConfig.saat : ''}{v.payload.kartConfig?.yer ? ' · ' + v.payload.kartConfig.yer : ''}
-                          </div>
-                        )}
-                        {v.payload?.kartConfig?.icerik && (
-                          <div style={{ fontSize: 12.5, color: '#4a4433', lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 4, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{renderMetin(v.payload.kartConfig.icerik)}</div>
-                        )}
-                        {(v.payload?.kartConfig?.videolar || []).length > 0 && <div className="note" style={{ margin: '2px 0 0' }}>🎬 {v.payload.kartConfig.videolar.length} video</div>}
-                      </div>
-                    )}
+                    {/* Kişisel bilgi kartları (Not/Randevu/Alışkanlık) için tıklayınca gerçek detay ekranını
+                        (aynen Ajanda/Havuz'daki gibi, salt okunur) açar — kabul etmeden önce ne geldiğini görüp
+                        gerekirse hemen silebilsin diye (kullanıcı isteği: "gereksiz paylaşım"lar). Sadece
+                        başlık/özet alanı tıklanabilir; alttaki Ajandama ekle/Havuzuma ekle/Sil ayrı, tetiklenmez. */}
+                    <div
+                      onClick={v.payload?.kartTipi === 'bilgi' ? () => openInboxPreview(v) : undefined}
+                      style={v.payload?.kartTipi === 'bilgi' ? { cursor: 'pointer' } : undefined}
+                    >
+                      <div style={{ fontSize: 13, fontWeight: 700 }}>🎁 {v.baslik || v.payload?.ad}</div>
+                      <div className="note" style={{ margin: '2px 0' }}>{v.payload?.from_ad ? 'Kimden: ' + v.payload.from_ad : 'Paylaşım'}{v.from_code ? ' · ' + v.from_code : ''}</div>
+                      {(v.payload?.faydalar || []).length > 0 && <div>{Array.from(new Set((v.payload.faydalar || []).map((k: string) => faydaMap[k]?.alan).filter(Boolean))).map((a: any) => <span key={a} className="tagp p-alan">{a}</span>)}</div>}
+                      {v.payload?.aciklama && <div className="note" style={{ marginTop: 4 }}>{v.payload.aciklama}</div>}
+                      {v.payload?.kartTipi === 'bilgi' && (
+                        <div className="note" style={{ margin: '4px 0 0', fontWeight: 700 }}>
+                          👁 Kartı aç{v.payload?.kartConfig?.randevu && v.payload.baslangic ? ' · 📅 ' + kisaTarih(v.payload.baslangic) : ''}
+                        </div>
+                      )}
+                    </div>
                     {ibGrupSec === v.id && (
                       <div style={{ margin: '6px 0' }}>
                         <label className="fldlbl" style={{ marginTop: 0 }}>Hangi grupta saklansın?</label>
@@ -2492,6 +2518,9 @@ export default function Rite() {
 
       {detay && (() => {
         const isRit = detay.tur === 'ritual';
+        // Inbox'ta "kartı aç"tan gelen bir önizleme mi (bkz. openInboxPreview) — henüz kaydedilmemiş, gerçek
+        // bir satır değil; düzenleme/kaydetme/paylaşım/silme gibi kalıcı hiçbir işlem burada yapılamaz, salt görüntü.
+        const preview = !!(detay as any).preview;
         const o = detay.obj;
         const act = detayAct;
         const areas = ritAreas(o);
@@ -2605,8 +2634,25 @@ export default function Rite() {
                 </div>
               </div>
             )}
+            {/* Inbox önizlemesinde randevu tarihi/saati salt okunur gösterilir — kayıt henüz yok, düzenlenemez.
+                Havuz'da bu alan yok (Havuz aktivitelerinde baslangic/bitis kavramı hiç yok), o yüzden preview'a özel. */}
+            {preview && kTip === 'bilgi' && !!kCfg?.randevu && (o.baslangic || kCfg?.saat) && (
+              <div className="kv" style={{ margin: '4px 0 10px' }}>
+                <div className="k">📅 Randevu ne zaman</div>
+                <div className="note" style={{ marginTop: 0 }}>{o.baslangic ? kisaTarih(o.baslangic) : ''}{kCfg?.saat ? ' · 🕑 ' + kCfg.saat : ''}</div>
+              </div>
+            )}
             {isRit && kTip === 'standart' && kCfg?.resim && <img src={kCfg.resim} alt="" style={{ maxWidth: '100%', borderRadius: 8, margin: '4px 0 8px', display: 'block' }} />}
-            {isRit && kTip === 'bilgi' && (o.kaynak === 'Kendi' ? <BilgiKartEdit cfg={kCfg} onSave={bilgiKaydet} randevu={!!kCfg?.randevu} /> : <BilgiKart cfg={kCfg} onSave={bilgiKaydet} />)}
+            {/* Kişisel bilgi kartları (Not/Randevu/Alışkanlık) Ajanda'da (kaynak='Kendi', önizleme değil) tam
+                düzenlenebilir açılıyor; Havuz'da ve Inbox önizlemesinde henüz düzenleme akışı yok, salt okunur
+                gösteriliyor — böylece Ajandama eklemeden kart orada da (Havuz'da olduğu gibi) açılabiliyor. */}
+            {kTip === 'bilgi' && (
+              !preview && isRit
+                ? (o.kaynak === 'Kendi'
+                    ? <BilgiKartEdit cfg={kCfg} onSave={bilgiKaydet} randevu={!!kCfg?.randevu} />
+                    : <BilgiKart cfg={kCfg} onSave={bilgiKaydet} />)
+                : <BilgiKartEdit cfg={kCfg} onSave={() => {}} randevu={!!kCfg?.randevu} readOnly />
+            )}
             {isDraft && <button className="btn" style={{ width: '100%', margin: '2px 0 8px' }} onClick={taslakKaydet}>Kaydet</button>}
             {isRit && kTip === 'video' && <div style={{ margin: '4px 0 8px' }}>
               {(kCfg.url || o.url) && <EmbedVideo url={kCfg.url || o.url} />}
@@ -2725,10 +2771,13 @@ export default function Rite() {
               </div>
             )}
 
-            {isProg && <button className="btn" style={{ width: '100%', marginTop: 14 }} onClick={() => { programBaslat(o); closeDetay(); setScreen('ajanda'); }}>Ajandama başlat{o.sure_gun ? ' (' + o.sure_gun + ' gün)' : ''}</button>}
-            {!isRit && !isProg && <button className="btn" style={{ width: '100%', marginTop: 14 }} onClick={() => { aktiviteEkleSlotlar(o); closeDetay(); setScreen('ajanda'); }}>Ajandama ekle</button>}
+            {/* Önizlemede (Inbox'tan açılan, henüz kaydedilmemiş paylaşım) kalıcı hiçbir eylem gösterilmiyor —
+                kabul/ret zaten Inbox listesindeki "Ajandama ekle"/"Havuzuma ekle"/"Sil" ile yapılıyor. */}
+            {preview && <div className="note" style={{ textAlign: 'center', margin: '14px 0 0' }}>📥 Bu bir Inbox önizlemesi — eklemek ya da silmek için Inbox listesine dön.</div>}
+            {!preview && isProg && <button className="btn" style={{ width: '100%', marginTop: 14 }} onClick={() => { programBaslat(o); closeDetay(); setScreen('ajanda'); }}>Ajandama başlat{o.sure_gun ? ' (' + o.sure_gun + ' gün)' : ''}</button>}
+            {!preview && !isRit && !isProg && <button className="btn" style={{ width: '100%', marginTop: 14 }} onClick={() => { aktiviteEkleSlotlar(o); closeDetay(); setScreen('ajanda'); }}>Ajandama ekle</button>}
 
-            {(!isRit || (personal && !isProg)) && (
+            {!preview && (!isRit || (personal && !isProg)) && (
               <div className="dettoolbar">
                 {!isRit && !paylasilamaz && <button className="tbtn" onClick={() => { setPaylasOpen(true); setKMsg(''); }}><span className="tbic">↪️</span>Paylaş</button>}
                 {personal && !isProg && <button className="tbtn" onClick={() => { closeDetay(); openStudioEdit(act); }}><span className="tbic">✎</span>Düzenle</button>}
