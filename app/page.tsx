@@ -729,6 +729,10 @@ export default function Rite() {
   const [yeniGrupOpen, setYeniGrupOpen] = useState(false);
   const [yeniGrupAd, setYeniGrupAd] = useState('');
   const [ekstraGruplar, setEkstraGruplar] = useState<string[]>([]);
+  const [ekleMenuOpen, setEkleMenuOpen] = useState(false);
+  const [ayracYeniOpen, setAyracYeniOpen] = useState(false);
+  const [ayracEditId, setAyracEditId] = useState<string | null>(null);
+  const [ayracAdVal, setAyracAdVal] = useState('');
   const [authEmail, setAuthEmail] = useState('');
   const [authPass, setAuthPass] = useState('');
   const [authPass2, setAuthPass2] = useState('');
@@ -1173,12 +1177,40 @@ export default function Rite() {
     patchDetay(patch);
     loadData(client.id);
   }
-  // Zaman diliminin + butonundan hemen ekleme — boş bir kişisel bilgi kartı açar, başlık/video/içerik kartın kendi içinde düzenlenir.
+  // Alt navigasyondaki ＋ menüsünden hemen ekleme — boş bir kişisel bilgi kartı açar, başlık/video/içerik kartın kendi içinde düzenlenir.
   async function hemenEkle(zaman: string) {
     if (!client) return;
     const ins = await supabase.from('dog_rituals').insert({ client_id: client.id, ad: 'Yeni not', zaman, kaynak: 'Kendi', tip: 'aliskanlik', kart_tipi: 'bilgi', kart_config: { icerik: null, videolar: [] }, aliskanlik: false, aktif: true, mezun: false, baslangic: day, bitis: day, blok_sira: Date.now() }).select().single();
     loadData(client.id);
     if (ins.data) openRit(ins.data);
+  }
+  // Aynı şey ama baştan "randevu" işaretli açılır — saat için 🔔, buluşma linki için detaydaki + Link ekle kullanılır.
+  async function hemenEkleRandevu() {
+    if (!client) return;
+    const ins = await supabase.from('dog_rituals').insert({ client_id: client.id, ad: 'Yeni randevu', zaman: 'gün', kaynak: 'Kendi', tip: 'aliskanlik', kart_tipi: 'bilgi', kart_config: { icerik: null, videolar: [], randevu: true }, aliskanlik: false, aktif: true, mezun: false, baslangic: day, bitis: day, blok_sira: Date.now() }).select().single();
+    loadData(client.id);
+    if (ins.data) openRit(ins.data);
+  }
+  // Ayraç: isimli bir bölüm başlığı — bugünden itibaren, siz silene kadar her gün aynı şekilde görünür,
+  // sıradan bir kart gibi sürüklenir; gunSiraMap/dog_gun_duzeni onun da yerini günden güne hatırlar.
+  async function ayracEkle(ad: string) {
+    if (!client) return;
+    const isim = (ad || '').trim() || 'Ayraç';
+    await supabase.from('dog_rituals').insert({ client_id: client.id, ad: isim, zaman: 'gün', kaynak: 'Kendi', tip: 'aliskanlik', kart_tipi: 'ayrac', aliskanlik: true, aktif: true, mezun: false, baslangic: day, bitis: null, gunler: [], blok_sira: Date.now() });
+    loadData(client.id);
+  }
+  async function ayracAdKaydet(id: string) {
+    const ad = ayracAdVal.trim();
+    setAyracEditId(null);
+    if (!ad || !client) return;
+    await supabase.from('dog_rituals').update({ ad }).eq('id', id);
+    loadData(client.id);
+  }
+  async function ayracSil(id: string) {
+    if (!client) return;
+    if (!confirm('Bu ayracı silmek istediğine emin misin? Bugünden itibaren tüm günlerden kalkar.')) return;
+    await supabase.from('dog_rituals').delete().eq('id', id);
+    loadData(client.id);
   }
   // Kartı "randevu" olarak işaretler — ayrı bir kart tipine geçmez, aynı bilgi kartı kalır, sadece kart_config.randevu
   // bayrağı eklenir (saat için zaten var olan "değiştir → hatırlatma" kullanılır, buluşma linki için "+ Link ekle").
@@ -1374,7 +1406,7 @@ export default function Rite() {
         const activeId = activeRow.kind === 'member' ? activeRow.ritual.id : activeRow.members[0].id;
         const anyExisting = rituals.find((r: any) => r.rutin === targetRutin);
         const targetAd = anyExisting?.rutin_ad ?? null;
-        const targetSlot = anyExisting?.zaman || moved[pos].z;
+        const targetSlot = anyExisting?.zaman || 'gün';
         const allMembers = rituals.filter((r: any) => r.rutin === targetRutin && r.id !== activeId).sort((a: any, b: any) => (a.sira || 0) - (b.sira || 0));
         const insertAt = prevVisibleId ? allMembers.findIndex((r: any) => r.id === prevVisibleId) + 1 : 0;
         allMembers.splice(insertAt < 0 ? allMembers.length : insertAt, 0, { id: activeId });
@@ -1389,24 +1421,14 @@ export default function Rite() {
       if (activeRow.kind === 'member') { loadData(client.id); return; } // rutin dışına bırakma desteklenmiyor
     }
 
+    // Sıradan sürükleme (ayraçlar dahil) — artık zaman dilimi ayracı yok, tek düz sıra. Bu güne özel
+    // kaydediliyor (dog_gun_duzeni); blok_sira'ya dokunmuyoruz, o dokunulmamış günler için varsayılan sıra olarak kalıyor.
     const topRows = rows.filter((r) => r.kind !== 'member');
     const topOldIndex = topRows.findIndex((r) => r.key === active.id);
     const topNewIndex = topRows.findIndex((r) => r.key === over.id);
     if (topOldIndex < 0 || topNewIndex < 0) return;
     const moved = arrayMove(topRows, topOldIndex, topNewIndex);
-    // Artık sıra bu güne özel kaydediliyor (dog_gun_duzeni) — blok_sira'ya dokunmuyoruz, o dokunulmamış
-    // günler için varsayılan sıra olarak kalıyor. Zaman dilimi çizgisini geçenlerin zaman alanı yine güncellenir.
-    let curZ = SLOTS[0][0];
-    const gunSirasi: string[] = [];
-    const updates: any[] = [];
-    moved.forEach((r) => {
-      if (r.kind === 'divider') { curZ = r.z; return; }
-      gunSirasi.push(r.key);
-      r.members.forEach((m: any) => {
-        if ((m.zaman || 'gün') !== curZ) updates.push(supabase.from('dog_rituals').update({ zaman: curZ }).eq('id', m.id));
-      });
-    });
-    await Promise.all(updates);
+    const gunSirasi = moved.map((r) => r.key);
     await supabase.from('dog_gun_duzeni').upsert({ client_id: client.id, tarih: day, sira: gunSirasi }, { onConflict: 'client_id,tarih' });
     setGunSiraMap((mp) => ({ ...mp, [day]: gunSirasi }));
     loadData(client.id);
@@ -1811,53 +1833,67 @@ export default function Rite() {
               </div>
             ) : (
               <div>
-                {(() => {
-                  // Zaman dilimleri artık kutu değil — sürüklenemeyen (disabled) birer ayraç satırı; kartların
-                  // hepsi TEK akışta, bir ayracın öbür tarafına bırakılınca zaman dilimi de değişir (onDragEndDay).
-                  // Rutin (isimli grup) kapalıyken tek 'rutinHead' satırı; açıksa hemen ardından her üyesi kendi
-                  // 'member' satırı olarak eklenir — böylece hem üst düzey sürükleme hem rutin-içi sürükleme AYNI
-                  // düz listede, tek DndContext ile çözülüyor (bkz. onDragEndDay).
+                {habits.length === 0 && <div className="empty">Bugün için kart yok. Aşağıdaki ＋ ile ekleyebilirsin.</div>}
+                {habits.length > 0 && (() => {
+                  // Artık sabit zaman dilimi ayracı yok — kartlar (ve kullanıcının eklediği ayraçlar) TEK düz,
+                  // güne özel sıralı bir liste (bkz gunSiraMap / dog_gun_duzeni). Rutin (isimli grup) kapalıyken
+                  // tek 'rutinHead' satırı; açıksa hemen ardından her üyesi kendi 'member' satırı olarak eklenir —
+                  // böylece hem üst düzey sürükleme hem rutin-içi sürükleme AYNI düz listede, tek DndContext ile
+                  // çözülüyor (bkz. onDragEndDay).
                   const rows: any[] = [];
                   const gunOrder = gunSiraMap[day]; // bu güne özel kaydedilmiş sıra (yoksa/boşsa blok_sira'ya düşülür)
                   const blokSira = (it: any) => Number(it.members[0].blok_sira) || 0;
-                  SLOTS.forEach(([z, lbl]) => {
-                    rows.push({ key: 'div:' + z, kind: 'divider', z, lbl });
-                    const slotRits = habits.filter((r) => (r.zaman || 'gün') === z);
-                    const map = new Map<string, any>();
-                    for (const r of slotRits) {
-                      const key = r.rutin ? 'r:' + r.rutin : 's:' + r.id;
-                      if (!map.has(key)) map.set(key, { key, rutin: r.rutin || null, rutinAd: r.rutin_ad || null, members: [] });
-                      map.get(key).members.push(r);
-                    }
-                    const items = Array.from(map.values());
-                    for (const it of items) it.members.sort((a: any, b: any) => (a.sira || 0) - (b.sira || 0));
-                    if (gunOrder && gunOrder.length) {
-                      items.sort((a, b) => {
-                        const ia = gunOrder.indexOf(a.key), ib = gunOrder.indexOf(b.key);
-                        if (ia === -1 && ib === -1) return blokSira(a) - blokSira(b);
-                        if (ia === -1) return 1;
-                        if (ib === -1) return -1;
-                        return ia - ib;
-                      });
-                    } else {
-                      items.sort((a, b) => blokSira(a) - blokSira(b));
-                    }
-                    items.forEach((it) => {
-                      if (it.rutin) {
-                        rows.push({ key: it.key, kind: 'rutinHead', z, rutin: it.rutin, rutinAd: it.rutinAd, members: it.members });
-                        if (expandedRutin.has(it.rutin)) {
-                          it.members.forEach((m: any, i: number) => rows.push({ key: 'm:' + m.id, kind: 'member', z, rutin: it.rutin, ritual: m, members: [m], isLast: i === it.members.length - 1 }));
-                        }
-                      } else {
-                        rows.push({ key: it.key, kind: 'item', z, members: it.members });
-                      }
+                  const map = new Map<string, any>();
+                  for (const r of habits) {
+                    const key = r.rutin ? 'r:' + r.rutin : 's:' + r.id;
+                    if (!map.has(key)) map.set(key, { key, rutin: r.rutin || null, rutinAd: r.rutin_ad || null, members: [] });
+                    map.get(key).members.push(r);
+                  }
+                  const items = Array.from(map.values());
+                  for (const it of items) it.members.sort((a: any, b: any) => (a.sira || 0) - (b.sira || 0));
+                  if (gunOrder && gunOrder.length) {
+                    items.sort((a, b) => {
+                      const ia = gunOrder.indexOf(a.key), ib = gunOrder.indexOf(b.key);
+                      if (ia === -1 && ib === -1) return blokSira(a) - blokSira(b);
+                      if (ia === -1) return 1;
+                      if (ib === -1) return -1;
+                      return ia - ib;
                     });
+                  } else {
+                    items.sort((a, b) => blokSira(a) - blokSira(b));
+                  }
+                  items.forEach((it) => {
+                    if (it.rutin) {
+                      rows.push({ key: it.key, kind: 'rutinHead', rutin: it.rutin, rutinAd: it.rutinAd, members: it.members });
+                      if (expandedRutin.has(it.rutin)) {
+                        it.members.forEach((m: any, i: number) => rows.push({ key: 'm:' + m.id, kind: 'member', rutin: it.rutin, ritual: m, members: [m], isLast: i === it.members.length - 1 }));
+                      }
+                    } else if (it.members[0].kart_tipi === 'ayrac') {
+                      rows.push({ key: it.key, kind: 'ayrac', members: it.members });
+                    } else {
+                      rows.push({ key: it.key, kind: 'item', members: it.members });
+                    }
                   });
 
                   // Başlık + (açıksa) üyeler tek bir kutuymuş gibi görünsün diye kenarlar/köşeler birbirine
                   // kaynatılıyor: başlık açıkken alt kenarını kapatır, üyeler üstten kaynaşır, sadece SON üye
                   // kutuyu alttan kapatır (isLast). Girinti sadece sol iç boşlukla veriliyor.
                   const rowBody = (r: any) => {
+                    if (r.kind === 'ayrac') {
+                      const rt = r.members[0];
+                      const editing = ayracEditId === rt.id;
+                      return (
+                        <div className="timediv">
+                          {editing ? (
+                            <input autoFocus value={ayracAdVal} onChange={(e) => setAyracAdVal(e.target.value)} onBlur={() => ayracAdKaydet(rt.id)} onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} style={{ flex: 1, fontSize: 12, padding: '4px 8px' }} />
+                          ) : (
+                            <span className="tl" style={{ cursor: 'pointer' }} onClick={() => { setAyracEditId(rt.id); setAyracAdVal(rt.ad); }}>{rt.ad}</span>
+                          )}
+                          <span className="ln" />
+                          <button className="rmx" onClick={() => ayracSil(rt.id)} aria-label="ayracı sil">✕</button>
+                        </div>
+                      );
+                    }
                     if (r.kind === 'rutinHead') {
                       const doneCount = r.members.filter((m: any) => ritDone(m.id)).length;
                       const hepsi = r.members.length > 0 && doneCount === r.members.length;
@@ -1913,15 +1949,7 @@ export default function Rite() {
                   return (
                     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => onDragEndDay(rows, e)}>
                       <SortableContext items={rows.map((r) => r.key)} strategy={verticalListSortingStrategy}>
-                        {rows.map((r) => r.kind === 'divider' ? (
-                          <SortableRow key={r.key} id={r.key} disabled>
-                            <div className="timediv">
-                              <span className="tl">{r.lbl}</span>
-                              <span className="ln" />
-                              <button className="slotadd" onClick={() => hemenEkle(r.z)} aria-label="ekle">+</button>
-                            </div>
-                          </SortableRow>
-                        ) : (
+                        {rows.map((r) => (
                           <SortableRow key={r.key} id={r.key}>
                             {rowBody(r)}
                           </SortableRow>
@@ -1949,8 +1977,8 @@ export default function Rite() {
                   <div className="calgrid">
                     {cells.map((ds, i) => {
                       if (!ds) return <div key={i} className="calcell empty" />;
-                      // Sayıma yalnız "yapılabilir" (done'lanabilir) ritüeller: mesaj tipi video (done:false) hariç.
-                      const gunRit = rituals.filter((r) => !r.mezun && activeOn(r, ds) && !(r.kart_tipi === 'video' && r.kart_config && r.kart_config.done === false));
+                      // Sayıma yalnız "yapılabilir" (done'lanabilir) ritüeller: mesaj tipi video (done:false) ve ayraçlar hariç.
+                      const gunRit = rituals.filter((r) => !r.mezun && activeOn(r, ds) && r.kart_tipi !== 'ayrac' && !(r.kart_tipi === 'video' && r.kart_config && r.kart_config.done === false));
                       const n = gunRit.length;
                       const done = gunRit.filter((r) => logs.some((l) => l.ritual_id === r.id && l.tarih === ds && l.yapildi)).length;
                       return (
@@ -2014,14 +2042,6 @@ export default function Rite() {
                 </div>
               ))}
             </div>
-          </div>
-        )}
-
-        {/* ---------- DESTEK ---------- */}
-        {screen === 'destek' && (
-          <div>
-            <h2>Destek</h2>
-            <div className="empty">🌱<br />Yakında burada yeni bir şeyler olacak.</div>
           </div>
         )}
 
@@ -2141,7 +2161,7 @@ export default function Rite() {
             <button className="x" onClick={() => setInboxOpen(false)}>×</button>
             <h2 style={{ marginTop: 2 }}>📥 Inbox</h2>
             <div className="note" style={{ marginTop: 0 }}>Başkalarının seninle paylaştığı kartlar burada birikir. <button className="btn ghost sm" style={{ marginLeft: 6 }} onClick={() => client && loadInbox(client.id)}>🔄 Yenile</button></div>
-            {inbox.length === 0 && <div className="note" style={{ textAlign: 'center', marginTop: 10 }}>Inbox boş. Sana bir şey paylaşıldığında burada göreceksin. Kendi notunu/randevunu eklemek için zaman dilimindeki + butonunu kullan.</div>}
+            {inbox.length === 0 && <div className="note" style={{ textAlign: 'center', marginTop: 10 }}>Inbox boş. Sana bir şey paylaşıldığında burada göreceksin. Kendi notunu/randevunu eklemek için alttaki ＋ butonunu kullan.</div>}
             {inbox.map((v) => v.tur !== 'aktivite' ? (
               <InboxNot key={v.id} v={v} onOpen={() => openIbDetay(v)} />
             ) : (
@@ -2270,8 +2290,12 @@ export default function Rite() {
       </div>
 
       <div className="nav">
-        {[['ajanda', '🗓', 'Ajanda'], ['havuz', '⊕', 'Havuz'], ['destek', '🩺', 'Destek'], ['gelisim', '📈', 'Gelişim'], ['bilgi', '⚙', 'Ayarlar']].map(([k, ic, l]) => (
+        {[['ajanda', '🗓', 'Ajanda'], ['havuz', '⊕', 'Havuz']].map(([k, ic, l]) => (
           <button key={k} className={['ajanda', 'mezunlar'].includes(screen) && k === 'ajanda' ? 'on' : screen === k ? 'on' : ''} onClick={() => setScreen(k)}><span className="ic">{ic}</span>{l}</button>
+        ))}
+        <button className="plus" onClick={() => setEkleMenuOpen(true)} aria-label="Ekle">＋</button>
+        {[['gelisim', '📈', 'Gelişim'], ['bilgi', '⚙', 'Ayarlar']].map(([k, ic, l]) => (
+          <button key={k} className={screen === k ? 'on' : ''} onClick={() => setScreen(k)}><span className="ic">{ic}</span>{l}</button>
         ))}
       </div>
 
@@ -2650,6 +2674,33 @@ export default function Rite() {
               <div><input value={kiAd} onChange={(e) => setKiAd(e.target.value)} placeholder="Ad (ör. Eşim)" /></div>
               <div style={{ display: 'flex', gap: 6 }}><input value={kiKod} onChange={(e) => setKiKod(e.target.value)} placeholder="RT-XXXXX" autoCapitalize="characters" /><button className="btn sm" onClick={kisiEkle}>Ekle</button></div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {ekleMenuOpen && (
+        <div className="modal" onMouseDown={() => setEkleMenuOpen(false)}>
+          <div className="sheet" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="sheetgrip" onClick={() => setEkleMenuOpen(false)} />
+            <h2>Ekle</h2>
+            <div className="ekleGrid">
+              <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); hemenEkle('gün'); }}><span className="ekic">📝</span>Not</button>
+              <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); hemenEkleRandevu(); }}><span className="ekic">📅</span>Randevu</button>
+              <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); setAyracAdVal(''); setAyracYeniOpen(true); }}><span className="ekic">➖</span>Ayraç</button>
+            </div>
+            <div className="note" style={{ textAlign: 'center', marginTop: 12 }}>Not içine bağlantı eklersen otomatik video kartına döner.</div>
+          </div>
+        </div>
+      )}
+
+      {ayracYeniOpen && (
+        <div className="modal" onMouseDown={() => setAyracYeniOpen(false)}>
+          <div className="sheet" onMouseDown={(e) => e.stopPropagation()}>
+            <button className="x" onClick={() => setAyracYeniOpen(false)}>×</button>
+            <h2>Yeni ayraç</h2>
+            <p className="note" style={{ marginTop: 0 }}>Güne bir bölüm başlığı ekle — ör. &quot;Sabah&quot;, &quot;Egzersiz zamanı&quot;. Eklediğin günden itibaren, sen silene kadar her gün görünür.</p>
+            <input autoFocus value={ayracAdVal} onChange={(e) => setAyracAdVal(e.target.value)} placeholder="ör. Sabah" onKeyDown={(e) => { if (e.key === 'Enter') { ayracEkle(ayracAdVal); setAyracYeniOpen(false); } }} />
+            <div className="rowbtns" style={{ marginTop: 12 }}><button className="btn" onClick={() => { ayracEkle(ayracAdVal); setAyracYeniOpen(false); }}>Ekle</button></div>
           </div>
         </div>
       )}
