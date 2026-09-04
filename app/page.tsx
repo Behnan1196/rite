@@ -1425,9 +1425,11 @@ export default function Rite() {
     if (topOldIndex < 0 || topNewIndex < 0) return;
     const moved = arrayMove(topRows, topOldIndex, topNewIndex);
     const gunSirasi = moved.map((r) => r.key);
-    await supabase.from('dog_gun_duzeni').upsert({ client_id: client.id, tarih: day, sira: gunSirasi }, { onConflict: 'client_id,tarih' });
+    // Önce ekranı güncelle (kayıt ağ isteğini beklemeden) — yoksa kart bıraktığın an bir anlığına eski yerine
+    // geri zıplayıp, kayıt bittiğinde yeni yerine atlıyordu; art arda sürüklemede bu "stabil değil" gibi
+    // hissettiriyordu (kullanıcı geri bildirimi). Kayıt arka planda devam ediyor, sonucunu beklemeye gerek yok.
     setGunSiraMap((mp) => ({ ...mp, [day]: gunSirasi }));
-    loadData(client.id);
+    supabase.from('dog_gun_duzeni').upsert({ client_id: client.id, tarih: day, sira: gunSirasi }, { onConflict: 'client_id,tarih' });
   }
   async function rutinBoz(name: string) {
     if (!client) return;
