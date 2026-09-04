@@ -814,7 +814,7 @@ export default function Rite() {
   const [profilAd, setProfilAd] = useState('');
   const [kiAd, setKiAd] = useState('');
   const [kiKod, setKiKod] = useState('');
-  const [paylasSel, setPaylasSel] = useState('');
+  const [paylasSel, setPaylasSel] = useState<string[]>([]);
   const [yeniGrupOpen, setYeniGrupOpen] = useState(false);
   const [yeniGrupAd, setYeniGrupAd] = useState('');
   const [ekstraGruplar, setEkstraGruplar] = useState<string[]>([]);
@@ -1163,14 +1163,13 @@ export default function Rite() {
   }
   const kisiSil = (i: number) => kisilerKaydet(kisiler.filter((_, j) => j !== i));
   const kisiAd = (kod: string) => kisiler.find((x) => x.kod === kod)?.ad;
-  // Ritüel / aktivite / programı bir paylaşım koduna yolla (dog_inbox).
-  async function paylas(o: any, isRit: boolean, kod: string) {
+  // Ritüel / aktivite / programı bir ya da birden çok paylaşım koduna yolla (dog_inbox).
+  async function paylas(o: any, isRit: boolean, kodlar: string[]) {
     if (paylasBusy) return; // çift dokunma/çift paylaşımı önle (kullanıcı geri bildirimi)
-    const k = (kod || '').trim().toUpperCase();
-    if (!k) return setKMsg('Kişi seç ya da kod gir');
+    const ks = Array.from(new Set(kodlar.map((x) => (x || '').trim().toUpperCase()).filter(Boolean)));
+    if (!ks.length) return setKMsg('Kişi seç ya da kod gir');
     setPaylasBusy(true);
-    const rc = await supabase.from('dog_clients').select('id').eq('share_code', k).limit(1);
-    if (rc.error || !rc.data || !rc.data.length) { setPaylasBusy(false); return setKMsg('Kod bulunamadı: ' + k); }
+    // Payload tüm alıcılar için aynı — döngü dışında bir kere kuruluyor.
     let payload: any;
     if (!isRit && o.tur === 'program') payload = { tur: 'program', ad: o.ad, adimlar: o.adimlar || [], sure_gun: o.sure_gun || null };
     else if (!isRit) payload = { tur: 'aktivite', ad: o.ad, faydalar: o.faydalar || [], aciklama: o.aciklama || null, videolar: o.videolar || [], zaman: o.zaman || 'gün', zamanlar: o.zamanlar || null, gunler: o.gunler || null, sure_gun: o.sure_gun || null, kartTipi: o.kart_tipi || null, kartConfig: o.kart_config || null, aliskanlik: o.aliskanlik };
@@ -1183,10 +1182,20 @@ export default function Rite() {
     }
     const gonderen = profilAd.trim() || client?.ad || '';
     payload.from_ad = gonderen || null;
-    const ins = await supabase.from('dog_inbox').insert({ client_id: rc.data[0].id, tur: 'aktivite', baslik: o.ad, payload, from_code: client?.share_code || null, durum: 'yeni' });
-    if (ins.error) { setPaylasBusy(false); return setKMsg('Hata: ' + ins.error.message); }
-    try { await fetch('/api/push/send', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ clientId: rc.data[0].id, title: gonderen ? '📩 ' + gonderen : '📩 Yeni paylaşım', body: (gonderen ? gonderen + ' paylaştı: ' : '') + o.ad, url: '/' }) }); } catch (_) { /* sessiz */ }
-    setKShareTo(''); setPaylasSel(''); setKMsg('✓ Paylaşıldı → ' + (kisiAd(k) || k));
+    const basarili: string[] = [];
+    const basarisiz: string[] = [];
+    for (const k of ks) {
+      const rc = await supabase.from('dog_clients').select('id').eq('share_code', k).limit(1);
+      if (rc.error || !rc.data || !rc.data.length) { basarisiz.push(k); continue; }
+      const ins = await supabase.from('dog_inbox').insert({ client_id: rc.data[0].id, tur: 'aktivite', baslik: o.ad, payload, from_code: client?.share_code || null, durum: 'yeni' });
+      if (ins.error) { basarisiz.push(k); continue; }
+      try { await fetch('/api/push/send', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ clientId: rc.data[0].id, title: gonderen ? '📩 ' + gonderen : '📩 Yeni paylaşım', body: (gonderen ? gonderen + ' paylaştı: ' : '') + o.ad, url: '/' }) }); } catch (_) { /* sessiz */ }
+      basarili.push(kisiAd(k) || k);
+    }
+    setKShareTo(''); setPaylasSel([]);
+    if (basarili.length && !basarisiz.length) setKMsg('✓ Paylaşıldı → ' + basarili.join(', '));
+    else if (basarili.length && basarisiz.length) setKMsg('✓ ' + basarili.join(', ') + ' · bulunamadı: ' + basarisiz.join(', '));
+    else { setKMsg('Kod(lar) bulunamadı: ' + basarisiz.join(', ')); setPaylasBusy(false); return; }
     // Küçük bir onay yazısı gözden kaçabiliyordu (kullanıcı geri bildirimi) — artık paylaşım tamamlanana kadar
     // buton kilitli kalıyor, kısa bir gecikmeyle pencere kendiliğinden kapanıyor; "paylaştım mı" belirsizliğiyle
     // tekrar dokunulamıyor.
@@ -2337,6 +2346,21 @@ export default function Rite() {
                     <div className="note" style={{ margin: '2px 0' }}>{v.payload?.from_ad ? 'Kimden: ' + v.payload.from_ad : 'Paylaşım'}{v.from_code ? ' · ' + v.from_code : ''}</div>
                     {(v.payload?.faydalar || []).length > 0 && <div>{Array.from(new Set((v.payload.faydalar || []).map((k: string) => faydaMap[k]?.alan).filter(Boolean))).map((a: any) => <span key={a} className="tagp p-alan">{a}</span>)}</div>}
                     {v.payload?.aciklama && <div className="note" style={{ marginTop: 4 }}>{v.payload.aciklama}</div>}
+                    {/* Kişisel bilgi kartları (Not/Randevu/Alışkanlık) için gerçek önizleme — kabul etmeden önce ne
+                        geldiğini görüp gerekirse hemen silebilsin diye (kullanıcı isteği: "gereksiz paylaşım"lar). */}
+                    {v.payload?.kartTipi === 'bilgi' && (
+                      <div style={{ margin: '4px 0 0' }}>
+                        {v.payload?.kartConfig?.randevu && (
+                          <div className="note" style={{ margin: '0 0 2px' }}>
+                            📅{v.payload.baslangic ? ' ' + kisaTarih(v.payload.baslangic) : ''}{v.payload.kartConfig?.saat ? ' · 🕑 ' + v.payload.kartConfig.saat : ''}{v.payload.kartConfig?.yer ? ' · ' + v.payload.kartConfig.yer : ''}
+                          </div>
+                        )}
+                        {v.payload?.kartConfig?.icerik && (
+                          <div style={{ fontSize: 12.5, color: '#4a4433', lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 4, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{renderMetin(v.payload.kartConfig.icerik)}</div>
+                        )}
+                        {(v.payload?.kartConfig?.videolar || []).length > 0 && <div className="note" style={{ margin: '2px 0 0' }}>🎬 {v.payload.kartConfig.videolar.length} video</div>}
+                      </div>
+                    )}
                     {ibGrupSec === v.id && (
                       <div style={{ margin: '6px 0' }}>
                         <label className="fldlbl" style={{ marginTop: 0 }}>Hangi grupta saklansın?</label>
@@ -2562,7 +2586,7 @@ export default function Rite() {
                   {o.hatirlatma_saat ? (
                     <button className="btn ghost sm" onClick={() => { setRemInput(o.hatirlatma_saat || ''); setRemTarihInput(kCfg?.hatirlatma_tarih || o.baslangic || ''); setRemMenuFor({ ...o, _randevu: kTip === 'randevu' || !!kCfg?.randevu }); }} title="Bildirim seçenekleri" aria-label="Bildirim seçenekleri">🔔 {o.hatirlatma_saat}</button>
                   ) : (
-                    <button className="btn ghost sm" style={{ opacity: .4 }} onClick={() => { setRemInput(''); setRemTarihInput(kCfg?.hatirlatma_tarih || o.baslangic || ''); setRemMenuFor({ ...o, _randevu: kTip === 'randevu' || !!kCfg?.randevu }); }} title="Bildirim ekle" aria-label="Bildirim ekle">🔔</button>
+                    <button className="btn ghost sm" style={{ opacity: .4 }} onClick={() => { setRemInput(kCfg?.saat || ''); setRemTarihInput(kCfg?.hatirlatma_tarih || o.baslangic || ''); setRemMenuFor({ ...o, _randevu: kTip === 'randevu' || !!kCfg?.randevu }); }} title="Bildirim ekle" aria-label="Bildirim ekle">🔔</button>
                   )}
                   {!paylasilamaz && !isTaze && <button className="btn ghost sm" onClick={() => { setPaylasOpen(true); setKMsg(''); }} title="Paylaş" aria-label="Paylaş">↪️</button>}
                 </div>
@@ -2690,12 +2714,12 @@ export default function Rite() {
                 <h3 style={{ marginBottom: 4 }}>📤 Paylaş</h3>
                 <p className="note" style={{ marginTop: 0 }}><b>{o.ad}</b></p>
                 {kisiler.length > 0 ? (<>
-                  <label className="fldlbl">Kişi</label>
-                  <div>{kisiler.map((ki, i) => <button key={i} className={'chip' + (paylasSel === ki.kod ? ' on' : '')} onClick={() => { setPaylasSel(ki.kod); setKShareTo(''); }}>{ki.ad}</button>)}</div>
+                  <label className="fldlbl">Kişi (birden fazla seçebilirsin)</label>
+                  <div>{kisiler.map((ki, i) => <button key={i} className={'chip' + (paylasSel.includes(ki.kod) ? ' on' : '')} onClick={() => setPaylasSel((s) => s.includes(ki.kod) ? s.filter((x) => x !== ki.kod) : [...s, ki.kod])}>{ki.ad}</button>)}</div>
                 </>) : <div className="note">Henüz kişi yok — Ayarlar → Paylaşım'dan ekle. Ya da kod gir:</div>}
-                <label className="fldlbl">Kod (ops.)</label>
-                <input value={kShareTo} onChange={(e) => { setKShareTo(e.target.value); setPaylasSel(''); }} placeholder="RT-XXXXX" autoCapitalize="characters" />
-                <div style={{ marginTop: 10 }}><button className="btn" disabled={paylasBusy} onClick={() => paylas(o, isRit, paylasSel || kShareTo)}>{paylasBusy ? 'Paylaşılıyor…' : 'Paylaş'}</button></div>
+                <label className="fldlbl">Kod (ops., ek bir kişi için)</label>
+                <input value={kShareTo} onChange={(e) => setKShareTo(e.target.value)} placeholder="RT-XXXXX" autoCapitalize="characters" />
+                <div style={{ marginTop: 10 }}><button className="btn" disabled={paylasBusy} onClick={() => paylas(o, isRit, [...paylasSel, kShareTo])}>{paylasBusy ? 'Paylaşılıyor…' : 'Paylaş' + (paylasSel.length > 1 ? ' (' + paylasSel.length + ' kişi)' : '')}</button></div>
                 {kMsg && <div className="msg">{kMsg}</div>}
               </div>
               </div>
