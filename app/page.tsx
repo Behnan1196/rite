@@ -733,8 +733,6 @@ export default function Rite() {
   const [yeniGrupAd, setYeniGrupAd] = useState('');
   const [ekstraGruplar, setEkstraGruplar] = useState<string[]>([]);
   const [ekleMenuOpen, setEkleMenuOpen] = useState(false);
-  const [yeniKartOpen, setYeniKartOpen] = useState<'not' | 'randevu' | null>(null);
-  const [yeniKartAdVal, setYeniKartAdVal] = useState('');
   const [ayracYeniOpen, setAyracYeniOpen] = useState(false);
   const [ayracEditId, setAyracEditId] = useState<string | null>(null);
   const [ayracAdVal, setAyracAdVal] = useState('');
@@ -1137,6 +1135,7 @@ export default function Rite() {
   }
   async function setRitAd(id: string, ad: string) {
     if (!client || !ad.trim()) return;
+    if (!id) { patchDetay({ ad: ad.trim() }); return; } // taslak — henüz kaydedilmedi, sadece yerelde tut
     await supabase.from('dog_rituals').update({ ad: ad.trim() }).eq('id', id);
     patchDetay({ ad: ad.trim() });
     loadData(client.id);
@@ -1152,6 +1151,7 @@ export default function Rite() {
   async function setRitKisiselNot(id: string, v: string) {
     if (!client) return;
     const n = v.trim() || null;
+    if (!id) { patchDetay({ kisisel_not: n }); return; } // taslak
     await supabase.from('dog_rituals').update({ kisisel_not: n }).eq('id', id);
     patchDetay({ kisisel_not: n });
     loadData(client.id);
@@ -1160,6 +1160,7 @@ export default function Rite() {
   async function setBilgiCfg(id: string, cfg: any) {
     if (!client) return;
     const patch = { kart_config: cfg, kart_tipi: 'bilgi' };
+    if (!id) { patchDetay(patch); return; } // taslak — henüz kart yok, içerik/video sadece ekranda tutuluyor
     await supabase.from('dog_rituals').update(patch).eq('id', id);
     patchDetay(patch);
     loadData(client.id);
@@ -1188,27 +1189,35 @@ export default function Rite() {
     patchDetay(patch);
     loadData(client.id);
   }
-  // Not / Randevu: ＋ menüsünden tıklayınca artık DOĞRUDAN kart yaratmıyoruz — önce küçük bir "taslak" modalı
-  // açılır (ayraç ile aynı mantık: isim yaz, Kaydet'e bas), kart ancak Kaydet'e basınca oluşuyor. Kaydettikten
-  // sonra tam düzenleme ekranı (openRit) açılıyor, ama yeni oluşturulduğu için mezun et/paylaş gibi "zaten var
-  // olan bir kart" seçenekleri "taze" işaretiyle bir süre gizli kalıyor (bkz. isRit araç çubuğu).
-  async function yeniKartKaydet() {
-    if (!client || !yeniKartOpen) return;
-    const randevu = yeniKartOpen === 'randevu';
-    const ad = yeniKartAdVal.trim() || (randevu ? 'Yeni randevu' : 'Yeni not');
+  // Not / Randevu / Alışkanlık: ＋ menüsünden tıklayınca artık DOĞRUDAN kart yaratmıyoruz. Aynı tam düzenleme
+  // ekranı (openRit'in açtığı ekran) o.id'si olmayan yerel bir "taslak" nesnesiyle açılıyor — alan düzenleme
+  // fonksiyonları (setRitAd, setBilgiCfg, setRitReminder, setRitKisiselNot) id yokken sadece bu ekranda yerel
+  // tutuyor, veritabanına hiçbir şey yazmıyor (bkz. o fonksiyonlar ve isRit araç çubuğundaki isDraft/zamanlamaGoster).
+  // Kart ancak alttaki "Kaydet" (taslakKaydet) ile gerçekten oluşuyor.
+  function yeniTaslakAc(tur: 'not' | 'randevu' | 'aliskanlik') {
     const cfg: any = { icerik: null, videolar: [] };
-    if (randevu) cfg.randevu = true;
-    const ins = await supabase.from('dog_rituals').insert({ client_id: client.id, ad, zaman: 'gün', kaynak: 'Kendi', tip: 'aliskanlik', kart_tipi: 'bilgi', kart_config: cfg, aliskanlik: false, aktif: true, mezun: false, baslangic: day, bitis: day, blok_sira: Date.now() }).select().single();
-    setYeniKartOpen(null);
-    loadData(client.id);
-    if (ins.data) { openRit(ins.data); setTaze(ins.data.id); }
+    if (tur === 'randevu') cfg.randevu = true;
+    openRit({
+      id: null,
+      ad: tur === 'randevu' ? 'Yeni randevu' : tur === 'aliskanlik' ? 'Yeni alışkanlık' : 'Yeni not',
+      kaynak: 'Kendi', tip: 'aliskanlik', kart_tipi: 'bilgi', kart_config: cfg,
+      aliskanlik: tur === 'aliskanlik', aktif: true, mezun: false,
+      baslangic: day, bitis: tur === 'aliskanlik' ? null : day,
+      hatirlatma_saat: null, kisisel_not: null, gunler: null, faydalar: [],
+    });
   }
-  // Alışkanlık: Not ile aynı içerik kartı ama baştan süregelen (bitiş tarihsiz) başlar ve alışkanlık işaretlidir —
-  // zamanlama (günler/süre) ve mezun etme sadece bu şekilde oluşturulmuş kartlarda gösterilir (bkz. isRit araç çubuğu).
-  // Bu da (Not/Randevu'daki taslak adımı olmadan) hemen oluşturuluyor ama "taze" işaretiyle açılıyor.
-  async function hemenEkleAliskanlik() {
-    if (!client) return;
-    const ins = await supabase.from('dog_rituals').insert({ client_id: client.id, ad: 'Yeni alışkanlık', zaman: 'gün', kaynak: 'Kendi', tip: 'aliskanlik', kart_tipi: 'bilgi', kart_config: { icerik: null, videolar: [] }, aliskanlik: true, aktif: true, mezun: false, baslangic: day, bitis: null, blok_sira: Date.now() }).select().single();
+  async function taslakKaydet() {
+    if (!client || !detay || detay.obj.id) return;
+    const o = detay.obj;
+    const ins = await supabase.from('dog_rituals').insert({
+      client_id: client.id, ad: (o.ad || '').trim() || 'Yeni not', zaman: 'gün', kaynak: 'Kendi', tip: 'aliskanlik',
+      kart_tipi: 'bilgi', kart_config: o.kart_config || { icerik: null, videolar: [] },
+      aliskanlik: !!o.aliskanlik, aktif: true, mezun: false,
+      baslangic: o.baslangic || day, bitis: o.aliskanlik ? null : (o.bitis ?? day),
+      hatirlatma_saat: o.hatirlatma_saat || null, kisisel_not: o.kisisel_not || null,
+      blok_sira: Date.now(),
+    }).select().single();
+    if (ins.error) { alert('Kaydedilemedi: ' + ins.error.message); return; }
     loadData(client.id);
     if (ins.data) { openRit(ins.data); setTaze(ins.data.id); }
   }
@@ -1323,6 +1332,7 @@ export default function Rite() {
   }
   async function setRitReminder(id: string, saat: string) {
     if (!client) return;
+    if (!id) { patchDetay({ hatirlatma_saat: saat || null, son_bildirim: null }); return; } // taslak
     // Saati değiştirince "bugün gönderildi" işaretini sıfırla → yeni saat aynı gün de tetiklenir
     await supabase.from('dog_rituals').update({ hatirlatma_saat: saat || null, son_bildirim: null }).eq('id', id);
     patchDetay({ hatirlatma_saat: saat || null, son_bildirim: null });
@@ -2358,6 +2368,10 @@ export default function Rite() {
         // tarafından başka birine paylaşılamaz. Kendi yazdığı ya da bir arkadaşından aldığı kişisel kartlar serbest.
         const paylasilamaz = isRit ? (o.kaynak === 'Meridyen' || o.kaynak === 'Program' || !!o.sablon_id) : !!o.sablon_id;
         const stilP = kCfg.stil ? STIL_LOOKUP[kCfg.stil] : null;
+        // Taslak: ＋ menüsünden yeni bir Not/Randevu/Alışkanlık açıldı ama henüz Kaydet'e basılmadı — ortada
+        // gerçek bir veritabanı satırı (o.id) yok. Alan düzenleme fonksiyonları (setRitAd, setBilgiCfg, vb.)
+        // id yokken sadece bu ekrandaki yerel taslağı güncelliyor, hiçbir şeyi kaydetmiyor (bkz. o fonksiyonlar).
+        const isDraft = isRit && !o.id;
         return (
         <div className="modal full" onMouseDown={() => closeDetay()}>
           <div className="sheet fullsheet" onMouseDown={(e) => e.stopPropagation()} style={stilP ? { borderTop: '4px solid ' + stilP.ac } : undefined}>
@@ -2365,7 +2379,7 @@ export default function Rite() {
             <button className="x" onClick={() => closeDetay()}>×</button>
             {isRit ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                {kTip === 'bilgi' && <div className={'chk' + (ritDone(o.id) ? ' on' : '')} onClick={() => toggleRit(o.id)} title="Yaptım">{ritDone(o.id) ? '✓' : ''}</div>}
+                {kTip === 'bilgi' && !isDraft && <div className={'chk' + (ritDone(o.id) ? ' on' : '')} onClick={() => toggleRit(o.id)} title="Yaptım">{ritDone(o.id) ? '✓' : ''}</div>}
                 <input className="detbaslik" value={adInput} onChange={(e) => setAdInput(e.target.value)} onBlur={() => { if (adInput.trim() && adInput.trim() !== (o.ad || '')) setRitAd(o.id, adInput); }} style={{ flex: 1 }} />
               </div>
             ) : <h2 style={{ paddingRight: 34 }}>{o.ad}</h2>}
@@ -2401,10 +2415,12 @@ export default function Rite() {
               // arındırıldı; alışkanlık artık oluşturulurken (＋ menüsünden) seçilen bir tip, sonradan dönüştürülen
               // bir özellik değil (kullanıcı isteği).
               const kisiselBilgi = o.kaynak === 'Kendi' && kTip === 'bilgi';
-              const zamanlamaGoster = !kisiselBilgi || o.aliskanlik;
-              // Kart daha bu an ＋ menüsünden oluşturulduysa (taze), "zaten var olan bir kart" için anlamlı
-              // mezun et / paylaş seçenekleri bir süre gizli kalır (kullanıcı isteği) — kapatıp tekrar açınca kalkar.
-              const isTaze = taze === o.id;
+              // Taslak (henüz kaydedilmemiş, o.id yok) iken zamanlama/mezun etme hiç gösterilmiyor — bunlar
+              // Kaydet'ten SONRA, kart zaten varken ayarlanır (kullanıcı isteği: önce sade bir taslak, sonrası sonra).
+              const zamanlamaGoster = (!kisiselBilgi || o.aliskanlik) && !isDraft;
+              // Kart daha bu an ＋ menüsünden oluşturulduysa (taze) ya da hâlâ taslaksa, "zaten var olan bir kart"
+              // için anlamlı mezun et / paylaş seçenekleri gizli kalır (kullanıcı isteği).
+              const isTaze = isDraft || (!!o.id && taze === o.id);
               return (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, margin: '2px 0 10px' }}>
                 <div style={{ display: 'flex', gap: 6, flex: '0 0 auto' }}>
@@ -2434,6 +2450,7 @@ export default function Rite() {
             )}
             {isRit && kTip === 'standart' && kCfg?.resim && <img src={kCfg.resim} alt="" style={{ maxWidth: '100%', borderRadius: 8, margin: '4px 0 8px', display: 'block' }} />}
             {isRit && kTip === 'bilgi' && (o.kaynak === 'Kendi' ? <BilgiKartEdit cfg={kCfg} onSave={bilgiKaydet} /> : <BilgiKart cfg={kCfg} onSave={bilgiKaydet} />)}
+            {isDraft && <button className="btn" style={{ width: '100%', margin: '2px 0 8px' }} onClick={taslakKaydet}>Kaydet</button>}
             {isRit && kTip === 'video' && <div style={{ margin: '4px 0 8px' }}>
               {(kCfg.url || o.url) && <EmbedVideo url={kCfg.url || o.url} />}
               {!o.sablon_id && <div className="daterow" style={{ marginTop: 6 }}><input value={kartUrlInput} onChange={(e) => setKartUrlInput(e.target.value)} onBlur={() => { if (kartUrlInput.trim() !== ((o.kart_config && o.kart_config.url) || o.url || '')) setRitKartUrl(o.id, kartUrlInput); }} placeholder="Video linki (düzenle)…" style={{ flex: 1 }} /></div>}
@@ -2722,9 +2739,9 @@ export default function Rite() {
             <div className="sheetgrip" onClick={() => setEkleMenuOpen(false)} />
             <h2>Ekle</h2>
             <div className="ekleGrid">
-              <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); setYeniKartAdVal(''); setYeniKartOpen('not'); }}><span className="ekic">📝</span>Not</button>
-              <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); hemenEkleAliskanlik(); }}><span className="ekic">🎓</span>Alışkanlık</button>
-              <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); setYeniKartAdVal(''); setYeniKartOpen('randevu'); }}><span className="ekic">📅</span>Randevu</button>
+              <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); yeniTaslakAc('not'); }}><span className="ekic">📝</span>Not</button>
+              <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); yeniTaslakAc('aliskanlik'); }}><span className="ekic">🎓</span>Alışkanlık</button>
+              <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); yeniTaslakAc('randevu'); }}><span className="ekic">📅</span>Randevu</button>
               <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); setAyracAdVal(''); setAyracYeniOpen(true); }}><span className="ekic">➖</span>Ayraç</button>
               <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); setScreen('ajanda'); setAjView('gun'); startLink(); }}><span className="ekic">🔗</span>Rutin</button>
             </div>
@@ -2741,18 +2758,6 @@ export default function Rite() {
             <p className="note" style={{ marginTop: 0 }}>Güne bir bölüm başlığı ekle — ör. &quot;Sabah&quot;, &quot;Egzersiz zamanı&quot;. Eklediğin günden itibaren, sen silene kadar her gün görünür.</p>
             <input autoFocus value={ayracAdVal} onChange={(e) => setAyracAdVal(e.target.value)} placeholder="ör. Sabah" onKeyDown={(e) => { if (e.key === 'Enter') { ayracEkle(ayracAdVal); setAyracYeniOpen(false); } }} />
             <div className="rowbtns" style={{ marginTop: 12 }}><button className="btn" onClick={() => { ayracEkle(ayracAdVal); setAyracYeniOpen(false); }}>Ekle</button></div>
-          </div>
-        </div>
-      )}
-
-      {yeniKartOpen && (
-        <div className="modal" onMouseDown={() => setYeniKartOpen(null)}>
-          <div className="sheet" onMouseDown={(e) => e.stopPropagation()}>
-            <button className="x" onClick={() => setYeniKartOpen(null)}>×</button>
-            <h2>{yeniKartOpen === 'randevu' ? 'Yeni randevu' : 'Yeni not'}</h2>
-            <p className="note" style={{ marginTop: 0 }}>{yeniKartOpen === 'randevu' ? 'Randevuya bir başlık ver — saat ve buluşma linkini bir sonraki ekranda ekleyeceksin.' : 'Nota bir başlık ver — içeriğini bir sonraki ekranda yazacaksın.'}</p>
-            <input autoFocus value={yeniKartAdVal} onChange={(e) => setYeniKartAdVal(e.target.value)} placeholder={yeniKartOpen === 'randevu' ? 'ör. Diyetisyenle görüşme' : 'ör. Alışveriş listesi'} onKeyDown={(e) => { if (e.key === 'Enter') yeniKartKaydet(); }} />
-            <div className="rowbtns" style={{ marginTop: 12 }}><button className="btn" onClick={yeniKartKaydet}>Kaydet</button></div>
           </div>
         </div>
       )}
