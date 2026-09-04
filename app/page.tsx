@@ -1436,6 +1436,22 @@ export default function Rite() {
     setGunSiraMap((mp) => ({ ...mp, [day]: gunSirasi }));
     supabase.from('dog_gun_duzeni').upsert({ client_id: client.id, tarih: day, sira: gunSirasi }, { onConflict: 'client_id,tarih' })
       .then(({ error }) => { if (error) console.error('gün sırası kaydedilemedi:', error); });
+
+    // Bugün ya da ileri bir günde sıralama değiştiriyorsak: süregelen (bitiş tarihi olmayan) kartların ve
+    // ayraçların yeni sırası blok_sira'ya da yazılır — böylece kendi sırası hiç ayarlanmamış SONRAKİ günler de
+    // bu yeni düzeni miras alır (kullanıcı isteği). Geçmiş bir günde değişiklik yapmak ileriye yansımaz. Kendi
+    // sırası zaten ayarlanmış bir gün (kendi dog_gun_duzeni satırı olan) bundan etkilenmez — o günkü sıra korunur,
+    // çünkü o gün için gunOrder her zaman blok_sira'dan önce gelir.
+    if (day >= today) {
+      const base = Date.now();
+      const stamps = moved
+        .map((r, i) => ({ r, i }))
+        .filter(({ r }) => (r.kind === 'item' || r.kind === 'ayrac') && r.members[0].bitis === null);
+      if (stamps.length) {
+        await Promise.all(stamps.map(({ r, i }) => supabase.from('dog_rituals').update({ blok_sira: base + i }).eq('id', r.members[0].id)));
+        loadData(client.id);
+      }
+    }
   }
   async function rutinBoz(name: string) {
     if (!client) return;
