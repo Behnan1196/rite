@@ -1212,17 +1212,6 @@ export default function Rite() {
     await supabase.from('dog_rituals').delete().eq('id', id);
     loadData(client.id);
   }
-  // Kartı "randevu" olarak işaretler — ayrı bir kart tipine geçmez, aynı bilgi kartı kalır, sadece kart_config.randevu
-  // bayrağı eklenir (saat için zaten var olan "değiştir → hatırlatma" kullanılır, buluşma linki için "+ Link ekle").
-  // Eski (kart_tipi='randevu' olarak kaydedilmiş) kartlara dokunulunca da otomatik bu modele geçer.
-  async function setRitRandevu(id: string, on: boolean) {
-    if (!client) return;
-    const cfg = { ...(detay?.obj?.kart_config || {}), randevu: on };
-    const patch: any = { kart_tipi: 'bilgi', kart_config: cfg };
-    await supabase.from('dog_rituals').update(patch).eq('id', id);
-    patchDetay(patch);
-    loadData(client.id);
-  }
   // Randevu alanlarından biri değiştiğinde (RandevuKartEdit'ten) — diğer alanları koruyarak kart_config'i günceller.
   async function setRandevuCfg(id: string, patch: any) {
     if (!client) return;
@@ -1301,8 +1290,14 @@ export default function Rite() {
   }
   async function setRitAliskanlik(id: string, val: boolean) {
     if (!client) return;
-    await supabase.from('dog_rituals').update({ aliskanlik: val }).eq('id', id);
-    patchDetay({ aliskanlik: val });
+    const rt = rituals.find((r) => r.id === id);
+    const patch: any = { aliskanlik: val };
+    // Alışkanlık yap: kart o gün için tek günlük (bitis === baslangic, ör. yeni bir not) ise burada da süregelen
+    // hâle getiriyoruz — yoksa "alışkanlık" işaretlense bile kart bir daha görünmezdi, kullanıcının ayrıca
+    // Zamanlama'ya girip Süre'yi "Süregelen" yapması gerekirdi (kullanıcı geri bildirimi).
+    if (val && rt && rt.bitis && rt.bitis === rt.baslangic) patch.bitis = null;
+    await supabase.from('dog_rituals').update(patch).eq('id', id);
+    patchDetay(patch);
     loadData(client.id);
   }
   async function setRitReminder(id: string, saat: string) {
@@ -1382,50 +1377,51 @@ export default function Rite() {
     const { active, over } = e;
     if (!over || active.id === over.id) return;
     const oldIndex = rows.findIndex((r) => r.key === active.id);
-    const newIndex = rows.findIndex((r) => r.key === over.id);
-    if (oldIndex < 0 || newIndex < 0) return;
+    const overIndex = rows.findIndex((r) => r.key === over.id);
+    if (oldIndex < 0 || overIndex < 0) return;
     const activeRow = rows[oldIndex];
+    const overRow = rows[overIndex];
 
-    if (activeRow.kind === 'item' || activeRow.kind === 'member') {
-      const moved = arrayMove(rows, oldIndex, newIndex);
-      const pos = moved.indexOf(activeRow);
-      const neighborRutin = (idx: number): string | null => {
-        const row = moved[idx];
-        return row && (row.kind === 'member' || row.kind === 'rutinHead') ? row.rutin : null;
-      };
-      const targetRutin = neighborRutin(pos - 1) || neighborRutin(pos + 1);
-      if (targetRutin) {
-        // Bir rutinin üyeleri kendi gunler/tarih aralığını koruyor (kasıtlı — biri Pzt/Çrş, biri her gün olabilir,
-        // Meridyen'den gelen bir program adımı kendi başlangıç gününde devreye girebilir); o yüzden `habits`
-        // (SADECE bugün aktif olanlar) değil, rutinin TÜM üyeleri (rituals) üzerinden sira yeniden hesaplanır —
-        // yoksa bugün görünmeyen bir üye, görünenlerle aynı sira değerini alıp çakışabilirdi.
-        let lo = pos;
-        while (lo > 0 && ((moved[lo - 1].kind === 'member' && moved[lo - 1].rutin === targetRutin) || (moved[lo - 1].kind === 'rutinHead' && moved[lo - 1].rutin === targetRutin))) lo--;
-        let prevVisibleId: string | null = null;
-        for (let i = pos - 1; i >= lo; i--) { const row = moved[i]; if (row.kind === 'member') { prevVisibleId = row.ritual.id; break; } }
-        const activeId = activeRow.kind === 'member' ? activeRow.ritual.id : activeRow.members[0].id;
-        const anyExisting = rituals.find((r: any) => r.rutin === targetRutin);
-        const targetAd = anyExisting?.rutin_ad ?? null;
-        const targetSlot = anyExisting?.zaman || 'gün';
-        const allMembers = rituals.filter((r: any) => r.rutin === targetRutin && r.id !== activeId).sort((a: any, b: any) => (a.sira || 0) - (b.sira || 0));
-        const insertAt = prevVisibleId ? allMembers.findIndex((r: any) => r.id === prevVisibleId) + 1 : 0;
-        allMembers.splice(insertAt < 0 ? allMembers.length : insertAt, 0, { id: activeId });
-        await Promise.all(allMembers.map((r: any, i: number) => {
-          const patch: any = { sira: i };
-          if (r.id === activeId) { patch.rutin = targetRutin; patch.rutin_ad = targetAd; patch.zaman = targetSlot; }
-          return supabase.from('dog_rituals').update(patch).eq('id', r.id);
-        }));
-        loadData(client.id);
-        return;
-      }
-      if (activeRow.kind === 'member') { loadData(client.id); return; } // rutin dışına bırakma desteklenmiyor
+    // Bir rutine katılım artık SADECE o rutinin başlığına (ya da — aynı rutin içindeyse — bir üyesine) doğrudan
+    // bırakılınca oluyor. Önceden "taşındıktan sonra komşun bir rutinse katıl" mantığı vardı; bu, sıradan
+    // sıralama sırasında bir rutine yakın bir yere bırakmayı bile beklenmedik şekilde rutine katıyor, sıralamayı
+    // "hiç stabil değil" hissettiriyordu (kullanıcı geri bildirimi). Artık sadece rutinin kutusunun ÜSTÜNE
+    // bırakmak katılım sayılıyor — yakınına bırakmak sadece sırasını değiştirir.
+    const sameRoutineMemberMove = activeRow.kind === 'member' && overRow.kind === 'member' && overRow.rutin === activeRow.rutin;
+    const sameRoutineToHead = activeRow.kind === 'member' && overRow.kind === 'rutinHead' && overRow.rutin === activeRow.rutin;
+    const explicitJoinRoutine = (activeRow.kind === 'item' || activeRow.kind === 'member') && overRow.kind === 'rutinHead' && overRow.rutin !== activeRow.rutin;
+
+    if (sameRoutineMemberMove || sameRoutineToHead || explicitJoinRoutine) {
+      // Bir rutinin üyeleri kendi gunler/tarih aralığını koruyor (kasıtlı — biri Pzt/Çrş, biri her gün olabilir,
+      // Meridyen'den gelen bir program adımı kendi başlangıç gününde devreye girebilir); o yüzden `habits`
+      // (SADECE bugün aktif olanlar) değil, rutinin TÜM üyeleri (rituals) üzerinden sira yeniden hesaplanır —
+      // yoksa bugün görünmeyen bir üye, görünenlerle aynı sira değerini alıp çakışabilirdi.
+      const targetRutin = overRow.rutin;
+      const activeId = activeRow.kind === 'member' ? activeRow.ritual.id : activeRow.members[0].id;
+      const anyExisting = rituals.find((r: any) => r.rutin === targetRutin);
+      const targetAd = anyExisting?.rutin_ad ?? null;
+      const targetSlot = anyExisting?.zaman || 'gün';
+      const allMembers = rituals.filter((r: any) => r.rutin === targetRutin && r.id !== activeId).sort((a: any, b: any) => (a.sira || 0) - (b.sira || 0));
+      const insertAt = overRow.kind === 'member' ? Math.max(0, allMembers.findIndex((r: any) => r.id === overRow.ritual.id)) : allMembers.length;
+      allMembers.splice(insertAt < 0 ? allMembers.length : insertAt, 0, { id: activeId });
+      await Promise.all(allMembers.map((r: any, i: number) => {
+        const patch: any = { sira: i };
+        if (r.id === activeId) { patch.rutin = targetRutin; patch.rutin_ad = targetAd; patch.zaman = targetSlot; }
+        return supabase.from('dog_rituals').update(patch).eq('id', r.id);
+      }));
+      loadData(client.id);
+      return;
     }
+    if (activeRow.kind === 'member') { loadData(client.id); return; } // rutin dışına bırakma desteklenmiyor (✕ ile çıkarılır)
 
-    // Sıradan sürükleme (ayraçlar dahil) — artık zaman dilimi ayracı yok, tek düz sıra. Bu güne özel
-    // kaydediliyor (dog_gun_duzeni); blok_sira'ya dokunmuyoruz, o dokunulmamış günler için varsayılan sıra olarak kalıyor.
+    // Sıradan sürükleme (ayraçlar ve rutin başlıkları dahil) — artık zaman dilimi ayracı yok, tek düz sıra. Bu
+    // güne özel kaydediliyor (dog_gun_duzeni); blok_sira'ya dokunmuyoruz, o dokunulmamış günler için varsayılan
+    // sıra olarak kalıyor. Bırakılan yer (over) bir rutinin AÇIK üyesiyse, o rutinin üst-düzey konumuna (başlığına)
+    // denk düşürülüyor — üyeye bırakmak artık rutine katmadığı için sıradaki karşılığı budur.
     const topRows = rows.filter((r) => r.kind !== 'member');
     const topOldIndex = topRows.findIndex((r) => r.key === active.id);
-    const topNewIndex = topRows.findIndex((r) => r.key === over.id);
+    const overKeyForTop = overRow.kind === 'member' ? 'r:' + overRow.rutin : over.id;
+    const topNewIndex = topRows.findIndex((r) => r.key === overKeyForTop);
     if (topOldIndex < 0 || topNewIndex < 0) return;
     const moved = arrayMove(topRows, topOldIndex, topNewIndex);
     const gunSirasi = moved.map((r) => r.key);
@@ -2383,17 +2379,14 @@ export default function Rite() {
                 </div>
               </div>
             )}
-            {isRit && o.kaynak === 'Kendi' && (kTip === 'bilgi' || kTip === 'randevu') && (() => {
-              const isRandevu = kTip === 'randevu' || !!kCfg?.randevu;
-              return (
-                <div style={{ margin: '-6px 0 10px' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
-                    <input type="checkbox" style={{ width: 'auto' }} checked={isRandevu} onChange={(e) => setRitRandevu(o.id, e.target.checked)} /> 📅 Bu bir randevu
-                  </label>
-                  {isRandevu && <div className="note" style={{ margin: '2px 0 0' }}>Saat için üstteki &quot;değiştir&quot;den hatırlatma, buluşma linki için aşağıdan &quot;+ Link ekle&quot;yi kullan.</div>}
-                </div>
-              );
-            })()}
+            {/* Not eklerken/düzenlerken "bu bir randevu" seçme kutusu artık yok — Randevu, alttaki ＋ menüsünden
+                kendi başına oluşturuluyor. Bir kart zaten randevu olarak oluşturulduysa (kart_config.randevu),
+                burada sadece bilgilendirme gösterilir, dönüştürme seçeneği sunulmaz. */}
+            {isRit && o.kaynak === 'Kendi' && kTip === 'bilgi' && !!kCfg?.randevu && (
+              <div style={{ margin: '-6px 0 10px' }}>
+                <span className="note" style={{ margin: 0 }}>📅 Bu bir randevu — saat için üstteki &quot;değiştir&quot;den hatırlatma, buluşma linki için aşağıdan &quot;+ Link ekle&quot;yi kullan.</span>
+              </div>
+            )}
             {isRit && kTip === 'standart' && kCfg?.resim && <img src={kCfg.resim} alt="" style={{ maxWidth: '100%', borderRadius: 8, margin: '4px 0 8px', display: 'block' }} />}
             {isRit && kTip === 'bilgi' && (o.kaynak === 'Kendi' ? <BilgiKartEdit cfg={kCfg} onSave={bilgiKaydet} /> : <BilgiKart cfg={kCfg} onSave={bilgiKaydet} />)}
             {isRit && kTip === 'video' && <div style={{ margin: '4px 0 8px' }}>
