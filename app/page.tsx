@@ -192,9 +192,23 @@ function BilgiKartEdit({ cfg, onSave, randevu }: { cfg: any; onSave: (cfg: any) 
             {resimUrl.trim() && <img src={resimUrl.trim()} alt="" style={{ maxWidth: '100%', borderRadius: 8, margin: '8px 0 0', display: 'block' }} />}
           </div>
         )}
-        {/* Açıklama artık gri bölümün en üstünde — asıl içerik bu. Video linki eklemek ikincil bir eylem olduğu
-            için tam bir satır kaplayan "+ Link ekle" yerine, Açıklama başlığının sağında küçük bir simge oldu
-            (kullanıcı isteği: video üstte değil, Açıklama üstte olsun). */}
+        {/* Video seçimi/oynatıcısı (varsa) Açıklama başlığının ÜZERİNDE duruyor; ekleme tetikleyicisi ise
+            (ikincil bir eylem olduğu için) tam satır kaplamak yerine Açıklama başlığının sağında küçük bir
+            simge (kullanıcı isteği: video seçimi/yerleşimi üstte, + Link ekle ise Açıklama satırında). */}
+        {!randevu && videolar.length > 0 && (
+          <div style={{ margin: '0 0 6px', display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+            {videolar.map((v, i) => (
+              <span key={i} className={'chip' + (i === vidSec ? ' on' : '')} onClick={() => setVidSec(i)}>
+                {v.baslik || ('Video ' + (i + 1))}{(v.bas || v.bit) ? ` ⏱${v.bas || 0}–${v.bit || '…'}sn` : ''}
+                <span style={{ marginLeft: 6, opacity: 0.55 }} onClick={(e) => { e.stopPropagation(); videoSil(i); }}>✕</span>
+              </span>
+            ))}
+          </div>
+        )}
+        {!randevu && secili && <div style={{ margin: '0 0 4px' }}><EmbedVideo url={secili.url} bas={secili.bas} bit={secili.bit} /></div>}
+        {!randevu && secili && (
+          <input value={ozelNotVal} onChange={(e) => setOzelNotVal(e.target.value)} onBlur={ozelNotKaydet} placeholder="Bu videoya özel not (ops.)" style={{ width: '100%', margin: '0 0 10px', fontSize: 12.5, fontStyle: 'italic' }} />
+        )}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
           <div className="k" style={{ margin: 0 }}>Açıklama</div>
           {!randevu && <span className="chip" style={{ borderStyle: 'dashed', fontSize: 11, flex: '0 0 auto' }} onClick={() => setVidEkleOpen((o) => !o)} title="Video linki ekle">🔗 Video</span>}
@@ -215,20 +229,6 @@ function BilgiKartEdit({ cfg, onSave, randevu }: { cfg: any; onSave: (cfg: any) 
           <div onClick={() => setIcerikEdit(true)} style={{ cursor: 'text', minHeight: 24 }}>
             {icerikVal.trim() ? renderMetin(icerikVal) : <div className="note" style={{ marginTop: 0 }}>Yazmak için dokun…</div>}
           </div>
-        )}
-        {!randevu && videolar.length > 0 && (
-          <div style={{ margin: '10px 0 6px', display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
-            {videolar.map((v, i) => (
-              <span key={i} className={'chip' + (i === vidSec ? ' on' : '')} onClick={() => setVidSec(i)}>
-                {v.baslik || ('Video ' + (i + 1))}{(v.bas || v.bit) ? ` ⏱${v.bas || 0}–${v.bit || '…'}sn` : ''}
-                <span style={{ marginLeft: 6, opacity: 0.55 }} onClick={(e) => { e.stopPropagation(); videoSil(i); }}>✕</span>
-              </span>
-            ))}
-          </div>
-        )}
-        {!randevu && secili && <div style={{ margin: '0 0 4px' }}><EmbedVideo url={secili.url} bas={secili.bas} bit={secili.bit} /></div>}
-        {!randevu && secili && (
-          <input value={ozelNotVal} onChange={(e) => setOzelNotVal(e.target.value)} onBlur={ozelNotKaydet} placeholder="Bu videoya özel not (ops.)" style={{ width: '100%', margin: '0 0 10px', fontSize: 12.5, fontStyle: 'italic' }} />
         )}
       </div>
     </div>
