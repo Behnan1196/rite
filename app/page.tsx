@@ -1217,7 +1217,15 @@ export default function Rite() {
     closeDetay(); loadActivities();
   }
   function sureGun(rt: any): number { if (!rt.bitis) return 0; const b = parseD(rt.baslangic || today); const e = parseD(rt.bitis); return Math.round((e.getTime() - b.getTime()) / 86400000) + 1; }
-  const patchDetay = (patch: any) => setDetay((d: any) => (d ? { ...d, obj: { ...d.obj, ...patch } } : d));
+  // Ajanda'da (tur='ritual') sadece detay.obj yamalanır — act ayrı bir kavram (bağlı Program şablonu) olabilir,
+  // ona dokunmak yanlış olur. Havuz'da (tur!=='ritual') o ve act aynı nesneyi temsil ediyor (bkz. openDetay'in
+  // else dalı) — bilgi kartı taslağı (kart_config, gunler…) düzenlenirken ikisi de senkron kalsın diye act da
+  // yamalanıyor; yoksa kCfg (act.kart_config okuyor) ekranda hiç güncellenmez.
+  const patchDetay = (patch: any) => setDetay((d: any) => {
+    if (!d) return d;
+    if (d.tur !== 'ritual') setDetayAct((a: any) => (a ? { ...a, ...patch } : a));
+    return { ...d, obj: { ...d.obj, ...patch } };
+  });
   // Tek detay kartı: hem ritüel (Ajanda) hem aktivite (Havuz) buradan açılır.
   async function openDetay(obj: any, tur: string, extra?: any) {
     setDetay({ obj, tur, ...(extra || {}) }); setGrupEditOpen(false); setGrupEditVal('');
@@ -1228,7 +1236,13 @@ export default function Rite() {
       else setDetayAct(null);
       if (obj.sablon_id) { const s = await supabase.from('dog_activities').select('id,adimlar').eq('id', obj.sablon_id).single(); setDetaySablon(s.data || null); }
       else setDetaySablon(null);
-    } else { setDetayAct(obj); setDetaySablon(null); }
+    } else {
+      setDetayAct(obj); setDetaySablon(null);
+      // adInput normalde sadece isRit dalında kullanılır (başlık input'u); Havuz taslağının (yeniHavuzTaslakAc)
+      // başlığı da aynı input'u paylaşıyor, o yüzden burada da dolduruluyor — gerçek (kaydedilmiş) Havuz
+      // kartlarında başlık zaten salt okunur <h2> olarak gösterildiği için bunun bir etkisi yok.
+      setAdInput(obj.ad || '');
+    }
   }
   // Inbox'a gelen (henüz kabul edilmemiş) bir paylaşımı, gerçek karta eklemeden Havuz görünümüyle önizle —
   // "Ajandama ekle" burada gösterilmiyor (kabul, Inbox listesindeki asıl butonlardan yapılır); preview:true
@@ -1340,20 +1354,53 @@ export default function Rite() {
       hatirlatma_saat: null, kisisel_not: null, gunler: null, faydalar: [],
     });
   }
+  // Havuz'da (dog_activities) + ile Not/Alışkanlık: aynı taslak mekanizması (openDetay + id:null), sadece
+  // tur='aktivite'. `aliskanlik` burada gerçek bir dog_activities kolonu DEĞİL — sadece bu ekranda Günler
+  // seçiciyi göstermek/gizlemek ve kaydederken sure_gun'u belirlemek için yerel bir bayrak (taslakKaydet'te
+  // DB'ye hiç yazılmıyor). Ajanda'ya eklenince (aktiviteEkleSlotlar) sure_gun boşsa kart zaten süregelen —
+  // yani "alışkanlık" — oluyor (bkz. ritEkle: aliskanlik = aliskanlikP===null ? !bitis : aliskanlikP).
+  function yeniHavuzTaslakAc(tur: 'not' | 'aliskanlik') {
+    const cfg: any = { icerik: null, videolar: [] };
+    openDetay({
+      id: null,
+      ad: tur === 'aliskanlik' ? 'Yeni alışkanlık' : 'Yeni not',
+      grup: actGroup || 'Genel', kart_tipi: 'bilgi', kart_config: cfg,
+      aliskanlik: tur === 'aliskanlik', faydalar: [], aciklama: null, videolar: [],
+      zaman: 'gün', zamanlar: null, gunler: tur === 'aliskanlik' ? [] : null, sure_gun: null,
+    }, 'aktivite');
+  }
   async function taslakKaydet() {
     if (!client || !detay || detay.obj.id) return;
     const o = detay.obj;
-    const ins = await supabase.from('dog_rituals').insert({
-      client_id: client.id, ad: (o.ad || '').trim() || 'Yeni not', zaman: 'gün', kaynak: 'Kendi', tip: 'aliskanlik',
+    if (detay.tur === 'ritual') {
+      const ins = await supabase.from('dog_rituals').insert({
+        client_id: client.id, ad: (o.ad || '').trim() || 'Yeni not', zaman: 'gün', kaynak: 'Kendi', tip: 'aliskanlik',
+        kart_tipi: 'bilgi', kart_config: o.kart_config || { icerik: null, videolar: [] },
+        aliskanlik: !!o.aliskanlik, aktif: true, mezun: false,
+        baslangic: o.baslangic || day, bitis: o.aliskanlik ? null : (o.bitis ?? day),
+        hatirlatma_saat: o.hatirlatma_saat || null, kisisel_not: o.kisisel_not || null,
+        blok_sira: Date.now(),
+      }).select().single();
+      if (ins.error) { alert('Kaydedilemedi: ' + ins.error.message); return; }
+      loadData(client.id);
+      closeDetay(); // her şeyi zaten bu ekranda yazdın — tekrar aynı ekranı açmaya gerek yok
+      return;
+    }
+    // Havuz taslağı — dog_activities'e yazılır; bu tabloda baslangic/bitis/hatirlatma_saat hiç yok.
+    const isAliskanlik = !!o.aliskanlik;
+    const grup = (o.grup || 'Genel').trim() || 'Genel';
+    const ins = await supabase.from('dog_activities').insert({
+      client_id: client.id, tur: 'aktivite', ad: (o.ad || '').trim() || (isAliskanlik ? 'Yeni alışkanlık' : 'Yeni not'),
+      grup, faydalar: [], aciklama: null, videolar: [],
+      zaman: 'gün', zamanlar: null, gunler: isAliskanlik ? (o.gunler || null) : null,
+      sure_gun: isAliskanlik ? null : 1,
       kart_tipi: 'bilgi', kart_config: o.kart_config || { icerik: null, videolar: [] },
-      aliskanlik: !!o.aliskanlik, aktif: true, mezun: false,
-      baslangic: o.baslangic || day, bitis: o.aliskanlik ? null : (o.bitis ?? day),
-      hatirlatma_saat: o.hatirlatma_saat || null, kisisel_not: o.kisisel_not || null,
-      blok_sira: Date.now(),
+      kaynak_etiket: 'Kendi', aktif: true,
     }).select().single();
     if (ins.error) { alert('Kaydedilemedi: ' + ins.error.message); return; }
-    loadData(client.id);
-    closeDetay(); // her şeyi zaten bu ekranda yazdın — tekrar aynı ekranı açmaya gerek yok
+    loadActivities();
+    setActGroup(grup);
+    closeDetay();
   }
   // Ayraç: isimli bir bölüm başlığı — bugünden itibaren, siz silene kadar her gün aynı şekilde görünür,
   // sıradan bir kart gibi sürüklenir; gunSiraMap/dog_gun_duzeni onun da yerini günden güne hatırlar.
@@ -2510,7 +2557,10 @@ export default function Rite() {
         {[['ajanda', '🗓', 'Ajanda'], ['havuz', '⊕', 'Havuz']].map(([k, ic, l]) => (
           <button key={k} className={['ajanda', 'mezunlar'].includes(screen) && k === 'ajanda' ? 'on' : screen === k ? 'on' : ''} onClick={() => setScreen(k)}><span className="ic">{ic}</span>{l}</button>
         ))}
-        <button className="plus" onClick={() => setEkleMenuOpen(true)} aria-label="Ekle">＋</button>
+        {/* ＋ tuşu Gelişim/Ayarlar'da hiç gösterilmiyor — orada kart eklemenin bir anlamı yok. Ajanda'da tam
+            menü (Not/Alışkanlık/Randevu/Ayraç/Rutin), Havuz'da daraltılmış menü (Randevu/Ayraç/Rutin hariç —
+            bkz. ekleMenüsü içeriği) açılıyor. */}
+        {['ajanda', 'mezunlar', 'havuz'].includes(screen) && <button className="plus" onClick={() => setEkleMenuOpen(true)} aria-label="Ekle">＋</button>}
         {[['gelisim', '📈', 'Gelişim'], ['bilgi', '⚙', 'Ayarlar']].map(([k, ic, l]) => (
           <button key={k} className={screen === k ? 'on' : ''} onClick={() => setScreen(k)}><span className="ic">{ic}</span>{l}</button>
         ))}
@@ -2548,10 +2598,12 @@ export default function Rite() {
         // tarafından başka birine paylaşılamaz. Kendi yazdığı ya da bir arkadaşından aldığı kişisel kartlar serbest.
         const paylasilamaz = isRit ? (o.kaynak === 'Meridyen' || o.kaynak === 'Program' || !!o.sablon_id) : !!o.sablon_id;
         const stilP = kCfg.stil ? STIL_LOOKUP[kCfg.stil] : null;
-        // Taslak: ＋ menüsünden yeni bir Not/Randevu/Alışkanlık açıldı ama henüz Kaydet'e basılmadı — ortada
-        // gerçek bir veritabanı satırı (o.id) yok. Alan düzenleme fonksiyonları (setRitAd, setBilgiCfg, vb.)
-        // id yokken sadece bu ekrandaki yerel taslağı güncelliyor, hiçbir şeyi kaydetmiyor (bkz. o fonksiyonlar).
-        const isDraft = isRit && !o.id;
+        // Taslak: ＋ menüsünden yeni bir Not/Randevu/Alışkanlık (Ajanda'da) ya da Not/Alışkanlık (Havuz'da)
+        // açıldı ama henüz Kaydet'e basılmadı — ortada gerçek bir veritabanı satırı (o.id) yok. Alan düzenleme
+        // fonksiyonları (setRitAd, setBilgiCfg, vb.) id yokken sadece bu ekrandaki yerel taslağı güncelliyor,
+        // hiçbir şeyi kaydetmiyor (bkz. o fonksiyonlar). preview (Inbox önizlemesi) de id'siz ama taslak DEĞİL —
+        // orada Kaydet/Paylaş/Sil gibi kalıcı hiçbir işlem yok, o yüzden ayrıca dışlanıyor.
+        const isDraft = !o.id && !preview;
         return (
         <div className="modal full" onMouseDown={() => closeDetay()}>
           <div className="sheet fullsheet" onMouseDown={(e) => e.stopPropagation()} style={stilP ? { borderTop: '4px solid ' + stilP.ac } : undefined}>
@@ -2562,6 +2614,10 @@ export default function Rite() {
                 {kTip === 'bilgi' && !isDraft && <div className={'chk' + (ritDone(o.id) ? ' on' : '')} onClick={() => toggleRit(o.id)} title="Yaptım">{ritDone(o.id) ? '✓' : ''}</div>}
                 <input className="detbaslik" value={adInput} autoFocus={isDraft} onFocus={(e) => e.target.select()} onChange={(e) => setAdInput(e.target.value)} onBlur={() => { if (adInput.trim() && adInput.trim() !== (o.ad || '')) setRitAd(o.id, adInput); }} style={{ flex: 1 }} />
               </div>
+            ) : isDraft ? (
+              // Havuz taslağı: başlık de Ajanda taslağı gibi düzenlenebilir, ama kaydı yok (id yok) — sadece
+              // yerel taslağı (patchDetay) güncelliyor, taslakKaydet basılınca gerçek satıra yazılıyor.
+              <input className="detbaslik" value={adInput} autoFocus onFocus={(e) => e.target.select()} onChange={(e) => setAdInput(e.target.value)} onBlur={() => { if (adInput.trim() && adInput.trim() !== (o.ad || '')) patchDetay({ ad: adInput.trim() }); }} style={{ width: '100%' }} />
             ) : <h2 style={{ paddingRight: 34 }}>{o.ad}</h2>}
             <div className="m">
               {isRit ? null : (
@@ -2643,16 +2699,32 @@ export default function Rite() {
               </div>
             )}
             {isRit && kTip === 'standart' && kCfg?.resim && <img src={kCfg.resim} alt="" style={{ maxWidth: '100%', borderRadius: 8, margin: '4px 0 8px', display: 'block' }} />}
-            {/* Kişisel bilgi kartları (Not/Randevu/Alışkanlık) Ajanda'da (kaynak='Kendi', önizleme değil) tam
-                düzenlenebilir açılıyor; Havuz'da ve Inbox önizlemesinde henüz düzenleme akışı yok, salt okunur
-                gösteriliyor — böylece Ajandama eklemeden kart orada da (Havuz'da olduğu gibi) açılabiliyor. */}
-            {kTip === 'bilgi' && (
-              !preview && isRit
-                ? (o.kaynak === 'Kendi'
-                    ? <BilgiKartEdit cfg={kCfg} onSave={bilgiKaydet} randevu={!!kCfg?.randevu} />
-                    : <BilgiKart cfg={kCfg} onSave={bilgiKaydet} />)
-                : <BilgiKartEdit cfg={kCfg} onSave={() => {}} randevu={!!kCfg?.randevu} readOnly />
+            {/* Havuz'da Alışkanlık taslağı için "hangi günler" burada, doğrudan taslak ekranında seçiliyor —
+                Ajanda'daki gibi ayrı bir Zamanlama panosu yok, çünkü Havuz'un baslangic/bitis/Süre kavramı hiç
+                yok (dog_activities'te bu kolonlar mevcut değil), tek geçerli alan Günler. setRitGunler zaten
+                id yokken sadece yerel taslağı yamalıyor (bkz. o fonksiyon) — tablo farkı önemli değil. */}
+            {!isRit && isDraft && kTip === 'bilgi' && !!o.aliskanlik && (
+              <div className="kv" style={{ margin: '4px 0 10px' }}>
+                <div className="k">Hangi günler?</div>
+                <div>
+                  <span className={'chip' + ((!o.gunler || o.gunler.length === 0) ? ' on' : '')} onClick={() => setRitGunler(o.id, [])}>Her gün</span>
+                  {GUNLER.map(([n, l]) => {
+                    const sel = !!(o.gunler && o.gunler.includes(n));
+                    return <span key={n} className={'chip' + (sel ? ' on' : '')} onClick={() => { const cur: number[] = o.gunler ? [...o.gunler] : []; const nx = cur.includes(n) ? cur.filter((x) => x !== n) : [...cur, n]; setRitGunler(o.id, nx); }}>{l}</span>;
+                  })}
+                </div>
+              </div>
             )}
+            {/* Kişisel bilgi kartları (Not/Randevu/Alışkanlık) Ajanda'da (kaynak='Kendi') ve Havuz taslağında
+                (henüz kaydedilmemiş, ＋'dan yeni açılmış) tam düzenlenebilir açılıyor; kaydedilmiş Havuz
+                kartlarında ve Inbox önizlemesinde henüz düzenleme akışı yok, salt okunur gösteriliyor —
+                böylece Ajandama eklemeden kart orada da (Havuz'da olduğu gibi) açılabiliyor. */}
+            {kTip === 'bilgi' && (() => {
+              const editable = !preview && (isRit ? o.kaynak === 'Kendi' : isDraft);
+              if (editable) return <BilgiKartEdit cfg={kCfg} onSave={bilgiKaydet} randevu={!!kCfg?.randevu} />;
+              if (!preview && isRit) return <BilgiKart cfg={kCfg} onSave={bilgiKaydet} />;
+              return <BilgiKartEdit cfg={kCfg} onSave={() => {}} randevu={!!kCfg?.randevu} readOnly />;
+            })()}
             {isDraft && <button className="btn" style={{ width: '100%', margin: '2px 0 8px' }} onClick={taslakKaydet}>Kaydet</button>}
             {isRit && kTip === 'video' && <div style={{ margin: '4px 0 8px' }}>
               {(kCfg.url || o.url) && <EmbedVideo url={kCfg.url || o.url} />}
@@ -2774,10 +2846,12 @@ export default function Rite() {
             {/* Önizlemede (Inbox'tan açılan, henüz kaydedilmemiş paylaşım) kalıcı hiçbir eylem gösterilmiyor —
                 kabul/ret zaten Inbox listesindeki "Ajandama ekle"/"Havuzuma ekle"/"Sil" ile yapılıyor. */}
             {preview && <div className="note" style={{ textAlign: 'center', margin: '14px 0 0' }}>📥 Bu bir Inbox önizlemesi — eklemek ya da silmek için Inbox listesine dön.</div>}
-            {!preview && isProg && <button className="btn" style={{ width: '100%', marginTop: 14 }} onClick={() => { programBaslat(o); closeDetay(); setScreen('ajanda'); }}>Ajandama başlat{o.sure_gun ? ' (' + o.sure_gun + ' gün)' : ''}</button>}
-            {!preview && !isRit && !isProg && <button className="btn" style={{ width: '100%', marginTop: 14 }} onClick={() => { aktiviteEkleSlotlar(o); closeDetay(); setScreen('ajanda'); }}>Ajandama ekle</button>}
+            {!preview && !isDraft && isProg && <button className="btn" style={{ width: '100%', marginTop: 14 }} onClick={() => { programBaslat(o); closeDetay(); setScreen('ajanda'); }}>Ajandama başlat{o.sure_gun ? ' (' + o.sure_gun + ' gün)' : ''}</button>}
+            {/* Havuz taslağı (henüz Kaydet'e basılmadı, isDraft) için "Ajandama ekle" anlamsız — ortada henüz
+                gerçek bir Havuz satırı yok; önce Kaydet, sonra normal Havuz kartı gibi Ajandama ekle görünür. */}
+            {!preview && !isDraft && !isRit && !isProg && <button className="btn" style={{ width: '100%', marginTop: 14 }} onClick={() => { aktiviteEkleSlotlar(o); closeDetay(); setScreen('ajanda'); }}>Ajandama ekle</button>}
 
-            {!preview && (!isRit || (personal && !isProg)) && (
+            {!preview && !isDraft && (!isRit || (personal && !isProg)) && (
               <div className="dettoolbar">
                 {!isRit && !paylasilamaz && <button className="tbtn" onClick={() => { setPaylasOpen(true); setKMsg(''); }}><span className="tbic">↪️</span>Paylaş</button>}
                 {/* Eski "Düzenle" formu (openStudioEdit) kart_tipi='bilgi' yapısını (kart_config: videolar/icerik/randevu…)
@@ -2952,14 +3026,17 @@ export default function Rite() {
           <div className="sheet" onMouseDown={(e) => e.stopPropagation()}>
             <div className="sheetgrip" onClick={() => setEkleMenuOpen(false)} />
             <h2>Ekle</h2>
+            {/* Havuz'da: Randevu tek bir tarihe bağlı, Havuz'a (tarihsiz şablon havuzu) uymuyor — Ayraç ve Rutin
+                da yalnız Ajanda kavramları — o yüzden Havuz'da sadece Not/Alışkanlık gösteriliyor, direkt
+                Havuz'a (mevcut açık gruba) taslak olarak eklenir (kullanıcı isteği). */}
             <div className="ekleGrid">
-              <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); yeniTaslakAc('not'); }}><span className="ekic">📝</span>Not</button>
-              <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); yeniTaslakAc('aliskanlik'); }}><span className="ekic">🎓</span>Alışkanlık</button>
-              <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); yeniTaslakAc('randevu'); }}><span className="ekic">📅</span>Randevu</button>
-              <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); setAyracAdVal(''); setAyracYeniOpen(true); }}><span className="ekic">➖</span>Ayraç</button>
-              <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); setScreen('ajanda'); setAjView('gun'); startLink(); }}><span className="ekic">🔗</span>Rutin</button>
+              <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); (screen === 'havuz' ? yeniHavuzTaslakAc : yeniTaslakAc)('not'); }}><span className="ekic">📝</span>Not</button>
+              <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); (screen === 'havuz' ? yeniHavuzTaslakAc : yeniTaslakAc)('aliskanlik'); }}><span className="ekic">🎓</span>Alışkanlık</button>
+              {screen !== 'havuz' && <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); yeniTaslakAc('randevu'); }}><span className="ekic">📅</span>Randevu</button>}
+              {screen !== 'havuz' && <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); setAyracAdVal(''); setAyracYeniOpen(true); }}><span className="ekic">➖</span>Ayraç</button>}
+              {screen !== 'havuz' && <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); setScreen('ajanda'); setAjView('gun'); startLink(); }}><span className="ekic">🔗</span>Rutin</button>}
             </div>
-            <div className="note" style={{ textAlign: 'center', marginTop: 12 }}>Not içine bağlantı eklersen otomatik video kartına döner.</div>
+            <div className="note" style={{ textAlign: 'center', marginTop: 12 }}>{screen === 'havuz' ? 'Havuza eklenen kart, Ajanda\'ya eklendiğinde gerçek bir tarih alır.' : 'Not içine bağlantı eklersen otomatik video kartına döner.'}</div>
           </div>
         </div>
       )}
