@@ -894,8 +894,15 @@ export default function Rite() {
   const [ajView, setAjView] = useState<'gun' | 'ay'>('gun');
   const [selDate, setSelDate] = useState('');
   const [activities, setActivities] = useState<any[]>([]);
+  // actGroup/actAltGroup artık bir "seçili sekme" değil, en son açtığın (dokunduğun) Grup/Alt grup — yeni bir
+  // kart Ajanda'daki ＋'dan Havuz'a eklendiğinde otomatik olarak buraya düşer (bkz. Havuz akordeon ekranı).
   const [actGroup, setActGroup] = useState('Genel');
-  const [actAltGroup, setActAltGroup] = useState<string | null>(null); // null = "Tümü" (o Grup'un tüm Alt gruplar)
+  const [actAltGroup, setActAltGroup] = useState<string | null>(null);
+  // Havuz ekranında hangi Grup/Alt grup başlıklarının açık (genişletilmiş) olduğu — gerçek akordeon, birden
+  // fazlası aynı anda açık kalabilir. Alt gruplar "Grup␟AltGrup" anahtarıyla tutuluyor (aynı adlı alt grup
+  // farklı Gruplarda çakışmasın diye).
+  const [acikGruplar, setAcikGruplar] = useState<Set<string>>(() => new Set(['Genel']));
+  const [acikAltGruplar, setAcikAltGruplar] = useState<Set<string>>(() => new Set());
   // Havuz'u "kitaplık / araştırma planı" olarak kullanmak için kalıcı Grup + Alt grup listesi (bkz. dog_gruplar
   // tablosu, rite_gruplar_migration.sql). ust_id boş olanlar Grup (üst seviye), dolu olanlar o Grup'a bağlı Alt grup.
   const [grupListesi, setGrupListesi] = useState<any[]>([]);
@@ -976,8 +983,6 @@ export default function Rite() {
   const [kiAd, setKiAd] = useState('');
   const [kiKod, setKiKod] = useState('');
   const [paylasSel, setPaylasSel] = useState<string[]>([]);
-  const [yeniGrupOpen, setYeniGrupOpen] = useState(false);
-  const [yeniGrupAd, setYeniGrupAd] = useState('');
   const [ekstraGruplar, setEkstraGruplar] = useState<string[]>([]);
   const [ekleMenuOpen, setEkleMenuOpen] = useState(false);
   const [olcumEkleOpen, setOlcumEkleOpen] = useState(false);
@@ -1304,6 +1309,7 @@ export default function Rite() {
     if (r.error) return setKMsg('Hata: ' + r.error.message);
     const savedGrup = row.grup;
     studioReset(); loadActivities(); setStudioOpen(false); setActGroup(savedGrup);
+    setAcikGruplar((s) => new Set(s).add(savedGrup));
   }
   async function loadKisiler(cid: string) {
     const r = await supabase.from('dog_clients').select('kisiler,profil_ad,avatar').eq('id', cid).single();
@@ -1628,6 +1634,8 @@ export default function Rite() {
     loadActivities();
     setActGroup(grup);
     setActAltGroup(altGrup);
+    setAcikGruplar((s) => new Set(s).add(grup));
+    if (altGrup) setAcikAltGruplar((s) => new Set(s).add(grup + '␟' + altGrup));
     closeDetay();
   }
   // Ayraç: isimli bir bölüm başlığı — bugünden itibaren, siz silene kadar her gün aynı şekilde görünür,
@@ -2514,41 +2522,80 @@ export default function Rite() {
 
         {/* ---------- HAVUZ ---------- */}
         {screen === 'havuz' && (() => {
-          const altlar = altGruplarOf(actGroup);
-          const gosterilen = personalActs.filter((a) => personalGroupOf(a) === actGroup && (!actAltGroup || (a.alt_grup || null) === actAltGroup));
+          // Gerçek akordeon: her Grup kendi kartı, başlığına dokununca açılır/kapanır — birden fazlası aynı
+          // anda açık kalabilir. Alt gruplar o kartın içinde, kendi başlıklarıyla iç içe aynı şekilde çalışır.
+          // Bir başlığı AÇARKEN actGroup/actAltGroup da güncellenir — Ajanda'daki ＋ ile yeni kart eklendiğinde
+          // (bkz. yeniHavuzTaslakAc/taslakKaydet) kart en son açtığın buraya düşer; kapatmak hedefi değiştirmez.
+          const grupAc = (g: string) => {
+            setAcikGruplar((s) => {
+              const n = new Set(s);
+              if (n.has(g)) n.delete(g); else { n.add(g); setActGroup(g); setActAltGroup(null); }
+              return n;
+            });
+          };
+          const altGrupAc = (g: string, ag: string) => {
+            const key = g + '␟' + ag;
+            setAcikAltGruplar((s) => {
+              const n = new Set(s);
+              if (n.has(key)) n.delete(key); else { n.add(key); setActGroup(g); setActAltGroup(ag); }
+              return n;
+            });
+          };
+          const aktKart = (a: any) => (
+            <div key={a.id} className="actcard" onClick={() => openDetay(a, 'aktivite')}>
+              <div style={{ flex: 1 }}><div className="n">{a.tur === 'program' ? '🧩 ' : ''}{a.ad}{a.puan ? <span className="puanp"> {'★'.repeat(a.puan)}</span> : ''}</div><div className="o">{a.tur === 'program' ? (a.adimlar || []).length + ' adım' + (a.sure_gun ? ' · ' + a.sure_gun + ' gün' : '') : (a.kaynak_etiket === 'Mezun' ? 'Mezun · ' : '') + Array.from(new Set((a.faydalar || []).map((k: string) => faydaMap[k]?.alan).filter(Boolean))).join(' · ')}</div></div>
+              <span className="go">›</span>
+            </div>
+          );
           return (
           <div>
-            <h2>Aktivite Havuzu</h2>
-            <p className="sub">Yeni bir kişisel kart Ajanda&apos;daki <b>+</b> ile oluşturulur. Her Grup kendi araştırma başlığın — Alt gruplarla daha ince ayırabilirsin.</p>
-            <div className="tabs">
-              {personalGroups.map((g) => <div key={g} className={'tab' + (actGroup === g ? ' on' : '')} onClick={() => { setActGroup(g); setActAltGroup(null); }}>{g}</div>)}
-              <div className="tab" onClick={() => { setYeniGrupAd(''); setYeniGrupOpen((o) => !o); }}>＋ yeni grup</div>
-              <div className="tab" onClick={() => setGruplarYonetOpen(true)} title="Grupları yönet">🗂</div>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+              <h2 style={{ margin: 0 }}>Aktivite Havuzu</h2>
+              <button className="minlink" onClick={() => setGruplarYonetOpen(true)}>🗂 Grupları yönet</button>
             </div>
-            {yeniGrupOpen && (
-              <div style={{ display: 'flex', gap: 6, margin: '0 0 10px' }}>
-                <input value={yeniGrupAd} onChange={(e) => setYeniGrupAd(e.target.value)} placeholder="ör. Beslenme" style={{ flex: 1 }} autoFocus />
-                <button className="btn sm" onClick={() => { const g = yeniGrupAd.trim(); if (!g) return; grupEkle(g, null); setActGroup(g); setActAltGroup(null); setYeniGrupOpen(false); setYeniGrupAd(''); }}>Ekle</button>
-                <button className="btn ghost sm" onClick={() => setYeniGrupOpen(false)}>Vazgeç</button>
-              </div>
-            )}
-            {/* Alt grup satırı sadece bu Grup'un en az bir Alt grubu varsa görünür — Duruş > Bel çukurluğu gibi. */}
-            {altlar.length > 0 && (
-              <div className="tabs" style={{ marginTop: -4 }}>
-                <div className={'tab' + (!actAltGroup ? ' on' : '')} onClick={() => setActAltGroup(null)}>Tümü</div>
-                {altlar.map((ag) => <div key={ag} className={'tab' + (actAltGroup === ag ? ' on' : '')} onClick={() => setActAltGroup(ag)}>{ag}</div>)}
-              </div>
-            )}
-            <div className="card">
-              {gosterilen.length === 0 ? (
-                <div className="note">Bu {actAltGroup ? 'alt grupta' : 'grupta'} aktivite yok.</div>
-              ) : gosterilen.map((a) => (
-                <div key={a.id} className="actcard" onClick={() => openDetay(a, 'aktivite')}>
-                  <div style={{ flex: 1 }}><div className="n">{a.tur === 'program' ? '🧩 ' : ''}{a.ad}{a.puan ? <span className="puanp"> {'★'.repeat(a.puan)}</span> : ''}</div><div className="o">{a.tur === 'program' ? (a.adimlar || []).length + ' adım' + (a.sure_gun ? ' · ' + a.sure_gun + ' gün' : '') : (a.kaynak_etiket === 'Mezun' ? 'Mezun · ' : '') + Array.from(new Set((a.faydalar || []).map((k: string) => faydaMap[k]?.alan).filter(Boolean))).join(' · ')}</div></div>
-                  <span className="go">›</span>
+            <p className="sub">Her Grup kendi araştırma başlığın — başlığa dokunup aç/kapat. Yeni bir kişisel kart Ajanda&apos;daki <b>+</b> ile oluşturulur, en son açtığın Grup/Alt gruba eklenir.</p>
+            {personalGroups.length === 0 ? (
+              <div className="note">Henüz grup yok — 🗂 Grupları yönet&apos;ten ekleyebilirsin.</div>
+            ) : personalGroups.map((g) => {
+              const altlar = altGruplarOf(g);
+              const acik = acikGruplar.has(g);
+              const dogrudanAkt = personalActs.filter((a) => personalGroupOf(a) === g && !a.alt_grup);
+              const toplamSay = personalActs.filter((a) => personalGroupOf(a) === g).length;
+              return (
+                <div key={g} className="card">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', margin: acik ? '0 0 6px' : 0 }} onClick={() => grupAc(g)}>
+                    <span style={{ width: 14, textAlign: 'center', color: '#9a9280' }}>{acik ? '▾' : '▸'}</span>
+                    <span style={{ flex: 1, fontWeight: 700 }}>{g}</span>
+                    {toplamSay > 0 && <span className="note" style={{ margin: 0 }}>{toplamSay}</span>}
+                  </div>
+                  {acik && (
+                    <div>
+                      {dogrudanAkt.length === 0 && altlar.length === 0 && <div className="note">Bu grupta henüz aktivite yok.</div>}
+                      {dogrudanAkt.map(aktKart)}
+                      {altlar.map((ag) => {
+                        const key = g + '␟' + ag;
+                        const altAcik = acikAltGruplar.has(key);
+                        const altAkt = personalActs.filter((a) => personalGroupOf(a) === g && a.alt_grup === ag);
+                        return (
+                          <div key={ag} style={{ margin: '2px 0 0', borderTop: '1px solid var(--line)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 0', cursor: 'pointer' }} onClick={() => altGrupAc(g, ag)}>
+                              <span style={{ width: 12, textAlign: 'center', color: '#9a9280', fontSize: 11 }}>{altAcik ? '▾' : '▸'}</span>
+                              <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600, color: 'var(--muted)' }}>{ag}</span>
+                              {altAkt.length > 0 && <span className="note" style={{ margin: 0 }}>{altAkt.length}</span>}
+                            </div>
+                            {altAcik && (
+                              <div style={{ margin: '0 0 4px 20px' }}>
+                                {altAkt.length === 0 ? <div className="note">Bu alt grupta aktivite yok.</div> : altAkt.map(aktKart)}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
-              ))}
-            </div>
+              );
+            })}
           </div>
           );
         })()}
@@ -3329,7 +3376,7 @@ export default function Rite() {
               {screen !== 'havuz' && <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); setAyracAdVal(''); setAyracYeniOpen(true); }}><span className="ekic">➖</span>Ayraç</button>}
               {screen !== 'havuz' && <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); setScreen('ajanda'); setAjView('gun'); startLink(); }}><span className="ekic">🔗</span>Rutin</button>}
             </div>
-            <div className="note" style={{ textAlign: 'center', marginTop: 12 }}>{screen === 'havuz' ? 'Havuza eklenen kart, Ajanda\'ya eklendiğinde gerçek bir tarih alır.' : 'Not içine bağlantı eklersen otomatik video kartına döner.'}</div>
+            <div className="note" style={{ textAlign: 'center', marginTop: 12 }}>{screen === 'havuz' ? <>"{actGroup}{actAltGroup ? ' › ' + actAltGroup : ''}" grubuna eklenecek — Havuza eklenen kart, Ajanda&apos;ya eklendiğinde gerçek bir tarih alır.</> : 'Not içine bağlantı eklersen otomatik video kartına döner.'}</div>
           </div>
         </div>
       )}
