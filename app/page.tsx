@@ -284,7 +284,7 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly }: { cfg: any; onSave: (
                       <div
                         key={i}
                         style={{
-                          position: 'relative', width: 72, height: 72, borderRadius: 10, overflow: 'hidden', flex: '0 0 auto',
+                          position: 'relative', width: 108, height: 108, borderRadius: 14, overflow: 'hidden', flex: '0 0 auto',
                           background: '#f4efe6', border: url ? '1px solid var(--line)' : '1px dashed var(--line)',
                           cursor: url ? 'zoom-in' : (readOnly ? 'default' : 'pointer'),
                         }}
@@ -298,8 +298,19 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly }: { cfg: any; onSave: (
                           <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                         ) : (
                           !readOnly && (
-                            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, opacity: 0.55 }}>
-                              {yukleniyorBu ? '…' : '📷'}
+                            <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              {yukleniyorBu ? (
+                                <span style={{ fontSize: 22, opacity: 0.55 }}>…</span>
+                              ) : (
+                                <>
+                                  <span style={{ fontSize: 38, opacity: 0.5 }}>📷</span>
+                                  <span style={{
+                                    position: 'absolute', right: 14, bottom: 14, width: 24, height: 24, borderRadius: '50%',
+                                    background: '#8a8168', color: '#fff', fontSize: 16, fontWeight: 700, lineHeight: 1,
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none',
+                                  }}>+</span>
+                                </>
+                              )}
                             </div>
                           )
                         )}
@@ -311,8 +322,8 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly }: { cfg: any; onSave: (
                               disabled={resimYuklemeIndex != null}
                               title="Resmi değiştir"
                               style={{
-                                position: 'absolute', right: 3, bottom: 3, width: 22, height: 22, borderRadius: '50%',
-                                border: 'none', background: 'rgba(24,21,16,.6)', color: '#fff', fontSize: 11,
+                                position: 'absolute', right: 5, bottom: 5, width: 28, height: 28, borderRadius: '50%',
+                                border: 'none', background: 'rgba(24,21,16,.6)', color: '#fff', fontSize: 13,
                                 display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0,
                               }}
                             >
@@ -323,8 +334,8 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly }: { cfg: any; onSave: (
                               onClick={(e) => { e.stopPropagation(); resimSil(i); }}
                               title="Resmi kaldır"
                               style={{
-                                position: 'absolute', right: 3, top: 3, width: 18, height: 18, borderRadius: '50%',
-                                border: 'none', background: 'rgba(24,21,16,.6)', color: '#fff', fontSize: 10,
+                                position: 'absolute', right: 5, top: 5, width: 22, height: 22, borderRadius: '50%',
+                                border: 'none', background: 'rgba(24,21,16,.6)', color: '#fff', fontSize: 12,
                                 display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0,
                               }}
                             >
