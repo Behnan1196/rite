@@ -171,14 +171,19 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly }: { cfg: any; onSave: (
   const [vAciklama, setVAciklama] = useState('');
   const [icerikEdit, setIcerikEdit] = useState(false);
   const [icerikVal, setIcerikVal] = useState(cfg?.icerik || '');
-  const [resimUrl, setResimUrl] = useState(cfg?.resim || '');
-  const [resimYukleniyor, setResimYukleniyor] = useState(false);
+  const RESIM_MAX = 3;
+  function resimlerdenAl(c: any): string[] {
+    if (Array.isArray(c?.resimler)) return c.resimler.filter((x: any) => typeof x === 'string' && x.trim());
+    return c?.resim ? [c.resim] : [];
+  }
+  const [resimler, setResimler] = useState<string[]>(() => resimlerdenAl(cfg));
+  const [resimYuklemeIndex, setResimYuklemeIndex] = useState<number | null>(null);
   const [resimHata, setResimHata] = useState('');
-  const [resimBuyuk, setResimBuyuk] = useState(false);
+  const [resimBuyukIndex, setResimBuyukIndex] = useState<number | null>(null);
   const resimInputRef = useRef<HTMLInputElement>(null);
   const [yer, setYer] = useState(cfg?.yer || '');
   useEffect(() => { setIcerikVal(cfg?.icerik || ''); }, [cfg?.icerik]);
-  useEffect(() => { setResimUrl(cfg?.resim || ''); }, [cfg?.resim]);
+  useEffect(() => { setResimler(resimlerdenAl(cfg)); }, [cfg?.resim, cfg?.resimler]);
   useEffect(() => { setYer(cfg?.yer || ''); }, [cfg?.yer]);
   const secili = videolar[Math.min(vidSec, videolar.length - 1)];
   // Video ekleme/düzenleme formunu aç: 'edit' iken seçili videonun alanlarıyla doldurur, 'add' iken boş açar.
@@ -215,13 +220,15 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly }: { cfg: any; onSave: (
     setIcerikEdit(false);
     if (icerikVal.trim() !== (cfg?.icerik || '')) onSave({ ...cfg, icerik: icerikVal.trim() || null });
   }
-  // Dosyadan resim yükle (Hostinger'a, bkz. app/api/upload) — resim kutucuğuna tıklanınca (yoksa) ya da
-  // kutucuğun üzerindeki ✎ ile (varsa) açılır; ayrı, görünür bir link kutusu yok.
+  // Dosyadan resim yükle (Hostinger'a, bkz. app/api/upload) — resim kutucuklarından birine tıklanınca
+  // (boşsa yeni ekler, doluysa üzerindeki ✎ değiştirir) açılır; ayrı, görünür bir link kutusu yok.
+  // En fazla RESIM_MAX (3) resim; resim[0] geriye dönük uyum için ayrıca cfg.resim'e de yazılır.
   async function resimDosyaSecildi(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     e.target.value = '';
     if (!f) return;
-    setResimHata(''); setResimYukleniyor(true);
+    const idx = resimYuklemeIndex;
+    setResimHata('');
     try {
       const kucuk = await resimKucult(f);
       const fd = new FormData();
@@ -229,13 +236,22 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly }: { cfg: any; onSave: (
       const r = await fetch('/api/upload', { method: 'POST', body: fd });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(data.error || 'Yükleme başarısız');
-      setResimUrl(data.url);
-      onSave({ ...cfg, resim: data.url });
+      const yeni = idx != null && idx < resimler.length
+        ? resimler.map((u, i) => (i === idx ? data.url : u))
+        : [...resimler, data.url].slice(0, RESIM_MAX);
+      setResimler(yeni);
+      onSave({ ...cfg, resimler: yeni, resim: yeni[0] || null });
     } catch (err: any) {
       setResimHata(err?.message || 'Yükleme başarısız');
     } finally {
-      setResimYukleniyor(false);
+      setResimYuklemeIndex(null);
     }
+  }
+  function resimSil(i: number) {
+    const yeni = resimler.filter((_, j) => j !== i);
+    setResimler(yeni);
+    onSave({ ...cfg, resimler: yeni, resim: yeni[0] || null });
+    setResimBuyukIndex((cur) => (cur === i ? null : cur != null && cur > i ? cur - 1 : cur));
   }
   function yerKaydet() {
     const v = yer.trim() || null;
@@ -255,54 +271,78 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly }: { cfg: any; onSave: (
             ) : (
               <input value={yer} onChange={(e) => setYer(e.target.value)} onBlur={yerKaydet} placeholder="Detay / yer (ops.) — link, adres, doktor adı…" style={{ width: '100%' }} />
             )}
-            {/* Resim kutucuğu: küçük bir önizleme, üzerine tıklayınca büyür; ekleme/değiştirme de kutucuğun
-                kendi üzerinde (ayrı, görünür bir link kutusu yok — readOnly'de bu özellik hiç görünmez). */}
-            {(resimUrl.trim() || !readOnly) && (
+            {/* Resim kutucukları (en fazla RESIM_MAX): her biri küçük bir önizleme, üzerine tıklayınca büyür;
+                ekleme/değiştirme/silme kutucuğun kendi üzerinde (ayrı, görünür bir link kutusu yok —
+                readOnly'de bu özellikler hiç görünmez, yalnız dolu kutucuklar gösterilir). */}
+            {(resimler.length > 0 || !readOnly) && (
               <div style={{ marginTop: 8 }}>
-                <div
-                  style={{
-                    position: 'relative', width: 72, height: 72, borderRadius: 10, overflow: 'hidden',
-                    background: '#f4efe6', border: resimUrl.trim() ? '1px solid var(--line)' : '1px dashed var(--line)',
-                    cursor: resimUrl.trim() ? 'zoom-in' : (readOnly ? 'default' : 'pointer'),
-                  }}
-                  onClick={() => {
-                    if (resimUrl.trim()) setResimBuyuk(true);
-                    else if (!readOnly) resimInputRef.current?.click();
-                  }}
-                  title={resimUrl.trim() ? 'Büyütmek için tıkla' : (readOnly ? undefined : 'Resim eklemek için tıkla')}
-                >
-                  {resimUrl.trim() ? (
-                    <img src={resimUrl.trim()} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                  ) : (
-                    !readOnly && (
-                      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, opacity: 0.55 }}>
-                        {resimYukleniyor ? '…' : '📷'}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {Array.from({ length: Math.min(resimler.length + (!readOnly && resimler.length < RESIM_MAX ? 1 : 0), RESIM_MAX) }).map((_, i) => {
+                    const url = resimler[i];
+                    const yukleniyorBu = resimYuklemeIndex === i;
+                    return (
+                      <div
+                        key={i}
+                        style={{
+                          position: 'relative', width: 72, height: 72, borderRadius: 10, overflow: 'hidden', flex: '0 0 auto',
+                          background: '#f4efe6', border: url ? '1px solid var(--line)' : '1px dashed var(--line)',
+                          cursor: url ? 'zoom-in' : (readOnly ? 'default' : 'pointer'),
+                        }}
+                        onClick={() => {
+                          if (url) setResimBuyukIndex(i);
+                          else if (!readOnly && resimYuklemeIndex == null) { setResimYuklemeIndex(i); resimInputRef.current?.click(); }
+                        }}
+                        title={url ? 'Büyütmek için tıkla' : (readOnly ? undefined : 'Resim eklemek için tıkla')}
+                      >
+                        {url ? (
+                          <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                        ) : (
+                          !readOnly && (
+                            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, opacity: 0.55 }}>
+                              {yukleniyorBu ? '…' : '📷'}
+                            </div>
+                          )
+                        )}
+                        {!readOnly && url && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); if (resimYuklemeIndex == null) { setResimYuklemeIndex(i); resimInputRef.current?.click(); } }}
+                              disabled={resimYuklemeIndex != null}
+                              title="Resmi değiştir"
+                              style={{
+                                position: 'absolute', right: 3, bottom: 3, width: 22, height: 22, borderRadius: '50%',
+                                border: 'none', background: 'rgba(24,21,16,.6)', color: '#fff', fontSize: 11,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0,
+                              }}
+                            >
+                              {yukleniyorBu ? '…' : '✎'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); resimSil(i); }}
+                              title="Resmi kaldır"
+                              style={{
+                                position: 'absolute', right: 3, top: 3, width: 18, height: 18, borderRadius: '50%',
+                                border: 'none', background: 'rgba(24,21,16,.6)', color: '#fff', fontSize: 10,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0,
+                              }}
+                            >
+                              ✕
+                            </button>
+                          </>
+                        )}
                       </div>
-                    )
-                  )}
-                  {!readOnly && resimUrl.trim() && (
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); resimInputRef.current?.click(); }}
-                      disabled={resimYukleniyor}
-                      title="Resmi değiştir"
-                      style={{
-                        position: 'absolute', right: 3, bottom: 3, width: 22, height: 22, borderRadius: '50%',
-                        border: 'none', background: 'rgba(24,21,16,.6)', color: '#fff', fontSize: 11,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0,
-                      }}
-                    >
-                      {resimYukleniyor ? '…' : '✎'}
-                    </button>
-                  )}
+                    );
+                  })}
                 </div>
                 {!readOnly && <input ref={resimInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={resimDosyaSecildi} />}
                 {resimHata && <div className="note" style={{ color: 'var(--red)', marginTop: 2 }}>{resimHata}</div>}
               </div>
             )}
-            {resimBuyuk && resimUrl.trim() && (
-              <div className="modal" style={{ alignItems: 'center' }} onMouseDown={() => setResimBuyuk(false)}>
-                <img src={resimUrl.trim()} alt="" style={{ maxWidth: '90vw', maxHeight: '85vh', borderRadius: 10, display: 'block' }} />
+            {resimBuyukIndex != null && resimler[resimBuyukIndex] && (
+              <div className="modal" style={{ alignItems: 'center' }} onMouseDown={() => setResimBuyukIndex(null)}>
+                <img src={resimler[resimBuyukIndex]} alt="" style={{ maxWidth: '90vw', maxHeight: '85vh', borderRadius: 10, display: 'block' }} />
               </div>
             )}
           </div>
