@@ -403,7 +403,19 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi, videoAcikZ
         {readOnly ? (
           icerikVal.trim() ? <div style={{ whiteSpace: 'pre-wrap' }}>{icerikVal}</div> : null
         ) : icerikEdit ? (
-          <textarea autoFocus value={icerikVal} onChange={(e) => setIcerikVal(e.target.value)} onBlur={icerikKaydet} placeholder={'Notunu yaz…'} style={{ width: '100%', minHeight: 100 }} />
+          // notTasarimi: Ad alanıyla aynı sade görünüm (çerçevesiz, şeffaf) — sıradan bir form kutusu gibi değil,
+          // Ad'ın devamı gibi hissettirsin; baştan 3-4 satır yükseklikte açılsın diye rows kullanılıyor.
+          <textarea
+            autoFocus
+            rows={notTasarimi ? 4 : undefined}
+            value={icerikVal}
+            onChange={(e) => setIcerikVal(e.target.value)}
+            onBlur={icerikKaydet}
+            placeholder={'Notunu yaz…'}
+            style={notTasarimi
+              ? { width: '100%', minHeight: 0, border: 'none', outline: 'none', background: 'transparent', padding: 0, fontFamily: 'inherit', fontSize: 14, lineHeight: 1.6, color: 'var(--ink)', resize: 'vertical' }
+              : { width: '100%', minHeight: 100 }}
+          />
         ) : (
           <div onClick={() => setIcerikEdit(true)} style={{ cursor: 'text', minHeight: 24, whiteSpace: 'pre-wrap' }}>
             {icerikVal.trim() ? icerikVal : <div className="note" style={{ marginTop: 0 }}>Yazmak için dokun…</div>}
@@ -2999,9 +3011,10 @@ export default function Rite() {
               isNot ? (
                 // İnce başlık şeridi: sabit etiket (gerçek "başlık" artık aşağıdaki Ad alanı) + sağda 🔔/↪️/🎬 —
                 // ayrı, kendi başına boşluk yaratan genel zamanlama şeridi Not'ta hiç render edilmiyor (yukarısı).
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                // Sağda 34px boşluk (paddingRight) bırakılıyor ki ikonlar köşedeki ✕ (mutlak konumlu) ile çakışmasın.
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingRight: 34 }}>
                   {!isDraft && <div className={'chk' + (ritDone(o.id) ? ' on' : '')} onClick={() => toggleRit(o.id)} title="Yaptım">{ritDone(o.id) ? '✓' : ''}</div>}
-                  <div style={{ flex: 1, fontSize: 11.5, fontWeight: 800, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.4px' }}>{isDraft ? 'Yeni not' : 'Not düzenleme'}</div>
+                  <div style={{ flex: 1, fontSize: 11.5, fontWeight: 800, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.4px' }}>{isDraft ? 'Yeni not' : 'Not Düzenle'}</div>
                   {!paylasilamaz && !isTaze && <button type="button" onClick={() => { setPaylasOpen(true); setKMsg(''); }} title="Paylaş" style={{ background: 'none', border: 'none', padding: 0, fontSize: 16, cursor: 'pointer', opacity: .55 }}>↪️</button>}
                   {o.hatirlatma_saat ? (
                     <button type="button" onClick={() => { setRemInput(o.hatirlatma_saat || ''); setRemTarihInput(kCfg?.hatirlatma_tarih || o.baslangic || ''); setRemMenuFor({ ...o, _randevu: false }); }} title="Bildirim seçenekleri" style={{ background: 'none', border: 'none', padding: 0, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 2 }}>🔔<span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--muted)' }}>{o.hatirlatma_saat}</span></button>
