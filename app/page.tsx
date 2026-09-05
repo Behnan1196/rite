@@ -142,6 +142,23 @@ function strSaniye(str: string): number | undefined {
   const n = parseInt(t);
   return isNaN(n) ? undefined : n;
 }
+// Randevu resmi yüklemeden önce tarayıcıda küçültür (telefon fotoğrafları 5-15MB olabiliyor) — hem yükleme
+// hızlanıyor hem de sunucudaki 8MB sınırına takılma ihtimali kalmıyor. createImageBitmap yoksa (çok eski
+// tarayıcı) dosya olduğu gibi yüklenir.
+async function resimKucult(file: File, maxDim = 1600, quality = 0.82): Promise<Blob> {
+  let bitmap: ImageBitmap;
+  try { bitmap = await createImageBitmap(file); } catch { return file; }
+  const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
+  const w = Math.max(1, Math.round(bitmap.width * scale));
+  const h = Math.max(1, Math.round(bitmap.height * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return file;
+  ctx.drawImage(bitmap, 0, 0, w, h);
+  const blob: Blob | null = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
+  return blob || file;
+}
 function BilgiKartEdit({ cfg, onSave, randevu, readOnly }: { cfg: any; onSave: (cfg: any) => void; randevu?: boolean; readOnly?: boolean }) {
   const videolar: { baslik?: string; url: string; bas?: number; bit?: number; ozelNot?: string }[] = cfg?.videolar || [];
   const [vidSec, setVidSec] = useState(0);
@@ -155,6 +172,9 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly }: { cfg: any; onSave: (
   const [icerikEdit, setIcerikEdit] = useState(false);
   const [icerikVal, setIcerikVal] = useState(cfg?.icerik || '');
   const [resimUrl, setResimUrl] = useState(cfg?.resim || '');
+  const [resimYukleniyor, setResimYukleniyor] = useState(false);
+  const [resimHata, setResimHata] = useState('');
+  const resimInputRef = useRef<HTMLInputElement>(null);
   const [yer, setYer] = useState(cfg?.yer || '');
   useEffect(() => { setIcerikVal(cfg?.icerik || ''); }, [cfg?.icerik]);
   useEffect(() => { setResimUrl(cfg?.resim || ''); }, [cfg?.resim]);
@@ -199,6 +219,27 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly }: { cfg: any; onSave: (
     if (v === (cfg?.resim || null)) return;
     onSave({ ...cfg, resim: v });
   }
+  // Dosyadan resim yükle (Hostinger'a, bkz. app/api/upload) — manuel link girmenin yanında ikinci bir yol.
+  async function resimDosyaSecildi(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (!f) return;
+    setResimHata(''); setResimYukleniyor(true);
+    try {
+      const kucuk = await resimKucult(f);
+      const fd = new FormData();
+      fd.append('file', kucuk, 'resim.jpg');
+      const r = await fetch('/api/upload', { method: 'POST', body: fd });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || 'Yükleme başarısız');
+      setResimUrl(data.url);
+      onSave({ ...cfg, resim: data.url });
+    } catch (err: any) {
+      setResimHata(err?.message || 'Yükleme başarısız');
+    } finally {
+      setResimYukleniyor(false);
+    }
+  }
   function yerKaydet() {
     const v = yer.trim() || null;
     if (v === (cfg?.yer || null)) return;
@@ -217,7 +258,18 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly }: { cfg: any; onSave: (
             ) : (
               <input value={yer} onChange={(e) => setYer(e.target.value)} onBlur={yerKaydet} placeholder="Detay / yer (ops.) — link, adres, doktor adı…" style={{ width: '100%' }} />
             )}
-            {!readOnly && <input value={resimUrl} onChange={(e) => setResimUrl(e.target.value)} onBlur={resimKaydet} placeholder="Resim linki (ops.)…" style={{ width: '100%', marginTop: 8 }} />}
+            {/* Manuel link + gerçek dosya yükleme (📷) yan yana — biri linke sahip bir görsel için, diğeri
+                telefon/bilgisayardan doğrudan seçip Hostinger'a (bkz. app/api/upload) yüklemek için. */}
+            {!readOnly && (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <input value={resimUrl} onChange={(e) => setResimUrl(e.target.value)} onBlur={resimKaydet} placeholder="Resim linki (ops.)…" style={{ flex: 1 }} />
+                  <button type="button" className="btn ghost sm" disabled={resimYukleniyor} onClick={() => resimInputRef.current?.click()} title="Dosyadan resim yükle">{resimYukleniyor ? '…' : '📷'}</button>
+                  <input ref={resimInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={resimDosyaSecildi} />
+                </div>
+                {resimHata && <div className="note" style={{ color: 'var(--red)', marginTop: 2 }}>{resimHata}</div>}
+              </div>
+            )}
             {resimUrl.trim() && <img src={resimUrl.trim()} alt="" style={{ maxWidth: '100%', borderRadius: 8, margin: '8px 0 0', display: 'block' }} />}
           </div>
         )}
@@ -758,6 +810,16 @@ export default function Rite() {
   const [selDate, setSelDate] = useState('');
   const [activities, setActivities] = useState<any[]>([]);
   const [actGroup, setActGroup] = useState('Genel');
+  const [actAltGroup, setActAltGroup] = useState<string | null>(null); // null = "Tümü" (o Grup'un tüm Alt gruplar)
+  // Havuz'u "kitaplık / araştırma planı" olarak kullanmak için kalıcı Grup + Alt grup listesi (bkz. dog_gruplar
+  // tablosu, rite_gruplar_migration.sql). ust_id boş olanlar Grup (üst seviye), dolu olanlar o Grup'a bağlı Alt grup.
+  const [grupListesi, setGrupListesi] = useState<any[]>([]);
+  const [gruplarYonetOpen, setGruplarYonetOpen] = useState(false);
+  const [grupYeniAd, setGrupYeniAd] = useState('');
+  const [grupDuzenleId, setGrupDuzenleId] = useState<string | null>(null);
+  const [grupDuzenleAd, setGrupDuzenleAd] = useState('');
+  const [altGrupEkleFor, setAltGrupEkleFor] = useState<string | null>(null);
+  const [altGrupYeniAd, setAltGrupYeniAd] = useState('');
   const [rituals, setRituals] = useState<any[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
   const [ep, setEp] = useState<any>(null);
@@ -792,6 +854,7 @@ export default function Rite() {
   const [zamanOpen, setZamanOpen] = useState(false);
   const [grupEditOpen, setGrupEditOpen] = useState(false);
   const [grupEditVal, setGrupEditVal] = useState('');
+  const [grupEditAltVal, setGrupEditAltVal] = useState('');
   const [paylasOpen, setPaylasOpen] = useState(false);
   const [mezunModal, setMezunModal] = useState<any>(null);
   const [mezunPuan, setMezunPuan] = useState(0);
@@ -969,6 +1032,13 @@ export default function Rite() {
     } else { setAnchors([]); setCNot(''); }
     const m = await supabase.from('dog_measurements').select('tarih,anahtar,deger,birim').eq('client_id', clientId).order('tarih', { ascending: true }).limit(80);
     setMeas(m.data || []);
+    loadGruplar(clientId);
+  }
+  // Havuz'daki kalıcı Grup/Alt grup listesi (bkz. dog_gruplar) — Gruplar yönet ekranındaki her ekle/yeniden
+  // adlandır/sil/sırala işleminden sonra da tekrar çağrılıyor.
+  async function loadGruplar(clientId: string) {
+    const g = await supabase.from('dog_gruplar').select('id,ad,ust_id,sira').eq('client_id', clientId).order('sira');
+    setGrupListesi(g.data || []);
   }
 
   // ---------- e-posta ile kendi hesabını aç / giriş yap ----------
@@ -1247,6 +1317,45 @@ export default function Rite() {
     if (r.error) return alert('Hata: ' + r.error.message);
     closeDetay(); loadActivities();
   }
+  // ---------- Havuz: kalıcı Grup / Alt grup listesi (dog_gruplar) ----------
+  // ustId null → yeni bir üst seviye Grup; doluysa o Grup'a bağlı bir Alt grup.
+  async function grupEkle(ad: string, ustId: string | null) {
+    if (!client) return;
+    const isim = ad.trim();
+    if (!isim) return;
+    const kardesler = grupListesi.filter((g) => (g.ust_id || null) === (ustId || null));
+    const sira = kardesler.length ? Math.max(...kardesler.map((g) => g.sira)) + 1 : 0;
+    const ins = await supabase.from('dog_gruplar').insert({ client_id: client.id, ad: isim, ust_id: ustId, sira });
+    if (ins.error) { alert('Eklenemedi: ' + ins.error.message); return; }
+    loadGruplar(client.id);
+  }
+  async function grupYenidenAdlandir(id: string, ad: string) {
+    if (!client || !ad.trim()) return;
+    await supabase.from('dog_gruplar').update({ ad: ad.trim() }).eq('id', id);
+    loadGruplar(client.id);
+  }
+  async function grupSil(g: any) {
+    if (!client) return;
+    const altSay = grupListesi.filter((x) => x.ust_id === g.id).length;
+    const msg = altSay > 0
+      ? '"' + g.ad + '" ve altındaki ' + altSay + ' alt grup silinsin mi? (Bu gruba etiketlenmiş kartlar Havuz\'da kalır, üzerlerindeki grup adı serbest metin olarak aynen durur.)'
+      : '"' + g.ad + '" silinsin mi?';
+    if (!confirm(msg)) return;
+    await supabase.from('dog_gruplar').delete().eq('id', g.id); // ust_id cascade — alt gruplar da silinir
+    loadGruplar(client.id);
+  }
+  // Kardeşler arasında sırayı değiştir (yon: -1 yukarı, 1 aşağı) — sira alanlarını komşusuyla takas eder.
+  async function grupSiraDegistir(g: any, yon: -1 | 1) {
+    if (!client) return;
+    const kardesler = grupListesi.filter((x) => (x.ust_id || null) === (g.ust_id || null)).sort((a, b) => a.sira - b.sira);
+    const i = kardesler.findIndex((x) => x.id === g.id);
+    const j = i + yon;
+    if (j < 0 || j >= kardesler.length) return;
+    const diger = kardesler[j];
+    await supabase.from('dog_gruplar').update({ sira: diger.sira }).eq('id', g.id);
+    await supabase.from('dog_gruplar').update({ sira: g.sira }).eq('id', diger.id);
+    loadGruplar(client.id);
+  }
   function sureGun(rt: any): number { if (!rt.bitis) return 0; const b = parseD(rt.baslangic || today); const e = parseD(rt.bitis); return Math.round((e.getTime() - b.getTime()) / 86400000) + 1; }
   // Ajanda'da (tur='ritual') sadece detay.obj yamalanır — act ayrı bir kavram (bağlı Program şablonu) olabilir,
   // ona dokunmak yanlış olur. Havuz'da (tur!=='ritual') o ve act aynı nesneyi temsil ediyor (bkz. openDetay'in
@@ -1295,13 +1404,14 @@ export default function Rite() {
   }
   function openRit(rt: any) { openDetay(rt, 'ritual'); }
   function closeDetay() { setDetay(null); setTaze(null); }
-  // Havuzdaki (kişisel) bir aktivite/programın grubunu değiştir — aktivite ve program için ortak.
-  async function setAktGrup(id: string, grup: string) {
+  // Havuzdaki (kişisel) bir aktivite/programın grubunu (ve varsa alt grubunu) değiştir — aktivite ve program için ortak.
+  async function setAktGrup(id: string, grup: string, altGrup?: string) {
     if (!client) return;
     const g = grup.trim() || 'Genel';
-    await supabase.from('dog_activities').update({ grup: g }).eq('id', id);
-    setDetay((d: any) => (d ? { ...d, obj: { ...d.obj, grup: g } } : d));
-    setDetayAct((a: any) => (a ? { ...a, grup: g } : a));
+    const ag = (altGrup || '').trim() || null;
+    await supabase.from('dog_activities').update({ grup: g, alt_grup: ag }).eq('id', id);
+    setDetay((d: any) => (d ? { ...d, obj: { ...d.obj, grup: g, alt_grup: ag } } : d));
+    setDetayAct((a: any) => (a ? { ...a, grup: g, alt_grup: ag } : a));
     setGrupEditOpen(false);
     loadActivities();
   }
@@ -1395,7 +1505,7 @@ export default function Rite() {
     openDetay({
       id: null,
       ad: tur === 'aliskanlik' ? 'Yeni alışkanlık' : 'Yeni not',
-      grup: actGroup || 'Genel', kart_tipi: 'bilgi', kart_config: cfg,
+      grup: actGroup || 'Genel', alt_grup: actAltGroup || null, kart_tipi: 'bilgi', kart_config: cfg,
       aliskanlik: tur === 'aliskanlik', faydalar: [], aciklama: null, videolar: [],
       zaman: 'gün', zamanlar: null, gunler: tur === 'aliskanlik' ? [] : null, sure_gun: null,
     }, 'aktivite');
@@ -1420,9 +1530,10 @@ export default function Rite() {
     // Havuz taslağı — dog_activities'e yazılır; bu tabloda baslangic/bitis/hatirlatma_saat hiç yok.
     const isAliskanlik = !!o.aliskanlik;
     const grup = (o.grup || 'Genel').trim() || 'Genel';
+    const altGrup = (o.alt_grup || '').trim() || null;
     const ins = await supabase.from('dog_activities').insert({
       client_id: client.id, tur: 'aktivite', ad: (o.ad || '').trim() || (isAliskanlik ? 'Yeni alışkanlık' : 'Yeni not'),
-      grup, faydalar: [], aciklama: null, videolar: [],
+      grup, alt_grup: altGrup, faydalar: [], aciklama: null, videolar: [],
       zaman: 'gün', zamanlar: null, gunler: isAliskanlik ? (o.gunler || null) : null,
       sure_gun: isAliskanlik ? null : 1,
       kart_tipi: 'bilgi', kart_config: o.kart_config || { icerik: null, videolar: [] },
@@ -1431,6 +1542,7 @@ export default function Rite() {
     if (ins.error) { alert('Kaydedilemedi: ' + ins.error.message); return; }
     loadActivities();
     setActGroup(grup);
+    setActAltGroup(altGrup);
     closeDetay();
   }
   // Ayraç: isimli bir bölüm başlığı — bugünden itibaren, siz silene kadar her gün aynı şekilde görünür,
@@ -1988,9 +2100,19 @@ export default function Rite() {
   // Havuz gruplama: Genel ve Meridyen her zaman seçenek olarak durur (boş bile olsalar), üstüne kullanıcının
   // kendi eklediği gruplar eklenir — sabit iki sekme yerine büyüyebilen bir chip listesi.
   const HAVUZ_VARSAYILAN_GRUPLAR = ['Genel', 'Meridyen'];
+  // Kalıcı Grup listesi (bkz. dog_gruplar / Gruplar yönet ekranı) — ust_id boş olanlar üst seviye Grup.
+  const grupUst = grupListesi.filter((g) => !g.ust_id);
   // ekstraGruplar: "+ yeni grup" ile önceden açılmış ama henüz hiç aktivitesi olmayan gruplar (bu oturumda) —
   // bir aktivite o gruba girince zaten personalActs üzerinden kalıcı olarak da gelir.
-  const personalGroups = Array.from(new Set([...HAVUZ_VARSAYILAN_GRUPLAR, ...personalActs.map(personalGroupOf), ...ekstraGruplar]));
+  const personalGroups = Array.from(new Set([...HAVUZ_VARSAYILAN_GRUPLAR, ...grupUst.map((g) => g.ad), ...personalActs.map(personalGroupOf), ...ekstraGruplar]));
+  // Seçili Grup'un Alt grupları: dog_gruplar'daki kalıcı liste ∪ o gruptaki aktivitelerin fiilen kullandığı
+  // alt_grup değerleri (Gruplar yönet'ten silinmiş/hiç eklenmemiş olsa bile mevcut etiket kaybolmasın diye).
+  function altGruplarOf(grupAdi: string): string[] {
+    const ust = grupUst.find((g) => g.ad === grupAdi);
+    const kalici = ust ? grupListesi.filter((g) => g.ust_id === ust.id).sort((a, b) => a.sira - b.sira).map((g) => g.ad) : [];
+    const kullanilan = personalActs.filter((a) => personalGroupOf(a) === grupAdi && a.alt_grup).map((a) => a.alt_grup);
+    return Array.from(new Set([...kalici, ...kullanilan]));
+  }
 
   function RitItem({ rt }: { rt: any }) {
     const done = ritDone(rt.id);
@@ -2306,25 +2428,36 @@ export default function Rite() {
         )}
 
         {/* ---------- HAVUZ ---------- */}
-        {screen === 'havuz' && (
+        {screen === 'havuz' && (() => {
+          const altlar = altGruplarOf(actGroup);
+          const gosterilen = personalActs.filter((a) => personalGroupOf(a) === actGroup && (!actAltGroup || (a.alt_grup || null) === actAltGroup));
+          return (
           <div>
             <h2>Aktivite Havuzu</h2>
-            <p className="sub">Yeni bir kişisel kart Ajanda&apos;daki <b>+</b> ile oluşturulur. Burada aktiviteler gruplar halinde durur.</p>
+            <p className="sub">Yeni bir kişisel kart Ajanda&apos;daki <b>+</b> ile oluşturulur. Her Grup kendi araştırma başlığın — Alt gruplarla daha ince ayırabilirsin.</p>
             <div className="tabs">
-              {personalGroups.map((g) => <div key={g} className={'tab' + (actGroup === g ? ' on' : '')} onClick={() => setActGroup(g)}>{g}</div>)}
+              {personalGroups.map((g) => <div key={g} className={'tab' + (actGroup === g ? ' on' : '')} onClick={() => { setActGroup(g); setActAltGroup(null); }}>{g}</div>)}
               <div className="tab" onClick={() => { setYeniGrupAd(''); setYeniGrupOpen((o) => !o); }}>＋ yeni grup</div>
+              <div className="tab" onClick={() => setGruplarYonetOpen(true)} title="Grupları yönet">🗂</div>
             </div>
             {yeniGrupOpen && (
               <div style={{ display: 'flex', gap: 6, margin: '0 0 10px' }}>
                 <input value={yeniGrupAd} onChange={(e) => setYeniGrupAd(e.target.value)} placeholder="ör. Beslenme" style={{ flex: 1 }} autoFocus />
-                <button className="btn sm" onClick={() => { const g = yeniGrupAd.trim(); if (!g) return; setEkstraGruplar((a) => Array.from(new Set([...a, g]))); setActGroup(g); setYeniGrupOpen(false); setYeniGrupAd(''); }}>Ekle</button>
+                <button className="btn sm" onClick={() => { const g = yeniGrupAd.trim(); if (!g) return; grupEkle(g, null); setActGroup(g); setActAltGroup(null); setYeniGrupOpen(false); setYeniGrupAd(''); }}>Ekle</button>
                 <button className="btn ghost sm" onClick={() => setYeniGrupOpen(false)}>Vazgeç</button>
               </div>
             )}
+            {/* Alt grup satırı sadece bu Grup'un en az bir Alt grubu varsa görünür — Duruş > Bel çukurluğu gibi. */}
+            {altlar.length > 0 && (
+              <div className="tabs" style={{ marginTop: -4 }}>
+                <div className={'tab' + (!actAltGroup ? ' on' : '')} onClick={() => setActAltGroup(null)}>Tümü</div>
+                {altlar.map((ag) => <div key={ag} className={'tab' + (actAltGroup === ag ? ' on' : '')} onClick={() => setActAltGroup(ag)}>{ag}</div>)}
+              </div>
+            )}
             <div className="card">
-              {personalActs.filter((a) => personalGroupOf(a) === actGroup).length === 0 ? (
-                <div className="note">Bu grupta aktivite yok.</div>
-              ) : personalActs.filter((a) => personalGroupOf(a) === actGroup).map((a) => (
+              {gosterilen.length === 0 ? (
+                <div className="note">Bu {actAltGroup ? 'alt grupta' : 'grupta'} aktivite yok.</div>
+              ) : gosterilen.map((a) => (
                 <div key={a.id} className="actcard" onClick={() => openDetay(a, 'aktivite')}>
                   <div style={{ flex: 1 }}><div className="n">{a.tur === 'program' ? '🧩 ' : ''}{a.ad}{a.puan ? <span className="puanp"> {'★'.repeat(a.puan)}</span> : ''}</div><div className="o">{a.tur === 'program' ? (a.adimlar || []).length + ' adım' + (a.sure_gun ? ' · ' + a.sure_gun + ' gün' : '') : (a.kaynak_etiket === 'Mezun' ? 'Mezun · ' : '') + Array.from(new Set((a.faydalar || []).map((k: string) => faydaMap[k]?.alan).filter(Boolean))).join(' · ')}</div></div>
                   <span className="go">›</span>
@@ -2332,7 +2465,8 @@ export default function Rite() {
               ))}
             </div>
           </div>
-        )}
+          );
+        })()}
 
         {/* ---------- GELİŞİM ---------- */}
         {screen === 'gelisim' && (
@@ -2676,17 +2810,27 @@ export default function Rite() {
             <div className="m">
               {isRit ? null : (
                 personal ? (
-                  <span style={{ cursor: 'pointer' }} onClick={() => { setGrupEditVal(personalGroupOf(o)); setGrupEditOpen(true); }}>{personalGroupOf(o)} · değiştir ✎</span>
+                  <span style={{ cursor: 'pointer' }} onClick={() => { setGrupEditVal(personalGroupOf(o)); setGrupEditAltVal(o.alt_grup || ''); setGrupEditOpen(true); }}>{personalGroupOf(o)}{o.alt_grup ? ' › ' + o.alt_grup : ''} · değiştir ✎</span>
                 ) : (o.grup || '')
               )}
               {act?.kanit_duzeyi && <span className="evi">kanıt: {act.kanit_duzeyi}</span>}
             </div>
             {!isRit && personal && grupEditOpen && (
               <div style={{ margin: '2px 0 10px' }}>
-                {personalGroups.length > 0 && <div style={{ margin: '0 0 6px' }}>{personalGroups.map((g) => <span key={g} className={'chip' + (grupEditVal === g ? ' on' : '')} onClick={() => setGrupEditVal(g)}>{g}</span>)}</div>}
+                {personalGroups.length > 0 && <div style={{ margin: '0 0 6px' }}>{personalGroups.map((g) => <span key={g} className={'chip' + (grupEditVal === g ? ' on' : '')} onClick={() => { setGrupEditVal(g); setGrupEditAltVal(''); }}>{g}</span>)}</div>}
                 <div style={{ display: 'flex', gap: 6 }}>
                   <input value={grupEditVal} onChange={(e) => setGrupEditVal(e.target.value)} placeholder="yeni grup için yaz" style={{ flex: 1 }} />
-                  <button className="btn sm" onClick={() => setAktGrup(o.id, grupEditVal)}>Kaydet</button>
+                </div>
+                {/* Alt grup — sadece seçili Grup'un kayıtlı alt grupları varsa gösteriliyor; serbest metin de yazılabilir. */}
+                {altGruplarOf(grupEditVal).length > 0 && (
+                  <div style={{ margin: '6px 0' }}>
+                    <div className="note" style={{ margin: '0 0 4px' }}>Alt grup (ops.)</div>
+                    <span className={'chip' + (!grupEditAltVal ? ' on' : '')} onClick={() => setGrupEditAltVal('')}>Yok</span>
+                    {altGruplarOf(grupEditVal).map((ag) => <span key={ag} className={'chip' + (grupEditAltVal === ag ? ' on' : '')} onClick={() => setGrupEditAltVal(ag)}>{ag}</span>)}
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                  <button className="btn sm" onClick={() => setAktGrup(o.id, grupEditVal, grupEditAltVal)}>Kaydet</button>
                   <button className="btn ghost sm" onClick={() => setGrupEditOpen(false)}>Vazgeç</button>
                 </div>
               </div>
@@ -3138,6 +3282,83 @@ export default function Rite() {
                 setOlcumEkleOpen(false);
               }}
             >Kaydet</button>
+          </div>
+        </div>
+      )}
+
+      {/* Havuz'u bir "kitaplık / araştırma planı" olarak kullanmak için Grup + Alt grup'ların kalıcı,
+          düzenlenebilir listesi (bkz. dog_gruplar). Havuz'daki sekmeler artık burada tutulan bu listeden
+          besleniyor — serbestçe yazılan, kalıcı olmayan bir isimden çok, "Duruş" / "Bel çukurluğu" gibi
+          gerçek bir araştırma başlığı listesi. */}
+      {gruplarYonetOpen && (
+        <div className="modal" onMouseDown={() => { setGruplarYonetOpen(false); setGrupDuzenleId(null); setAltGrupEkleFor(null); }}>
+          <div className="sheet" onMouseDown={(e) => e.stopPropagation()}>
+            <button className="x" onClick={() => { setGruplarYonetOpen(false); setGrupDuzenleId(null); setAltGrupEkleFor(null); }}>×</button>
+            <h2>🗂 Grupları yönet</h2>
+            <div className="note" style={{ marginTop: 0 }}>Her Grup bir araştırma başlığı, Alt gruplar onun altındaki daha ince konular.</div>
+            {grupUst.length === 0 && <div className="note">Henüz Grup yok — aşağıdan ekle.</div>}
+            {grupUst.sort((a, b) => a.sira - b.sira).map((g, i) => {
+              const altlar = grupListesi.filter((x) => x.ust_id === g.id).sort((a, b) => a.sira - b.sira);
+              return (
+                <div key={g.id} style={{ margin: '8px 0', padding: '8px 0', borderTop: i === 0 ? undefined : '1px solid var(--line)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      <button className="minlink" style={{ padding: 0 }} onClick={() => grupSiraDegistir(g, -1)} disabled={i === 0}>▲</button>
+                      <button className="minlink" style={{ padding: 0 }} onClick={() => grupSiraDegistir(g, 1)} disabled={i === grupUst.length - 1}>▼</button>
+                    </div>
+                    {grupDuzenleId === g.id ? (
+                      <>
+                        <input value={grupDuzenleAd} onChange={(e) => setGrupDuzenleAd(e.target.value)} style={{ flex: 1 }} autoFocus />
+                        <button className="btn sm" onClick={() => { grupYenidenAdlandir(g.id, grupDuzenleAd); setGrupDuzenleId(null); }}>Kaydet</button>
+                        <button className="btn ghost sm" onClick={() => setGrupDuzenleId(null)}>Vazgeç</button>
+                      </>
+                    ) : (
+                      <>
+                        <b style={{ flex: 1 }}>{g.ad}</b>
+                        <button className="minlink" onClick={() => { setGrupDuzenleId(g.id); setGrupDuzenleAd(g.ad); }}>✎</button>
+                        <button className="minlink" style={{ color: 'var(--red)' }} onClick={() => grupSil(g)}>🗑</button>
+                      </>
+                    )}
+                  </div>
+                  <div style={{ margin: '4px 0 0 24px' }}>
+                    {altlar.map((ag, j) => (
+                      <div key={ag.id} style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '3px 0' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                          <button className="minlink" style={{ padding: 0, fontSize: 10 }} onClick={() => grupSiraDegistir(ag, -1)} disabled={j === 0}>▲</button>
+                          <button className="minlink" style={{ padding: 0, fontSize: 10 }} onClick={() => grupSiraDegistir(ag, 1)} disabled={j === altlar.length - 1}>▼</button>
+                        </div>
+                        {grupDuzenleId === ag.id ? (
+                          <>
+                            <input value={grupDuzenleAd} onChange={(e) => setGrupDuzenleAd(e.target.value)} style={{ flex: 1 }} autoFocus />
+                            <button className="btn sm" onClick={() => { grupYenidenAdlandir(ag.id, grupDuzenleAd); setGrupDuzenleId(null); }}>Kaydet</button>
+                            <button className="btn ghost sm" onClick={() => setGrupDuzenleId(null)}>Vazgeç</button>
+                          </>
+                        ) : (
+                          <>
+                            <span className="note" style={{ margin: 0, flex: 1 }}>{ag.ad}</span>
+                            <button className="minlink" onClick={() => { setGrupDuzenleId(ag.id); setGrupDuzenleAd(ag.ad); }}>✎</button>
+                            <button className="minlink" style={{ color: 'var(--red)' }} onClick={() => grupSil(ag)}>🗑</button>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                    {altGrupEkleFor === g.id ? (
+                      <div style={{ display: 'flex', gap: 6, margin: '4px 0' }}>
+                        <input value={altGrupYeniAd} onChange={(e) => setAltGrupYeniAd(e.target.value)} placeholder="Alt grup adı" style={{ flex: 1 }} autoFocus />
+                        <button className="btn sm" onClick={() => { grupEkle(altGrupYeniAd, g.id); setAltGrupYeniAd(''); setAltGrupEkleFor(null); }}>Ekle</button>
+                        <button className="btn ghost sm" onClick={() => setAltGrupEkleFor(null)}>Vazgeç</button>
+                      </div>
+                    ) : (
+                      <button className="minlink" style={{ margin: '4px 0 0' }} onClick={() => { setAltGrupEkleFor(g.id); setAltGrupYeniAd(''); }}>+ Alt grup</button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+            <div style={{ display: 'flex', gap: 6, marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--line)' }}>
+              <input value={grupYeniAd} onChange={(e) => setGrupYeniAd(e.target.value)} placeholder="Yeni Grup adı (ör. Duruş, Mental Health…)" style={{ flex: 1 }} />
+              <button className="btn sm" onClick={() => { grupEkle(grupYeniAd, null); setGrupYeniAd(''); }}>Grup ekle</button>
+            </div>
           </div>
         </div>
       )}
