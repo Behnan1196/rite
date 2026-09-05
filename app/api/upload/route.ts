@@ -13,9 +13,20 @@ export const runtime = 'nodejs';
 //   HOSTINGER_FTP_PORT      — ops., varsayılan 21
 //   HOSTINGER_FTP_SECURE    — ops., FTPS gerekiyorsa "true" yap (çoğu Hostinger hesabında gerekmez)
 //   HOSTINGER_FTP_DIR       — hedef klasör, ör. /public_html/rite-uploads
-//   HOSTINGER_PUBLIC_BASE_URL — o klasörün dışarıdan erişilen tam adresi, ör. https://alanadin.com/rite-uploads
+//   HOSTINGER_PUBLIC_BASE_URL — sitenin ANA adresi, ör. https://alanadin.com — klasör adını buna EKLEME,
+//                                kod onu aşağıda HOSTINGER_FTP_DIR'dan otomatik ekliyor (bkz. dirUrlYolu)
 const MAX_BYTES = 8 * 1024 * 1024; // 8MB — istemci tarafında zaten küçültülüyor (bkz. BilgiKartEdit), bu son bir güvenlik sınırı
 const ALLOWED_EXT = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif']);
+
+// HOSTINGER_FTP_DIR, FTP'nin gördüğü sunucu-içi yolu (ör. /public_html/rite-uploads); ama dışarıdan
+// erişilen web adresinde "public_html" (ya da "www"/"htdocs") hiç görünmez — o klasör zaten sitenin
+// kökü demektir. Önceden bu klasör HOSTINGER_PUBLIC_BASE_URL'e elle eklenmesi bekleniyordu; kullanıcı
+// bunu ayarlamayınca link kırık geliyordu. Şimdi klasör adı buradan otomatik çıkarılıp URL'ye ekleniyor.
+function dirUrlYolu(dir: string): string {
+  let d = (dir || '').trim().replace(/^\/+/, '').replace(/\/+$/, '');
+  d = d.replace(/^(public_html|www|htdocs)(\/|$)/i, '');
+  return d;
+}
 
 export async function POST(req: Request) {
   // HOSTINGER_FTP_HOST bazen "ftp://alanadin.com" ya da sonunda "/" ile girilebiliyor (Hostinger panelinden
@@ -63,6 +74,7 @@ export async function POST(req: Request) {
     client.close();
   }
 
-  const url = publicBase.replace(/\/+$/, '') + '/' + name;
+  const dirYolu = dirUrlYolu(dir);
+  const url = publicBase.replace(/\/+$/, '') + (dirYolu ? '/' + dirYolu : '') + '/' + name;
   return NextResponse.json({ url });
 }
