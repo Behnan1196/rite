@@ -903,6 +903,11 @@ export default function Rite() {
   // farklı Gruplarda çakışmasın diye).
   const [acikGruplar, setAcikGruplar] = useState<Set<string>>(() => new Set(['Genel']));
   const [acikAltGruplar, setAcikAltGruplar] = useState<Set<string>>(() => new Set());
+  // Havuz akordeonunda tepedeki "+ Grup" ve bir Grup başlığındaki "+" (alt grup) için satır-içi ekleme —
+  // 🗂 Grupları yönet ekranındaki yeniden adlandır/sil/sırala hâlâ orada, bunlar sadece hızlı ekleme.
+  const [anaGrupEkleAcik, setAnaGrupEkleAcik] = useState(false);
+  const [altGrupEkleAcikFor, setAltGrupEkleAcikFor] = useState<string | null>(null); // Grup adı
+  const [anaAltGrupYeniAd, setAnaAltGrupYeniAd] = useState('');
   // Havuz'u "kitaplık / araştırma planı" olarak kullanmak için kalıcı Grup + Alt grup listesi (bkz. dog_gruplar
   // tablosu, rite_gruplar_migration.sql). ust_id boş olanlar Grup (üst seviye), dolu olanlar o Grup'a bağlı Alt grup.
   const [grupListesi, setGrupListesi] = useState<any[]>([]);
@@ -1411,14 +1416,24 @@ export default function Rite() {
   // ---------- Havuz: kalıcı Grup / Alt grup listesi (dog_gruplar) ----------
   // ustId null → yeni bir üst seviye Grup; doluysa o Grup'a bağlı bir Alt grup.
   async function grupEkle(ad: string, ustId: string | null) {
-    if (!client) return;
+    if (!client) return null;
     const isim = ad.trim();
-    if (!isim) return;
+    if (!isim) return null;
     const kardesler = grupListesi.filter((g) => (g.ust_id || null) === (ustId || null));
     const sira = kardesler.length ? Math.max(...kardesler.map((g) => g.sira)) + 1 : 0;
-    const ins = await supabase.from('dog_gruplar').insert({ client_id: client.id, ad: isim, ust_id: ustId, sira });
-    if (ins.error) { alert('Eklenemedi: ' + ins.error.message); return; }
-    loadGruplar(client.id);
+    const ins = await supabase.from('dog_gruplar').insert({ client_id: client.id, ad: isim, ust_id: ustId, sira }).select().single();
+    if (ins.error) { alert('Eklenemedi: ' + ins.error.message); return null; }
+    await loadGruplar(client.id);
+    return ins.data as { id: string; ad: string; ust_id: string | null; sira: number };
+  }
+  // Havuz akordeonunda bir Grup başlığından doğrudan "+ Alt grup" denince: o Grup adı henüz gerçek bir
+  // dog_gruplar satırı değilse (eski/örtük — HAVUZ_VARSAYILAN_GRUPLAR ya da sadece bir aktivite üzerinde
+  // metin olarak var) önce onu kalıcı bir üst-seviye Grup'a "yükseltip" öyle alt grup ekliyoruz.
+  async function grupUstIdGaranti(ad: string): Promise<string | null> {
+    const mevcut = grupUst.find((g) => g.ad === ad);
+    if (mevcut) return mevcut.id;
+    const yeni = await grupEkle(ad, null);
+    return yeni?.id || null;
   }
   async function grupYenidenAdlandir(id: string, ad: string) {
     if (!client || !ad.trim()) return;
@@ -2551,26 +2566,58 @@ export default function Rite() {
           <div>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
               <h2 style={{ margin: 0 }}>Aktivite Havuzu</h2>
-              <button className="minlink" onClick={() => setGruplarYonetOpen(true)}>🗂 Grupları yönet</button>
+              <div style={{ display: 'flex', gap: 12 }}>
+                <button className="minlink" onClick={() => { setAnaGrupEkleAcik((o) => !o); setGrupYeniAd(''); }}>＋ Grup</button>
+                <button className="minlink" onClick={() => setGruplarYonetOpen(true)}>🗂 Grupları yönet</button>
+              </div>
             </div>
             <p className="sub">Her Grup kendi araştırma başlığın — başlığa dokunup aç/kapat. Yeni bir kişisel kart Ajanda&apos;daki <b>+</b> ile oluşturulur, en son açtığın Grup/Alt gruba eklenir.</p>
+            {anaGrupEkleAcik && (
+              <div style={{ display: 'flex', gap: 6, margin: '0 0 10px' }}>
+                <input value={grupYeniAd} onChange={(e) => setGrupYeniAd(e.target.value)} placeholder="Yeni Grup adı (ör. Duruş)" style={{ flex: 1 }} autoFocus />
+                <button className="btn sm" onClick={async () => { const isim = grupYeniAd.trim(); if (!isim) return; await grupEkle(isim, null); setActGroup(isim); setActAltGroup(null); setAcikGruplar((s) => new Set(s).add(isim)); setGrupYeniAd(''); setAnaGrupEkleAcik(false); }}>Ekle</button>
+                <button className="btn ghost sm" onClick={() => setAnaGrupEkleAcik(false)}>Vazgeç</button>
+              </div>
+            )}
             {personalGroups.length === 0 ? (
-              <div className="note">Henüz grup yok — 🗂 Grupları yönet&apos;ten ekleyebilirsin.</div>
-            ) : personalGroups.map((g) => {
+              <div className="note">Henüz grup yok — yukarıdaki ＋ Grup&apos;tan ekleyebilirsin.</div>
+            ) : personalGroups.map((g, gi) => {
               const altlar = altGruplarOf(g);
               const acik = acikGruplar.has(g);
               const dogrudanAkt = personalActs.filter((a) => personalGroupOf(a) === g && !a.alt_grup);
               const toplamSay = personalActs.filter((a) => personalGroupOf(a) === g).length;
               return (
-                <div key={g} className="card">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', margin: acik ? '0 0 6px' : 0 }} onClick={() => grupAc(g)}>
-                    <span style={{ width: 14, textAlign: 'center', color: '#9a9280' }}>{acik ? '▾' : '▸'}</span>
+                <div key={g} style={{ marginTop: gi === 0 ? 4 : 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', background: '#efe8da', borderRadius: 10, padding: '10px 10px 10px 12px' }} onClick={() => grupAc(g)}>
+                    <span style={{ width: 14, textAlign: 'center', color: '#8a8169' }}>{acik ? '▾' : '▸'}</span>
                     <span style={{ flex: 1, fontWeight: 700 }}>{g}</span>
                     {toplamSay > 0 && <span className="note" style={{ margin: 0 }}>{toplamSay}</span>}
+                    <button
+                      type="button"
+                      title="Alt grup ekle"
+                      onClick={(e) => { e.stopPropagation(); setAcikGruplar((s) => new Set(s).add(g)); setAltGrupEkleAcikFor(g); setAnaAltGrupYeniAd(''); }}
+                      style={{ background: 'none', border: 'none', padding: '0 2px', fontSize: 16, fontWeight: 700, color: '#8a8169', cursor: 'pointer', lineHeight: 1 }}
+                    >＋</button>
                   </div>
                   {acik && (
-                    <div>
-                      {dogrudanAkt.length === 0 && altlar.length === 0 && <div className="note">Bu grupta henüz aktivite yok.</div>}
+                    <div style={{ padding: '4px 2px 2px' }}>
+                      {altGrupEkleAcikFor === g && (
+                        <div style={{ display: 'flex', gap: 6, margin: '4px 0 8px' }}>
+                          <input value={anaAltGrupYeniAd} onChange={(e) => setAnaAltGrupYeniAd(e.target.value)} placeholder="Yeni Alt grup adı" style={{ flex: 1 }} autoFocus />
+                          <button className="btn sm" onClick={async () => {
+                            const isim = anaAltGrupYeniAd.trim();
+                            if (!isim) return;
+                            const ustId = await grupUstIdGaranti(g);
+                            if (!ustId) return;
+                            await grupEkle(isim, ustId);
+                            setActGroup(g); setActAltGroup(isim);
+                            setAcikAltGruplar((s) => new Set(s).add(g + '␟' + isim));
+                            setAnaAltGrupYeniAd(''); setAltGrupEkleAcikFor(null);
+                          }}>Ekle</button>
+                          <button className="btn ghost sm" onClick={() => setAltGrupEkleAcikFor(null)}>Vazgeç</button>
+                        </div>
+                      )}
+                      {dogrudanAkt.length === 0 && altlar.length === 0 && altGrupEkleAcikFor !== g && <div className="note">Bu grupta henüz aktivite yok.</div>}
                       {dogrudanAkt.map(aktKart)}
                       {altlar.map((ag) => {
                         const key = g + '␟' + ag;
