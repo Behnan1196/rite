@@ -3050,13 +3050,20 @@ export default function Rite() {
             <button className="x" onClick={() => closeDetay()}>×</button>
             {isRit ? (
               isKisisel ? (
-                // İnce başlık şeridi: sabit etiket (gerçek "başlık" artık aşağıdaki Ad alanı) + sağda 🔔/↪️ —
-                // ayrı, kendi başına boşluk yaratan genel zamanlama şeridi kişisel kartlarda hiç render edilmiyor
-                // (yukarısı) — Alışkanlık'ın 🕐/🎓'i ise Ad alanının altında kendi küçük satırında (aşağısı).
+                // İnce başlık şeridi: sabit etiket (gerçek "başlık" artık aşağıdaki Ad alanı) + sağda
+                // (Alışkanlık'ta ayrıca 🗓️/🎓) 🔔/↪️ — ayrı, kendi başına boşluk yaratan genel zamanlama şeridi
+                // kişisel kartlarda hiç render edilmiyor; hepsi bu tek şeride toplandı (kullanıcı isteği —
+                // önceki ayrı alt satırda 🗓️ diğerlerinden daha aşağıda kalıyordu).
                 // Sağda 34px boşluk (paddingRight) bırakılıyor ki ikonlar köşedeki ✕ (mutlak konumlu) ile çakışmasın.
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingRight: 34, marginTop: -8 }}>
                   {!isDraft && <div className={'chk' + (ritDone(o.id) ? ' on' : '')} onClick={() => toggleRit(o.id)} title="Yaptım">{ritDone(o.id) ? '✓' : ''}</div>}
                   <div style={{ flex: 1, fontSize: 11.5, fontWeight: 800, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.4px' }}>{isDraft ? kisiselYeni : kisiselEtiket + ' Düzenle'}</div>
+                  {kisiselTur === 'aliskanlik' && !preview && (
+                    <button type="button" onClick={() => setZamanOpen(true)} title={gunOzet} aria-label="Zamanlama" style={{ background: 'none', border: 'none', padding: 0, fontSize: 16, cursor: 'pointer', opacity: .55 }}>🗓️</button>
+                  )}
+                  {kisiselTur === 'aliskanlik' && !preview && !isTaze && !o.mezun && (
+                    <button type="button" onClick={() => setHabitMenuFor(o)} title="Alışkanlık seçenekleri" aria-label="Alışkanlık seçenekleri" style={{ background: 'none', border: 'none', padding: 0, fontSize: 16, cursor: 'pointer', opacity: .55 }}>🎓</button>
+                  )}
                   {!paylasilamaz && !isTaze && <button type="button" onClick={() => { setPaylasOpen(true); setKMsg(''); }} title="Paylaş" style={{ background: 'none', border: 'none', padding: 0, fontSize: 16, cursor: 'pointer', opacity: .55 }}>↪️</button>}
                   {o.hatirlatma_saat ? (
                     <button type="button" onClick={() => { setRemInput(o.hatirlatma_saat || ''); setRemTarihInput(kCfg?.hatirlatma_tarih || o.baslangic || ''); setRemMenuFor({ ...o, _randevu: kisiselTur === 'randevu' }); }} title="Bildirim seçenekleri" style={{ background: 'none', border: 'none', padding: 0, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 2 }}>🔔<span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--muted)' }}>{o.hatirlatma_saat}</span></button>
@@ -3088,15 +3095,6 @@ export default function Rite() {
                 autoFocus={isDraft}
                 style={{ width: '100%', padding: 0, margin: '10px 0 14px', fontSize: 21 }}
               />
-            )}
-            {/* Alışkanlık'ın zamanlama (🕐 — hangi günler) ve mezun etme (🎓) seçenekleri artık kendi küçük
-                satırında, Ad'ın hemen altında — bell/paylaş yukarıdaki başlık şeridine taşındığı için burada
-                sadece bunlar kalıyor (kullanıcı isteği: diğer kişisel kart türlerinde de aynı tasarım). */}
-            {isKisisel && kisiselTur === 'aliskanlik' && !preview && (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, margin: '0 0 10px' }}>
-                <button className="btn ghost sm" onClick={() => setZamanOpen(true)} title={gunOzet} aria-label="Zamanlama">🕐</button>
-                {!isTaze && !o.mezun && <button className="btn ghost sm" onClick={() => setHabitMenuFor(o)} title="Alışkanlık seçenekleri" aria-label="Alışkanlık seçenekleri">🎓</button>}
-              </div>
             )}
             <div className="m">
               {isRit ? null : (
@@ -3137,12 +3135,11 @@ export default function Rite() {
             {isRit && !isKisisel && (() => {
               // Bu genel zamanlama/mezun/bildirim/paylaş şeridi artık yalnızca kişisel OLMAYAN ritüellerde
               // (Meridyen/program kaynaklı vb.) gösteriliyor — kişisel kartların (Not/Randevu/Alışkanlık) hepsi
-              // kendi ince başlık şeridini kullanıyor (🔔/↪️ orada), Alışkanlık'ın 🕐/🎓'i de Ad alanının
-              // altındaki kendi küçük satırında (kullanıcı isteği — tutarlı tasarım, aynı zamanda üçünde de).
+              // kendi ince başlık şeridini kullanıyor (Alışkanlık'ta 🗓️/🎓 de dahil, bkz. yukarısı).
               return (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, margin: '2px 0 10px' }}>
                 <div style={{ display: 'flex', gap: 6, flex: '0 0 auto' }}>
-                  <button className="btn ghost sm" onClick={() => setZamanOpen(true)} title={gunOzet} aria-label="Zamanlama">🕐</button>
+                  <button className="btn ghost sm" onClick={() => setZamanOpen(true)} title={gunOzet} aria-label="Zamanlama">🗓️</button>
                   {!isTaze && !o.mezun && (o.aliskanlik ? (
                     <button className="btn ghost sm" onClick={() => setHabitMenuFor(o)} title="Alışkanlık seçenekleri" aria-label="Alışkanlık seçenekleri">🎓</button>
                   ) : (
@@ -3242,7 +3239,7 @@ export default function Rite() {
               <div className="modal top2" onMouseDown={() => setZamanOpen(false)}>
               <div className="sheet" onMouseDown={(e) => e.stopPropagation()}>
                 <button className="x" onClick={() => setZamanOpen(false)}>×</button>
-                <h3 style={{ marginBottom: 6 }}>🕐 Zamanlama</h3>
+                <h3 style={{ marginBottom: 6 }}>🗓️ Zamanlama</h3>
                 <div className="kv"><div className="k">Hangi güne taşı</div>
                   <div>
                     <span className={'chip' + (o.baslangic === today ? ' on' : '')} onClick={() => ritTasi(o.id, today)}>Bugün</span>
