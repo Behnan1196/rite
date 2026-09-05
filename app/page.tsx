@@ -417,7 +417,9 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi, videoAcikZ
               : { width: '100%', minHeight: 100 }}
           />
         ) : (
-          <div onClick={() => setIcerikEdit(true)} style={{ cursor: 'text', minHeight: 24, whiteSpace: 'pre-wrap' }}>
+          // notTasarimi: dokunmadan önceki bu görünüm de textarea ile aynı min-yüksekliği (4 satır) alıyor —
+          // yoksa tıklayınca kutu aniden büyüyormuş gibi bir sıçrama oluyordu (kullanıcı geri bildirimi).
+          <div onClick={() => setIcerikEdit(true)} style={{ cursor: 'text', minHeight: notTasarimi ? 92 : 24, whiteSpace: 'pre-wrap' }}>
             {icerikVal.trim() ? icerikVal : <div className="note" style={{ marginTop: 0 }}>Yazmak için dokun…</div>}
           </div>
         )}
