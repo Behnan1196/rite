@@ -174,6 +174,7 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly }: { cfg: any; onSave: (
   const [resimUrl, setResimUrl] = useState(cfg?.resim || '');
   const [resimYukleniyor, setResimYukleniyor] = useState(false);
   const [resimHata, setResimHata] = useState('');
+  const [resimBuyuk, setResimBuyuk] = useState(false);
   const resimInputRef = useRef<HTMLInputElement>(null);
   const [yer, setYer] = useState(cfg?.yer || '');
   useEffect(() => { setIcerikVal(cfg?.icerik || ''); }, [cfg?.icerik]);
@@ -214,12 +215,8 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly }: { cfg: any; onSave: (
     setIcerikEdit(false);
     if (icerikVal.trim() !== (cfg?.icerik || '')) onSave({ ...cfg, icerik: icerikVal.trim() || null });
   }
-  function resimKaydet() {
-    const v = resimUrl.trim() || null;
-    if (v === (cfg?.resim || null)) return;
-    onSave({ ...cfg, resim: v });
-  }
-  // Dosyadan resim yükle (Hostinger'a, bkz. app/api/upload) — manuel link girmenin yanında ikinci bir yol.
+  // Dosyadan resim yükle (Hostinger'a, bkz. app/api/upload) — resim kutucuğuna tıklanınca (yoksa) ya da
+  // kutucuğun üzerindeki ✎ ile (varsa) açılır; ayrı, görünür bir link kutusu yok.
   async function resimDosyaSecildi(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     e.target.value = '';
@@ -258,19 +255,56 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly }: { cfg: any; onSave: (
             ) : (
               <input value={yer} onChange={(e) => setYer(e.target.value)} onBlur={yerKaydet} placeholder="Detay / yer (ops.) — link, adres, doktor adı…" style={{ width: '100%' }} />
             )}
-            {/* Manuel link + gerçek dosya yükleme (📷) yan yana — biri linke sahip bir görsel için, diğeri
-                telefon/bilgisayardan doğrudan seçip Hostinger'a (bkz. app/api/upload) yüklemek için. */}
-            {!readOnly && (
+            {/* Resim kutucuğu: küçük bir önizleme, üzerine tıklayınca büyür; ekleme/değiştirme de kutucuğun
+                kendi üzerinde (ayrı, görünür bir link kutusu yok — readOnly'de bu özellik hiç görünmez). */}
+            {(resimUrl.trim() || !readOnly) && (
               <div style={{ marginTop: 8 }}>
-                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                  <input value={resimUrl} onChange={(e) => setResimUrl(e.target.value)} onBlur={resimKaydet} placeholder="Resim linki (ops.)…" style={{ flex: 1 }} />
-                  <button type="button" className="btn ghost sm" disabled={resimYukleniyor} onClick={() => resimInputRef.current?.click()} title="Dosyadan resim yükle">{resimYukleniyor ? '…' : '📷'}</button>
-                  <input ref={resimInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={resimDosyaSecildi} />
+                <div
+                  style={{
+                    position: 'relative', width: 72, height: 72, borderRadius: 10, overflow: 'hidden',
+                    background: '#f4efe6', border: resimUrl.trim() ? '1px solid var(--line)' : '1px dashed var(--line)',
+                    cursor: resimUrl.trim() ? 'zoom-in' : (readOnly ? 'default' : 'pointer'),
+                  }}
+                  onClick={() => {
+                    if (resimUrl.trim()) setResimBuyuk(true);
+                    else if (!readOnly) resimInputRef.current?.click();
+                  }}
+                  title={resimUrl.trim() ? 'Büyütmek için tıkla' : (readOnly ? undefined : 'Resim eklemek için tıkla')}
+                >
+                  {resimUrl.trim() ? (
+                    <img src={resimUrl.trim()} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                  ) : (
+                    !readOnly && (
+                      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, opacity: 0.55 }}>
+                        {resimYukleniyor ? '…' : '📷'}
+                      </div>
+                    )
+                  )}
+                  {!readOnly && resimUrl.trim() && (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); resimInputRef.current?.click(); }}
+                      disabled={resimYukleniyor}
+                      title="Resmi değiştir"
+                      style={{
+                        position: 'absolute', right: 3, bottom: 3, width: 22, height: 22, borderRadius: '50%',
+                        border: 'none', background: 'rgba(24,21,16,.6)', color: '#fff', fontSize: 11,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0,
+                      }}
+                    >
+                      {resimYukleniyor ? '…' : '✎'}
+                    </button>
+                  )}
                 </div>
+                {!readOnly && <input ref={resimInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={resimDosyaSecildi} />}
                 {resimHata && <div className="note" style={{ color: 'var(--red)', marginTop: 2 }}>{resimHata}</div>}
               </div>
             )}
-            {resimUrl.trim() && <img src={resimUrl.trim()} alt="" style={{ maxWidth: '100%', borderRadius: 8, margin: '8px 0 0', display: 'block' }} />}
+            {resimBuyuk && resimUrl.trim() && (
+              <div className="modal" style={{ alignItems: 'center' }} onMouseDown={() => setResimBuyuk(false)}>
+                <img src={resimUrl.trim()} alt="" style={{ maxWidth: '90vw', maxHeight: '85vh', borderRadius: 10, display: 'block' }} />
+              </div>
+            )}
           </div>
         )}
         {/* Video şeridi Açıklama'nın ÜZERİNDE: videolar + (varsa seçili video için) ✎ düzenle + en sağda ＋ ekle
