@@ -3032,10 +3032,16 @@ export default function Rite() {
         // "Not" (Ajanda'da, salt kart_tipi='bilgi', randevu/alışkanlık değil) için deneme aşamasındaki yeni
         // tasarım: title bar artık düzenlenebilir bir alan değil, sabit bir etiket ("Yeni not"/"Not düzenleme");
         // asıl Ad girişi içeriğe iniyor. Randevu/Alışkanlık/Rutin/Havuz taslağı şimdilik eski haliyle kalıyor.
-        const isNot = isRit && kTip === 'bilgi' && !kCfg?.randevu && !o.aliskanlik;
+        // Kişisel kart (Not/Randevu/Alışkanlık) — üçü de kart_tipi='bilgi', kaynak='Kendi'; Not'ta denenen
+        // yeni tasarım (sabit başlık etiketi + içerikte Ad alanı + düz/çerçeveli Açıklama + video için hazır
+        // alan) beğenilince kullanıcı isteğiyle üçüne de uygulandı.
+        const isKisisel = isRit && kTip === 'bilgi' && o.kaynak === 'Kendi';
+        const kisiselTur: 'not' | 'randevu' | 'aliskanlik' = kCfg?.randevu ? 'randevu' : (o.aliskanlik ? 'aliskanlik' : 'not');
+        const kisiselEtiket = kisiselTur === 'randevu' ? 'Randevu' : kisiselTur === 'aliskanlik' ? 'Alışkanlık' : 'Not';
+        const kisiselYeni = kisiselTur === 'randevu' ? 'Yeni randevu' : kisiselTur === 'aliskanlik' ? 'Yeni alışkanlık' : 'Yeni not';
         // Kart daha bu an ＋ menüsünden oluşturulduysa (taze) ya da hâlâ taslaksa, "zaten var olan bir kart"
         // için anlamlı mezun et / paylaş seçenekleri gizli kalır (kullanıcı isteği) — hem aşağıdaki genel
-        // zamanlama şeridinde hem de Not'un kendi ince başlık şeridinde kullanılıyor.
+        // zamanlama şeridinde hem de kişisel kartın kendi ince başlık şeridinde kullanılıyor.
         const isTaze = isDraft || (!!o.id && taze === o.id);
         return (
         <div className="modal full" onMouseDown={() => closeDetay()}>
@@ -3043,18 +3049,19 @@ export default function Rite() {
             <div className="sheetgrip" onClick={() => closeDetay()} />
             <button className="x" onClick={() => closeDetay()}>×</button>
             {isRit ? (
-              isNot ? (
-                // İnce başlık şeridi: sabit etiket (gerçek "başlık" artık aşağıdaki Ad alanı) + sağda 🔔/↪️/🎬 —
-                // ayrı, kendi başına boşluk yaratan genel zamanlama şeridi Not'ta hiç render edilmiyor (yukarısı).
+              isKisisel ? (
+                // İnce başlık şeridi: sabit etiket (gerçek "başlık" artık aşağıdaki Ad alanı) + sağda 🔔/↪️ —
+                // ayrı, kendi başına boşluk yaratan genel zamanlama şeridi kişisel kartlarda hiç render edilmiyor
+                // (yukarısı) — Alışkanlık'ın 🕐/🎓'i ise Ad alanının altında kendi küçük satırında (aşağısı).
                 // Sağda 34px boşluk (paddingRight) bırakılıyor ki ikonlar köşedeki ✕ (mutlak konumlu) ile çakışmasın.
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingRight: 34, marginTop: -8 }}>
                   {!isDraft && <div className={'chk' + (ritDone(o.id) ? ' on' : '')} onClick={() => toggleRit(o.id)} title="Yaptım">{ritDone(o.id) ? '✓' : ''}</div>}
-                  <div style={{ flex: 1, fontSize: 11.5, fontWeight: 800, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.4px' }}>{isDraft ? 'Yeni not' : 'Not Düzenle'}</div>
+                  <div style={{ flex: 1, fontSize: 11.5, fontWeight: 800, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.4px' }}>{isDraft ? kisiselYeni : kisiselEtiket + ' Düzenle'}</div>
                   {!paylasilamaz && !isTaze && <button type="button" onClick={() => { setPaylasOpen(true); setKMsg(''); }} title="Paylaş" style={{ background: 'none', border: 'none', padding: 0, fontSize: 16, cursor: 'pointer', opacity: .55 }}>↪️</button>}
                   {o.hatirlatma_saat ? (
-                    <button type="button" onClick={() => { setRemInput(o.hatirlatma_saat || ''); setRemTarihInput(kCfg?.hatirlatma_tarih || o.baslangic || ''); setRemMenuFor({ ...o, _randevu: false }); }} title="Bildirim seçenekleri" style={{ background: 'none', border: 'none', padding: 0, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 2 }}>🔔<span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--muted)' }}>{o.hatirlatma_saat}</span></button>
+                    <button type="button" onClick={() => { setRemInput(o.hatirlatma_saat || ''); setRemTarihInput(kCfg?.hatirlatma_tarih || o.baslangic || ''); setRemMenuFor({ ...o, _randevu: kisiselTur === 'randevu' }); }} title="Bildirim seçenekleri" style={{ background: 'none', border: 'none', padding: 0, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 2 }}>🔔<span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--muted)' }}>{o.hatirlatma_saat}</span></button>
                   ) : (
-                    <button type="button" onClick={() => { setRemInput(kCfg?.saat || ''); setRemTarihInput(kCfg?.hatirlatma_tarih || o.baslangic || ''); setRemMenuFor({ ...o, _randevu: false }); }} title="Bildirim ekle" style={{ background: 'none', border: 'none', padding: 0, fontSize: 16, cursor: 'pointer', opacity: .4 }}>🔔</button>
+                    <button type="button" onClick={() => { setRemInput(kCfg?.saat || ''); setRemTarihInput(kCfg?.hatirlatma_tarih || o.baslangic || ''); setRemMenuFor({ ...o, _randevu: kisiselTur === 'randevu' }); }} title="Bildirim ekle" style={{ background: 'none', border: 'none', padding: 0, fontSize: 16, cursor: 'pointer', opacity: .4 }}>🔔</button>
                   )}
                 </div>
               ) : (
@@ -3068,7 +3075,7 @@ export default function Rite() {
               // yerel taslağı (patchDetay) güncelliyor, taslakKaydet basılınca gerçek satıra yazılıyor.
               <input className="detbaslik" value={adInput} autoFocus onFocus={(e) => e.target.select()} onChange={(e) => setAdInput(e.target.value)} onBlur={() => { if (adInput.trim() && adInput.trim() !== (o.ad || '')) patchDetay({ ad: adInput.trim() }); }} style={{ width: '100%' }} />
             ) : <h2 style={{ paddingRight: 34 }}>{o.ad}</h2>}
-            {isNot && (
+            {isKisisel && (
               // Gerçek "başlık" artık bu — ince etiketten belirgin şekilde ayrışsın diye daha büyük/kalın,
               // ve etiketten biraz mesafeli (kullanıcı isteği — "kart adı biraz aşağıdan başlamalı").
               <input
@@ -3077,10 +3084,19 @@ export default function Rite() {
                 onFocus={(e) => e.target.select()}
                 onChange={(e) => setAdInput(e.target.value)}
                 onBlur={() => { if (adInput.trim() && adInput.trim() !== (o.ad || '')) setRitAd(o.id, adInput); }}
-                placeholder="Not adı"
+                placeholder={kisiselEtiket + ' adı'}
                 autoFocus={isDraft}
                 style={{ width: '100%', padding: 0, margin: '10px 0 14px', fontSize: 21 }}
               />
+            )}
+            {/* Alışkanlık'ın zamanlama (🕐 — hangi günler) ve mezun etme (🎓) seçenekleri artık kendi küçük
+                satırında, Ad'ın hemen altında — bell/paylaş yukarıdaki başlık şeridine taşındığı için burada
+                sadece bunlar kalıyor (kullanıcı isteği: diğer kişisel kart türlerinde de aynı tasarım). */}
+            {isKisisel && kisiselTur === 'aliskanlik' && !preview && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, margin: '0 0 10px' }}>
+                <button className="btn ghost sm" onClick={() => setZamanOpen(true)} title={gunOzet} aria-label="Zamanlama">🕐</button>
+                {!isTaze && !o.mezun && <button className="btn ghost sm" onClick={() => setHabitMenuFor(o)} title="Alışkanlık seçenekleri" aria-label="Alışkanlık seçenekleri">🎓</button>}
+              </div>
             )}
             <div className="m">
               {isRit ? null : (
@@ -3118,23 +3134,16 @@ export default function Rite() {
               aciklamaGoster && <div className="howto"><div className="k">📋 Nasıl yapılır</div><div className="v">{aciklamaGoster}</div></div>
             ))}
 
-            {isRit && !isNot && (() => {
-              // Zamanlama (🕐) ve mezun etme (🎓) artık sadece Alışkanlık tipinde kişisel kartlarda gösteriliyor —
-              // Not ve Randevu (ikisi de kart_tipi='bilgi', kaynak='Kendi', ama alışkanlık DEĞİL) bu ikisinden
-              // arındırıldı; alışkanlık artık oluşturulurken (＋ menüsünden) seçilen bir tip, sonradan dönüştürülen
-              // bir özellik değil (kullanıcı isteği). Not'ta (isNot) bu şerit hiç render edilmiyor — 🔔/↪️ artık
-              // Not'un kendi ince başlık şeridinde (bkz. yukarısı), boşuna boşluk yaratan ayrı bir satır olmasın diye.
-              const kisiselBilgi = o.kaynak === 'Kendi' && kTip === 'bilgi';
-              // Taslak (henüz kaydedilmemiş, o.id yok) iken mezun etme/paylaşma hiç gösterilmiyor (isTaze, yukarıda) —
-              // ama Alışkanlık taslağı için Zamanlama (özellikle Günler) tam da oluşturma anında lazım, o yüzden
-              // Alışkanlık'ta taslakken de gösteriliyor (Not/Randevu taslağında zaten kisiselBilgi tek başına
-              // zamanlamayı gizliyor, isDraft'tan bağımsız olarak).
-              const zamanlamaGoster = !kisiselBilgi || o.aliskanlik;
+            {isRit && !isKisisel && (() => {
+              // Bu genel zamanlama/mezun/bildirim/paylaş şeridi artık yalnızca kişisel OLMAYAN ritüellerde
+              // (Meridyen/program kaynaklı vb.) gösteriliyor — kişisel kartların (Not/Randevu/Alışkanlık) hepsi
+              // kendi ince başlık şeridini kullanıyor (🔔/↪️ orada), Alışkanlık'ın 🕐/🎓'i de Ad alanının
+              // altındaki kendi küçük satırında (kullanıcı isteği — tutarlı tasarım, aynı zamanda üçünde de).
               return (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, margin: '2px 0 10px' }}>
                 <div style={{ display: 'flex', gap: 6, flex: '0 0 auto' }}>
-                  {zamanlamaGoster && <button className="btn ghost sm" onClick={() => setZamanOpen(true)} title={gunOzet} aria-label="Zamanlama">🕐</button>}
-                  {zamanlamaGoster && !isTaze && !o.mezun && (o.aliskanlik ? (
+                  <button className="btn ghost sm" onClick={() => setZamanOpen(true)} title={gunOzet} aria-label="Zamanlama">🕐</button>
+                  {!isTaze && !o.mezun && (o.aliskanlik ? (
                     <button className="btn ghost sm" onClick={() => setHabitMenuFor(o)} title="Alışkanlık seçenekleri" aria-label="Alışkanlık seçenekleri">🎓</button>
                   ) : (
                     <button className="btn ghost sm" style={{ opacity: .4 }} onClick={() => setRitAliskanlik(o.id, true)} title="Alışkanlık yap" aria-label="Alışkanlık yap">🎓</button>
@@ -3192,7 +3201,7 @@ export default function Rite() {
                 böylece Ajandama eklemeden kart orada da (Havuz'da olduğu gibi) açılabiliyor. */}
             {kTip === 'bilgi' && (() => {
               const editable = !preview && (isRit ? o.kaynak === 'Kendi' : isDraft);
-              if (editable) return <BilgiKartEdit cfg={kCfg} onSave={bilgiKaydet} randevu={!!kCfg?.randevu} notTasarimi={isNot} />;
+              if (editable) return <BilgiKartEdit cfg={kCfg} onSave={bilgiKaydet} randevu={!!kCfg?.randevu} notTasarimi={isKisisel} />;
               if (!preview && isRit) return <BilgiKart cfg={kCfg} onSave={bilgiKaydet} />;
               return <BilgiKartEdit cfg={kCfg} onSave={() => {}} randevu={!!kCfg?.randevu} readOnly />;
             })()}
