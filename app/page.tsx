@@ -259,7 +259,9 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi, videoAcikZ
     onSave({ ...cfg, yer: v });
   }
   return (
-    <div className="howto">
+    // Not tasarımında (notTasarimi) bilerek kutu/yeşil-çizgi görünümü (.howto) yok — o, sanki bu kutu asıl
+    // kart gibi görünmesine yol açıyordu (kullanıcı geri bildirimi). Düz metin tipografisi (.bilgi) kalıyor.
+    <div className={notTasarimi ? undefined : 'howto'}>
       <div className="bilgi">
         {randevu && (
           <div style={{ margin: '0 0 10px' }}>
@@ -364,7 +366,9 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi, videoAcikZ
             (videoAcikZorla) — video eklenince şerit zaten kalıcı görünür olur, ikon da title'dan kalkar.
             readOnly: sadece görüntüleme — ✕/✎/＋ ikonları gizlenir, chip'ler yalnız video seçmek için tıklanabilir kalır. */}
         {!randevu && (videolar.length > 0 || (!readOnly && (!notTasarimi || videoAcikZorla))) && (
-          <div style={{ margin: '0 0 6px', display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+          // notTasarimi: Açıklama artık kutu/çizgi olmadığı için video şeridi onunla karışabilir — kendi
+          // altına ince bir çizgi + boşluk vererek "ayrı bir şerit" olduğunu belli ediyoruz (kullanıcı isteği).
+          <div style={{ margin: '0 0 10px', paddingBottom: notTasarimi ? 10 : 0, borderBottom: notTasarimi ? '1px solid var(--line)' : undefined, display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
             {videolar.map((v, i) => (
               <span key={i} className={'chip' + (i === vidSec ? ' on' : '')} onClick={() => { setVidSec(i); if (vidFormMode) formuKapat(); }}>
                 {v.baslik || ('Video ' + (i + 1))}{(v.bas != null || v.bit != null) ? ` ⏱${saniyeStr(v.bas) || '0'}–${v.bit != null ? saniyeStr(v.bit) : '…'}` : ''}
@@ -2982,6 +2986,10 @@ export default function Rite() {
         // tasarım: title bar artık düzenlenebilir bir alan değil, sabit bir etiket ("Yeni not"/"Not düzenleme");
         // asıl Ad girişi içeriğe iniyor. Randevu/Alışkanlık/Rutin/Havuz taslağı şimdilik eski haliyle kalıyor.
         const isNot = isRit && kTip === 'bilgi' && !kCfg?.randevu && !o.aliskanlik;
+        // Kart daha bu an ＋ menüsünden oluşturulduysa (taze) ya da hâlâ taslaksa, "zaten var olan bir kart"
+        // için anlamlı mezun et / paylaş seçenekleri gizli kalır (kullanıcı isteği) — hem aşağıdaki genel
+        // zamanlama şeridinde hem de Not'un kendi ince başlık şeridinde kullanılıyor.
+        const isTaze = isDraft || (!!o.id && taze === o.id);
         return (
         <div className="modal full" onMouseDown={() => closeDetay()}>
           <div className="sheet fullsheet" onMouseDown={(e) => e.stopPropagation()} style={stilP ? { borderTop: '4px solid ' + stilP.ac } : undefined}>
@@ -2989,15 +2997,23 @@ export default function Rite() {
             <button className="x" onClick={() => closeDetay()}>×</button>
             {isRit ? (
               isNot ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                // İnce başlık şeridi: sabit etiket (gerçek "başlık" artık aşağıdaki Ad alanı) + sağda 🔔/↪️/🎬 —
+                // ayrı, kendi başına boşluk yaratan genel zamanlama şeridi Not'ta hiç render edilmiyor (yukarısı).
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   {!isDraft && <div className={'chk' + (ritDone(o.id) ? ' on' : '')} onClick={() => toggleRit(o.id)} title="Yaptım">{ritDone(o.id) ? '✓' : ''}</div>}
-                  <h2 style={{ margin: 0, flex: 1 }}>{isDraft ? 'Yeni not' : 'Not düzenleme'}</h2>
+                  <div style={{ flex: 1, fontSize: 11.5, fontWeight: 800, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.4px' }}>{isDraft ? 'Yeni not' : 'Not düzenleme'}</div>
+                  {!paylasilamaz && !isTaze && <button type="button" onClick={() => { setPaylasOpen(true); setKMsg(''); }} title="Paylaş" style={{ background: 'none', border: 'none', padding: 0, fontSize: 16, cursor: 'pointer', opacity: .55 }}>↪️</button>}
+                  {o.hatirlatma_saat ? (
+                    <button type="button" onClick={() => { setRemInput(o.hatirlatma_saat || ''); setRemTarihInput(kCfg?.hatirlatma_tarih || o.baslangic || ''); setRemMenuFor({ ...o, _randevu: false }); }} title="Bildirim seçenekleri" style={{ background: 'none', border: 'none', padding: 0, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 2 }}>🔔<span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--muted)' }}>{o.hatirlatma_saat}</span></button>
+                  ) : (
+                    <button type="button" onClick={() => { setRemInput(kCfg?.saat || ''); setRemTarihInput(kCfg?.hatirlatma_tarih || o.baslangic || ''); setRemMenuFor({ ...o, _randevu: false }); }} title="Bildirim ekle" style={{ background: 'none', border: 'none', padding: 0, fontSize: 16, cursor: 'pointer', opacity: .4 }}>🔔</button>
+                  )}
                   {!(kCfg?.videolar?.length > 0) && (
                     <button
                       type="button"
                       onClick={() => setNotVideoAcik((v) => !v)}
                       title="Video ekle"
-                      style={{ background: 'none', border: 'none', padding: '0 6px 0 0', fontSize: 17, cursor: 'pointer', opacity: notVideoAcik ? 1 : 0.5 }}
+                      style={{ background: 'none', border: 'none', padding: 0, fontSize: 16, cursor: 'pointer', opacity: notVideoAcik ? 1 : 0.4 }}
                     >🎬</button>
                   )}
                 </div>
@@ -3013,6 +3029,8 @@ export default function Rite() {
               <input className="detbaslik" value={adInput} autoFocus onFocus={(e) => e.target.select()} onChange={(e) => setAdInput(e.target.value)} onBlur={() => { if (adInput.trim() && adInput.trim() !== (o.ad || '')) patchDetay({ ad: adInput.trim() }); }} style={{ width: '100%' }} />
             ) : <h2 style={{ paddingRight: 34 }}>{o.ad}</h2>}
             {isNot && (
+              // Gerçek "başlık" artık bu — ince etiketten belirgin şekilde ayrışsın diye daha büyük/kalın,
+              // ve etiketten biraz mesafeli (kullanıcı isteği — "kart adı biraz aşağıdan başlamalı").
               <input
                 className="detbaslik"
                 value={adInput}
@@ -3021,7 +3039,7 @@ export default function Rite() {
                 onBlur={() => { if (adInput.trim() && adInput.trim() !== (o.ad || '')) setRitAd(o.id, adInput); }}
                 placeholder="Not adı"
                 autoFocus={isDraft}
-                style={{ width: '100%', padding: '2px 0 4px', margin: '2px 0 0' }}
+                style={{ width: '100%', padding: 0, margin: '10px 0 4px', fontSize: 21 }}
               />
             )}
             <div className="m">
@@ -3060,20 +3078,18 @@ export default function Rite() {
               aciklamaGoster && <div className="howto"><div className="k">📋 Nasıl yapılır</div><div className="v">{aciklamaGoster}</div></div>
             ))}
 
-            {isRit && (() => {
+            {isRit && !isNot && (() => {
               // Zamanlama (🕐) ve mezun etme (🎓) artık sadece Alışkanlık tipinde kişisel kartlarda gösteriliyor —
               // Not ve Randevu (ikisi de kart_tipi='bilgi', kaynak='Kendi', ama alışkanlık DEĞİL) bu ikisinden
               // arındırıldı; alışkanlık artık oluşturulurken (＋ menüsünden) seçilen bir tip, sonradan dönüştürülen
-              // bir özellik değil (kullanıcı isteği).
+              // bir özellik değil (kullanıcı isteği). Not'ta (isNot) bu şerit hiç render edilmiyor — 🔔/↪️ artık
+              // Not'un kendi ince başlık şeridinde (bkz. yukarısı), boşuna boşluk yaratan ayrı bir satır olmasın diye.
               const kisiselBilgi = o.kaynak === 'Kendi' && kTip === 'bilgi';
-              // Taslak (henüz kaydedilmemiş, o.id yok) iken mezun etme/paylaşma hiç gösterilmiyor (isTaze, aşağıda) —
+              // Taslak (henüz kaydedilmemiş, o.id yok) iken mezun etme/paylaşma hiç gösterilmiyor (isTaze, yukarıda) —
               // ama Alışkanlık taslağı için Zamanlama (özellikle Günler) tam da oluşturma anında lazım, o yüzden
               // Alışkanlık'ta taslakken de gösteriliyor (Not/Randevu taslağında zaten kisiselBilgi tek başına
               // zamanlamayı gizliyor, isDraft'tan bağımsız olarak).
               const zamanlamaGoster = !kisiselBilgi || o.aliskanlik;
-              // Kart daha bu an ＋ menüsünden oluşturulduysa (taze) ya da hâlâ taslaksa, "zaten var olan bir kart"
-              // için anlamlı mezun et / paylaş seçenekleri gizli kalır (kullanıcı isteği).
-              const isTaze = isDraft || (!!o.id && taze === o.id);
               return (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, margin: '2px 0 10px' }}>
                 <div style={{ display: 'flex', gap: 6, flex: '0 0 auto' }}>
