@@ -159,7 +159,7 @@ async function resimKucult(file: File, maxDim = 1600, quality = 0.82): Promise<B
   const blob: Blob | null = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
   return blob || file;
 }
-function BilgiKartEdit({ cfg, onSave, randevu, readOnly }: { cfg: any; onSave: (cfg: any) => void; randevu?: boolean; readOnly?: boolean }) {
+function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi, videoAcikZorla }: { cfg: any; onSave: (cfg: any) => void; randevu?: boolean; readOnly?: boolean; notTasarimi?: boolean; videoAcikZorla?: boolean }) {
   const videolar: { baslik?: string; url: string; bas?: number; bit?: number; ozelNot?: string }[] = cfg?.videolar || [];
   const [vidSec, setVidSec] = useState(0);
   // vidFormMode: 'add' = boş formla yeni video; 'edit' = seçili videoyu (secili) doldurup düzenler; null = kapalı.
@@ -359,9 +359,11 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly }: { cfg: any; onSave: (
           </div>
         )}
         {/* Video şeridi Açıklama'nın ÜZERİNDE: videolar + (varsa seçili video için) ✎ düzenle + en sağda ＋ ekle
-            (kullanıcı isteği — düzenle, eklemenin solunda). Şerit videosuzken de görünür, tek bir ＋ olarak.
+            (kullanıcı isteği — düzenle, eklemenin solunda). Video yokken: eski tasarımda şerit tek bir ＋ olarak
+            hep görünürdü; "Not" tasarımında (notTasarimi) bunun yerine title bar'daki 🎬 ikonuyla açılır
+            (videoAcikZorla) — video eklenince şerit zaten kalıcı görünür olur, ikon da title'dan kalkar.
             readOnly: sadece görüntüleme — ✕/✎/＋ ikonları gizlenir, chip'ler yalnız video seçmek için tıklanabilir kalır. */}
-        {!randevu && (videolar.length > 0 || !readOnly) && (
+        {!randevu && (videolar.length > 0 || (!readOnly && (!notTasarimi || videoAcikZorla))) && (
           <div style={{ margin: '0 0 6px', display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
             {videolar.map((v, i) => (
               <span key={i} className={'chip' + (i === vidSec ? ' on' : '')} onClick={() => { setVidSec(i); if (vidFormMode) formuKapat(); }}>
@@ -383,7 +385,7 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly }: { cfg: any; onSave: (
               <input value={vBas} onChange={(e) => setVBas(e.target.value.replace(/[^\d:]/g, ''))} placeholder="Başlangıç dk:sn (ops.)" style={{ flex: 1, minWidth: 120 }} />
               <input value={vBit} onChange={(e) => setVBit(e.target.value.replace(/[^\d:]/g, ''))} placeholder="Bitiş dk:sn (ops.)" style={{ flex: 1, minWidth: 120 }} />
             </div>
-            <textarea value={vAciklama} onChange={(e) => setVAciklama(e.target.value)} placeholder={'Bu videoya özel açıklama (ops. — md: # başlık, **kalın**, - madde)'} style={{ width: '100%', minHeight: 70 }} />
+            <textarea value={vAciklama} onChange={(e) => setVAciklama(e.target.value)} placeholder={'Bu videoya özel açıklama (ops.)'} style={{ width: '100%', minHeight: 70 }} />
             <div className="rowbtns" style={{ marginTop: 6 }}>
               <button className="btn sm" onClick={videoKaydet} disabled={!vUrl.trim()}>{vidFormMode === 'edit' ? 'Kaydet' : 'Ekle'}</button>
               <button className="btn ghost sm" onClick={formuKapat}>Vazgeç</button>
@@ -391,14 +393,16 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly }: { cfg: any; onSave: (
           </div>
         )}
         {!randevu && secili && <div style={{ margin: '0 0 4px' }}><EmbedVideo url={secili.url} bas={secili.bas} bit={secili.bit} /></div>}
+        {/* Kişisel kartlarda Açıklama artık düz metin — Meridyen'in md ile yazdığı içerikten farklı olarak
+            kullanıcıdan hiçbir sözdizimi (#, **, -…) beklemiyoruz, sadece satır aralarını koruyoruz. */}
         {(!readOnly || icerikVal.trim()) && <div className="k">Açıklama</div>}
         {readOnly ? (
-          icerikVal.trim() ? <div>{renderMetin(icerikVal)}</div> : null
+          icerikVal.trim() ? <div style={{ whiteSpace: 'pre-wrap' }}>{icerikVal}</div> : null
         ) : icerikEdit ? (
-          <textarea autoFocus value={icerikVal} onChange={(e) => setIcerikVal(e.target.value)} onBlur={icerikKaydet} placeholder={'# Başlık\nNotun…\n- madde\n**kalın**'} style={{ width: '100%', minHeight: 100 }} />
+          <textarea autoFocus value={icerikVal} onChange={(e) => setIcerikVal(e.target.value)} onBlur={icerikKaydet} placeholder={'Notunu yaz…'} style={{ width: '100%', minHeight: 100 }} />
         ) : (
-          <div onClick={() => setIcerikEdit(true)} style={{ cursor: 'text', minHeight: 24 }}>
-            {icerikVal.trim() ? renderMetin(icerikVal) : <div className="note" style={{ marginTop: 0 }}>Yazmak için dokun…</div>}
+          <div onClick={() => setIcerikEdit(true)} style={{ cursor: 'text', minHeight: 24, whiteSpace: 'pre-wrap' }}>
+            {icerikVal.trim() ? icerikVal : <div className="note" style={{ marginTop: 0 }}>Yazmak için dokun…</div>}
           </div>
         )}
         {/* Videoya özel açıklama: genel açıklamadan SONRA, salt okunur (düzenlemesi ✎'den) — genel açıklamayla
@@ -406,7 +410,7 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly }: { cfg: any; onSave: (
         {!randevu && secili?.ozelNot && (
           <div style={{ margin: '10px 0 0' }}>
             <div className="note" style={{ margin: '0 0 2px', fontWeight: 700 }}>🎬 Bu videoya özel</div>
-            {renderMetin(secili.ozelNot)}
+            <div style={{ whiteSpace: 'pre-wrap' }}>{secili.ozelNot}</div>
           </div>
         )}
       </div>
@@ -950,6 +954,9 @@ export default function Rite() {
   const [detaySablon, setDetaySablon] = useState<any>(null);
   const [zamanOpen, setZamanOpen] = useState(false);
   const [grupEditOpen, setGrupEditOpen] = useState(false);
+  // Not kartının yeni tasarımı: video hiç yokken title bar'daki 🎬 ikonuna basınca Açıklama'nın üstündeki
+  // şerit açılır (ilk videoyu oradan eklersin) — bir video eklenince şerit zaten kalıcı görünür olur.
+  const [notVideoAcik, setNotVideoAcik] = useState(false);
   const [grupEditVal, setGrupEditVal] = useState('');
   const [grupEditAltVal, setGrupEditAltVal] = useState('');
   const [paylasOpen, setPaylasOpen] = useState(false);
@@ -1509,7 +1516,7 @@ export default function Rite() {
     openDetay(obj, 'aktivite', { preview: true });
   }
   function openRit(rt: any) { openDetay(rt, 'ritual'); }
-  function closeDetay() { setDetay(null); setTaze(null); }
+  function closeDetay() { setDetay(null); setTaze(null); setNotVideoAcik(false); }
   // Havuzdaki (kişisel) bir aktivite/programın grubunu (ve varsa alt grubunu) değiştir — aktivite ve program için ortak.
   async function setAktGrup(id: string, grup: string, altGrup?: string) {
     if (!client) return;
@@ -2971,21 +2978,52 @@ export default function Rite() {
         // hiçbir şeyi kaydetmiyor (bkz. o fonksiyonlar). preview (Inbox önizlemesi) de id'siz ama taslak DEĞİL —
         // orada Kaydet/Paylaş/Sil gibi kalıcı hiçbir işlem yok, o yüzden ayrıca dışlanıyor.
         const isDraft = !o.id && !preview;
+        // "Not" (Ajanda'da, salt kart_tipi='bilgi', randevu/alışkanlık değil) için deneme aşamasındaki yeni
+        // tasarım: title bar artık düzenlenebilir bir alan değil, sabit bir etiket ("Yeni not"/"Not düzenleme");
+        // asıl Ad girişi içeriğe iniyor. Randevu/Alışkanlık/Rutin/Havuz taslağı şimdilik eski haliyle kalıyor.
+        const isNot = isRit && kTip === 'bilgi' && !kCfg?.randevu && !o.aliskanlik;
         return (
         <div className="modal full" onMouseDown={() => closeDetay()}>
           <div className="sheet fullsheet" onMouseDown={(e) => e.stopPropagation()} style={stilP ? { borderTop: '4px solid ' + stilP.ac } : undefined}>
             <div className="sheetgrip" onClick={() => closeDetay()} />
             <button className="x" onClick={() => closeDetay()}>×</button>
             {isRit ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                {kTip === 'bilgi' && !isDraft && <div className={'chk' + (ritDone(o.id) ? ' on' : '')} onClick={() => toggleRit(o.id)} title="Yaptım">{ritDone(o.id) ? '✓' : ''}</div>}
-                <input className="detbaslik" value={adInput} autoFocus={isDraft} onFocus={(e) => e.target.select()} onChange={(e) => setAdInput(e.target.value)} onBlur={() => { if (adInput.trim() && adInput.trim() !== (o.ad || '')) setRitAd(o.id, adInput); }} style={{ flex: 1 }} />
-              </div>
+              isNot ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {!isDraft && <div className={'chk' + (ritDone(o.id) ? ' on' : '')} onClick={() => toggleRit(o.id)} title="Yaptım">{ritDone(o.id) ? '✓' : ''}</div>}
+                  <h2 style={{ margin: 0, flex: 1 }}>{isDraft ? 'Yeni not' : 'Not düzenleme'}</h2>
+                  {!(kCfg?.videolar?.length > 0) && (
+                    <button
+                      type="button"
+                      onClick={() => setNotVideoAcik((v) => !v)}
+                      title="Video ekle"
+                      style={{ background: 'none', border: 'none', padding: '0 6px 0 0', fontSize: 17, cursor: 'pointer', opacity: notVideoAcik ? 1 : 0.5 }}
+                    >🎬</button>
+                  )}
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {kTip === 'bilgi' && !isDraft && <div className={'chk' + (ritDone(o.id) ? ' on' : '')} onClick={() => toggleRit(o.id)} title="Yaptım">{ritDone(o.id) ? '✓' : ''}</div>}
+                  <input className="detbaslik" value={adInput} autoFocus={isDraft} onFocus={(e) => e.target.select()} onChange={(e) => setAdInput(e.target.value)} onBlur={() => { if (adInput.trim() && adInput.trim() !== (o.ad || '')) setRitAd(o.id, adInput); }} style={{ flex: 1 }} />
+                </div>
+              )
             ) : isDraft ? (
               // Havuz taslağı: başlık de Ajanda taslağı gibi düzenlenebilir, ama kaydı yok (id yok) — sadece
               // yerel taslağı (patchDetay) güncelliyor, taslakKaydet basılınca gerçek satıra yazılıyor.
               <input className="detbaslik" value={adInput} autoFocus onFocus={(e) => e.target.select()} onChange={(e) => setAdInput(e.target.value)} onBlur={() => { if (adInput.trim() && adInput.trim() !== (o.ad || '')) patchDetay({ ad: adInput.trim() }); }} style={{ width: '100%' }} />
             ) : <h2 style={{ paddingRight: 34 }}>{o.ad}</h2>}
+            {isNot && (
+              <input
+                className="detbaslik"
+                value={adInput}
+                onFocus={(e) => e.target.select()}
+                onChange={(e) => setAdInput(e.target.value)}
+                onBlur={() => { if (adInput.trim() && adInput.trim() !== (o.ad || '')) setRitAd(o.id, adInput); }}
+                placeholder="Not adı"
+                autoFocus={isDraft}
+                style={{ width: '100%', padding: '2px 0 4px', margin: '2px 0 0' }}
+              />
+            )}
             <div className="m">
               {isRit ? null : (
                 personal ? (
@@ -3098,7 +3136,7 @@ export default function Rite() {
                 böylece Ajandama eklemeden kart orada da (Havuz'da olduğu gibi) açılabiliyor. */}
             {kTip === 'bilgi' && (() => {
               const editable = !preview && (isRit ? o.kaynak === 'Kendi' : isDraft);
-              if (editable) return <BilgiKartEdit cfg={kCfg} onSave={bilgiKaydet} randevu={!!kCfg?.randevu} />;
+              if (editable) return <BilgiKartEdit cfg={kCfg} onSave={bilgiKaydet} randevu={!!kCfg?.randevu} notTasarimi={isNot} videoAcikZorla={notVideoAcik} />;
               if (!preview && isRit) return <BilgiKart cfg={kCfg} onSave={bilgiKaydet} />;
               return <BilgiKartEdit cfg={kCfg} onSave={() => {}} randevu={!!kCfg?.randevu} readOnly />;
             })()}
