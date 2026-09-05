@@ -49,6 +49,10 @@ const OLCU_ETIKET: Record<string, string> = { kilo: 'Kilo', boy: 'Boy', bel: 'Be
 // Ölçüm anahtarı → varsayılan alan (statik tahmin; Meridyen'deki OLCU_INFO ile aynı). Kart_config.dikey varsa (bkz anahtarDikey) ONA öncelik verilir.
 const OLCU_ALAN: Record<string, string> = { kilo: 'Beslenme', bel: 'Beslenme', kalca: 'Beslenme', vucut_yagi: 'Beslenme', bel_kalca: 'Beslenme', vki: 'Beslenme', su: 'Beslenme', gogus: 'Fitness', kol: 'Fitness', bacak: 'Fitness', kas: 'Fitness', ruh_hali: 'Mental', odak_dk: 'Mental', boy: 'Genel' };
 const ALAN_SIRA = ['Beslenme', 'Fitness', 'Fizyo', 'Psikoloji', 'Mental', 'Genel', 'Diğer'];
+// Gelişim ekranındaki ＋ (hızlı Ölçüm ekle) için varsayılan birimler — Ruh hali/Odak/Su hariç, onların zaten
+// kendi kartları var (MoodKart/pomodoro/su sayacı). Kullanıcı isterse birimi elle değiştirebiliyor.
+const OLCU_BIRIM: Record<string, string> = { kilo: 'kg', boy: 'cm', bel: 'cm', kalca: 'cm', gogus: 'cm', kol: 'cm', bacak: 'cm', vucut_yagi: '%', kas: 'kg', bel_kalca: '', vki: '' };
+const OLCU_HIZLI_ANAHTAR = Object.keys(OLCU_ETIKET).filter((k) => !['ruh_hali', 'odak_dk', 'su'].includes(k));
 // Rite Studio'da kart_config.dikey olarak seçilen alan etiketi → okunur ad (bkz app-meridyen/app/atama/page.tsx DIKEY_OPTS).
 const DIKEY_LABEL: Record<string, string> = { beslenme: 'Beslenme', fitness: 'Fitness', fizyo: 'Fizyo', psikoloji: 'Psikoloji', mental: 'Mental', genel: 'Genel' };
 // kart_config.stil — Meridyen Studio'da seçilen renk/tema preseti (bg = açık zemin, ac = vurgu rengi, tx = yazı rengi). Liste Meridyen'deki STIL_PRESETS ile aynı kalmalı.
@@ -828,6 +832,11 @@ export default function Rite() {
   const [yeniGrupAd, setYeniGrupAd] = useState('');
   const [ekstraGruplar, setEkstraGruplar] = useState<string[]>([]);
   const [ekleMenuOpen, setEkleMenuOpen] = useState(false);
+  const [olcumEkleOpen, setOlcumEkleOpen] = useState(false);
+  const [olcumSecAnahtar, setOlcumSecAnahtar] = useState<string | null>(null);
+  const [olcumOzelAd, setOlcumOzelAd] = useState('');
+  const [olcumDeger, setOlcumDeger] = useState('');
+  const [olcumBirim, setOlcumBirim] = useState('');
   const [ayracYeniOpen, setAyracYeniOpen] = useState(false);
   const [ayracEditId, setAyracEditId] = useState<string | null>(null);
   const [ayracAdVal, setAyracAdVal] = useState('');
@@ -1752,6 +1761,16 @@ export default function Rite() {
     setMeas(m.data || []);
     if (!ritDone(ritId)) toggleRit(ritId);
   }
+  // Gelişim ekranındaki ＋ (hızlı Ölçüm ekle): olcumKaydet ile aynı gün-bazlı upsert, ama bağlı bir ritüel/kart
+  // yok — "yaptım" işaretlenecek bir kart olmadığı için toggleRit çağrısı yok, sadece dog_measurements'a yazıp
+  // Gelişim grafiğini tazeliyor.
+  async function olcumEkleGenel(anahtar: string, deger: number, birim: string | null) {
+    if (!client) return;
+    await supabase.from('dog_measurements').delete().eq('client_id', client.id).eq('anahtar', anahtar).eq('tarih', today);
+    await supabase.from('dog_measurements').insert({ client_id: client.id, anahtar, deger, birim, tarih: today });
+    const m = await supabase.from('dog_measurements').select('tarih,anahtar,deger,birim').eq('client_id', client.id).order('tarih', { ascending: true }).limit(80);
+    setMeas(m.data || []);
+  }
   // Gün içinde birikimli ölçüm (su, odak dk): mevcut bugünkü değere delta ekler, upsert eder. Pomodoro/Su kartları kullanır.
   async function biriktirKaydet(ritId: string, anahtar: string, delta: number, birim: string | null) {
     if (!client) return;
@@ -2398,7 +2417,11 @@ export default function Rite() {
                     {gruplar[alan].map((k) => {
                       const arr = measByKey[k]; const l = arr[arr.length - 1];
                       const son = arr.slice(-7).map((m: any) => Number(m.deger)); const mn = Math.min(...son), mx = Math.max(...son);
-                      return <div key={k} className="mrow"><span>{OLCU_ETIKET[k] || k}<span className="msprk">{son.map((v: number, i: number) => <i key={i} style={{ height: (mx > mn ? ((v - mn) / (mx - mn)) * 100 : 50) + '%' }} />)}</span></span><b>{l.deger} {l.birim || ''}</b></div>;
+                      // "ozel_..." önekli anahtarlar Gelişim'deki hızlı Ölçüm ekle formundan (kullanıcının kendi
+                      // yazdığı serbest etiket) geliyor — OLCU_ETIKET'te olmadığından ham anahtar yerine önek
+                      // temizlenip okunur hale getiriliyor (bkz. olcumEkleOpen formu).
+                      const etiket = OLCU_ETIKET[k] || (k.startsWith('ozel_') ? k.slice(5).replace(/_/g, ' ') : k);
+                      return <div key={k} className="mrow"><span>{etiket}<span className="msprk">{son.map((v: number, i: number) => <i key={i} style={{ height: (mx > mn ? ((v - mn) / (mx - mn)) * 100 : 50) + '%' }} />)}</span></span><b>{l.deger} {l.birim || ''}</b></div>;
                     })}
                   </div>
                 ));
@@ -2579,10 +2602,19 @@ export default function Rite() {
         {[['ajanda', '🗓', 'Ajanda'], ['havuz', '⊕', 'Havuz']].map(([k, ic, l]) => (
           <button key={k} className={['ajanda', 'mezunlar'].includes(screen) && k === 'ajanda' ? 'on' : screen === k ? 'on' : ''} onClick={() => setScreen(k)}><span className="ic">{ic}</span>{l}</button>
         ))}
-        {/* ＋ tuşu Gelişim/Ayarlar'da hiç gösterilmiyor — orada kart eklemenin bir anlamı yok. Ajanda'da tam
-            menü (Not/Alışkanlık/Randevu/Ayraç/Rutin), Havuz'da daraltılmış menü (Randevu/Ayraç/Rutin hariç —
-            bkz. ekleMenüsü içeriği) açılıyor. */}
-        {['ajanda', 'mezunlar', 'havuz'].includes(screen) && <button className="plus" onClick={() => setEkleMenuOpen(true)} aria-label="Ekle">＋</button>}
+        {/* ＋ tuşu artık her sekmede görünüyor (kullanıcı isteği — Ayarlar'da grileşip devre dışı kalmak,
+            hiç kaybolmaktan daha tutarlı). Ajanda'da tam menü, Havuz'da daraltılmış menü (bkz. ekleMenüsü);
+            Gelişim'de kart eklemek yerine hızlı bir Ölçüm/Değerlendirme girişi açıyor (kullanıcı fikri) —
+            böylece Gelişim'deki ＋ de gerçekten işe yarıyor. Sadece Ayarlar'da yapılacak bir "ekleme" yok. */}
+        <button
+          className={'plus' + (screen === 'bilgi' ? ' dim' : '')}
+          disabled={screen === 'bilgi'}
+          onClick={() => {
+            if (screen === 'gelisim') { setOlcumSecAnahtar(null); setOlcumOzelAd(''); setOlcumDeger(''); setOlcumBirim(''); setOlcumEkleOpen(true); }
+            else if (screen !== 'bilgi') setEkleMenuOpen(true);
+          }}
+          aria-label={screen === 'gelisim' ? 'Ölçüm ekle' : 'Ekle'}
+        >＋</button>
         {[['gelisim', '📈', 'Gelişim'], ['bilgi', '⚙', 'Ayarlar']].map(([k, ic, l]) => (
           <button key={k} className={screen === k ? 'on' : ''} onClick={() => setScreen(k)}><span className="ic">{ic}</span>{l}</button>
         ))}
@@ -3069,6 +3101,43 @@ export default function Rite() {
               {screen !== 'havuz' && <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); setScreen('ajanda'); setAjView('gun'); startLink(); }}><span className="ekic">🔗</span>Rutin</button>}
             </div>
             <div className="note" style={{ textAlign: 'center', marginTop: 12 }}>{screen === 'havuz' ? 'Havuza eklenen kart, Ajanda\'ya eklendiğinde gerçek bir tarih alır.' : 'Not içine bağlantı eklersen otomatik video kartına döner.'}</div>
+          </div>
+        </div>
+      )}
+
+      {/* Gelişim ekranındaki ＋ ile hızlı ölçüm/değerlendirme girişi — Ölçüm kartı gibi ayrı bir ritüele bağlı
+          değil, doğrudan bugüne (dog_measurements) yazılıyor (bkz. olcumEkleGenel). Ruh hali/Odak/Su hariç —
+          onların kendi kartları var; burada yalnız fiziksel ölçümler + serbest "Diğer" (özel etiket) var. */}
+      {olcumEkleOpen && (
+        <div className="modal" onMouseDown={() => setOlcumEkleOpen(false)}>
+          <div className="sheet" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="sheetgrip" onClick={() => setOlcumEkleOpen(false)} />
+            <h2>📏 Ölçüm ekle</h2>
+            <label className="fldlbl" style={{ marginTop: 0 }}>Ne ölçtün / değerlendirdin?</label>
+            <div style={{ margin: '2px 0 8px' }}>
+              {OLCU_HIZLI_ANAHTAR.map((k) => (
+                <span key={k} className={'chip' + (olcumSecAnahtar === k ? ' on' : '')} onClick={() => { setOlcumSecAnahtar(k); setOlcumBirim(OLCU_BIRIM[k] ?? ''); }}>{OLCU_ETIKET[k]}</span>
+              ))}
+              <span className={'chip' + (olcumSecAnahtar === 'ozel' ? ' on' : '')} onClick={() => { setOlcumSecAnahtar('ozel'); setOlcumBirim(''); }}>Diğer…</span>
+            </div>
+            {olcumSecAnahtar === 'ozel' && <input value={olcumOzelAd} onChange={(e) => setOlcumOzelAd(e.target.value)} placeholder="ör. Tansiyon, Nabız…" style={{ marginBottom: 8 }} autoFocus />}
+            {olcumSecAnahtar && (
+              <div className="daterow" style={{ marginTop: 0 }}>
+                <input type="number" inputMode="decimal" step="any" value={olcumDeger} onChange={(e) => setOlcumDeger(e.target.value)} placeholder="Değer" style={{ flex: 1 }} autoFocus={olcumSecAnahtar !== 'ozel'} />
+                <input value={olcumBirim} onChange={(e) => setOlcumBirim(e.target.value)} placeholder="Birim (ops.)" style={{ width: 90 }} />
+              </div>
+            )}
+            <button
+              className="btn" style={{ width: '100%', marginTop: 12 }}
+              disabled={!olcumSecAnahtar || !olcumDeger.trim() || isNaN(Number(olcumDeger)) || (olcumSecAnahtar === 'ozel' && !olcumOzelAd.trim())}
+              onClick={() => {
+                const anahtar = olcumSecAnahtar === 'ozel'
+                  ? 'ozel_' + olcumOzelAd.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_çğıöşü]/g, '')
+                  : (olcumSecAnahtar as string);
+                olcumEkleGenel(anahtar, Number(olcumDeger), olcumBirim.trim() || null);
+                setOlcumEkleOpen(false);
+              }}
+            >Kaydet</button>
           </div>
         </div>
       )}
