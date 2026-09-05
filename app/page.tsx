@@ -362,11 +362,14 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi }: { cfg: a
         )}
         {/* Video şeridi Açıklama'nın ÜZERİNDE: videolar + (varsa seçili video için) ✎ düzenle + en sağda ＋ ekle
             (kullanıcı isteği — düzenle, eklemenin solunda).
-            readOnly: sadece görüntüleme — ✕/✎/＋ ikonları gizlenir, chip'ler yalnız video seçmek için tıklanabilir kalır. */}
+            readOnly: sadece görüntüleme — ✕/✎/＋ ikonları gizlenir, chip'ler yalnız video seçmek için tıklanabilir kalır.
+            notTasarimi: dolu şerit de, boşken duran "hazır alan" ile AYNI gri arkaplan/köşe/boşluk stilini
+            kullanıyor — kullanıcı isteği: video eklenmeden önceki ve sonraki hal aynı "alan"ın devamı gibi
+            hissettirsin, yalnız kenar çizgisi olan çıplak bir şerit gibi değil. */}
         {!randevu && videolar.length > 0 && (
-          // notTasarimi: Açıklama artık kutu/çizgi olmadığı için video şeridi onunla karışabilir — kendi
-          // altına ince bir çizgi + boşluk vererek "ayrı bir şerit" olduğunu belli ediyoruz (kullanıcı isteği).
-          <div style={{ margin: '0 0 10px', paddingBottom: notTasarimi ? 10 : 0, borderBottom: notTasarimi ? '1px solid var(--line)' : undefined, display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+          <div style={notTasarimi
+            ? { margin: '0 0 12px', padding: '7px 10px', borderRadius: 8, background: 'var(--card2,#f6f4ee)', display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }
+            : { margin: '0 0 10px', display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
             {videolar.map((v, i) => (
               <span key={i} className={'chip' + (i === vidSec ? ' on' : '')} onClick={() => { setVidSec(i); if (vidFormMode) formuKapat(); }}>
                 {v.baslik || ('Video ' + (i + 1))}{(v.bas != null || v.bit != null) ? ` ⏱${saniyeStr(v.bas) || '0'}–${v.bit != null ? saniyeStr(v.bit) : '…'}` : ''}
@@ -385,7 +388,7 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi }: { cfg: a
         {!randevu && videolar.length === 0 && !readOnly && (
           notTasarimi ? (
             <div
-              onClick={() => (vidFormMode === 'add' ? formuKapat() : formuAc('add'))}
+              onClick={() => formuAc('add')}
               title="Video ekle"
               style={{ margin: '0 0 12px', padding: '7px 10px', borderRadius: 8, background: 'var(--card2,#f6f4ee)', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', cursor: 'pointer' }}
             >
@@ -397,20 +400,26 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi }: { cfg: a
             </div>
           )
         )}
+        {/* Video ekle/düzenle formu: bildirim/zamanlama seçenekleri gibi modal (üste açılan pencere) olarak
+            geliyor — kullanıcı isteği: aynı tutarlılık için içeriğe gömülü kutu yerine modal. */}
         {!randevu && !readOnly && vidFormMode && (
-          <div style={{ margin: '0 0 10px', padding: 8, border: '1px solid var(--line)', borderRadius: 8 }}>
-            <div className="daterow" style={{ flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
-              <input value={vUrl} onChange={(e) => setVUrl(e.target.value)} placeholder="https://… (şart)" style={{ flex: 2, minWidth: 160 }} />
-              <input value={vAd} onChange={(e) => setVAd(e.target.value)} placeholder="Video adı (ops.)" style={{ flex: 1, minWidth: 110 }} />
-            </div>
-            <div className="daterow" style={{ flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
-              <input value={vBas} onChange={(e) => setVBas(e.target.value.replace(/[^\d:]/g, ''))} placeholder="Başlangıç dk:sn (ops.)" style={{ flex: 1, minWidth: 120 }} />
-              <input value={vBit} onChange={(e) => setVBit(e.target.value.replace(/[^\d:]/g, ''))} placeholder="Bitiş dk:sn (ops.)" style={{ flex: 1, minWidth: 120 }} />
-            </div>
-            <textarea value={vAciklama} onChange={(e) => setVAciklama(e.target.value)} placeholder={'Bu videoya özel açıklama (ops.)'} style={{ width: '100%', minHeight: 70 }} />
-            <div className="rowbtns" style={{ marginTop: 6 }}>
-              <button className="btn sm" onClick={videoKaydet} disabled={!vUrl.trim()}>{vidFormMode === 'edit' ? 'Kaydet' : 'Ekle'}</button>
-              <button className="btn ghost sm" onClick={formuKapat}>Vazgeç</button>
+          <div className="modal top2" onMouseDown={formuKapat}>
+            <div className="sheet small" onMouseDown={(e) => e.stopPropagation()}>
+              <button className="x" onClick={formuKapat}>×</button>
+              <h3 style={{ marginBottom: 8 }}>🎬 {vidFormMode === 'edit' ? 'Videoyu düzenle' : 'Video ekle'}</h3>
+              <div className="daterow" style={{ flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+                <input value={vUrl} onChange={(e) => setVUrl(e.target.value)} placeholder="https://… (şart)" style={{ flex: 2, minWidth: 160 }} />
+                <input value={vAd} onChange={(e) => setVAd(e.target.value)} placeholder="Video adı (ops.)" style={{ flex: 1, minWidth: 110 }} />
+              </div>
+              <div className="daterow" style={{ flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+                <input value={vBas} onChange={(e) => setVBas(e.target.value.replace(/[^\d:]/g, ''))} placeholder="Başlangıç dk:sn (ops.)" style={{ flex: 1, minWidth: 120 }} />
+                <input value={vBit} onChange={(e) => setVBit(e.target.value.replace(/[^\d:]/g, ''))} placeholder="Bitiş dk:sn (ops.)" style={{ flex: 1, minWidth: 120 }} />
+              </div>
+              <textarea value={vAciklama} onChange={(e) => setVAciklama(e.target.value)} placeholder={'Bu videoya özel açıklama (ops.)'} style={{ width: '100%', minHeight: 70 }} />
+              <div className="rowbtns" style={{ marginTop: 6 }}>
+                <button className="btn sm" onClick={videoKaydet} disabled={!vUrl.trim()}>{vidFormMode === 'edit' ? 'Kaydet' : 'Ekle'}</button>
+                <button className="btn ghost sm" onClick={formuKapat}>Vazgeç</button>
+              </div>
             </div>
           </div>
         )}
@@ -442,7 +451,12 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi }: { cfg: a
           <div onClick={() => setIcerikEdit(true)} style={notTasarimi
             ? { cursor: 'text', minHeight: 92, whiteSpace: 'pre-wrap', border: '1px solid var(--line)', borderRadius: 8, padding: 8, fontSize: 14, lineHeight: 1.6, boxSizing: 'border-box' }
             : { cursor: 'text', minHeight: 24, whiteSpace: 'pre-wrap' }}>
-            {icerikVal.trim() ? icerikVal : <div className="note" style={{ marginTop: 0 }}>Yazmak için dokun…</div>}
+            {icerikVal.trim() ? icerikVal : (
+              // notTasarimi: placeholder metni de textarea'nın kendi placeholder'ıyla (Notunu yaz…) AYNI
+              // font büyüklüğünde — farklı olursa dokununca yazı boyu değişiyormuş gibi bir sıçrama izlenimi
+              // veriyordu (kullanıcı geri bildirimi).
+              <div className={notTasarimi ? undefined : 'note'} style={notTasarimi ? { marginTop: 0, fontSize: 14, lineHeight: 1.6, color: 'var(--muted)' } : { marginTop: 0 }}>Yazmak için dokun…</div>
+            )}
           </div>
         )}
         {/* Videoya özel açıklama: genel açıklamadan SONRA, salt okunur (düzenlemesi ✎'den) — genel açıklamayla
@@ -3033,7 +3047,7 @@ export default function Rite() {
                 // İnce başlık şeridi: sabit etiket (gerçek "başlık" artık aşağıdaki Ad alanı) + sağda 🔔/↪️/🎬 —
                 // ayrı, kendi başına boşluk yaratan genel zamanlama şeridi Not'ta hiç render edilmiyor (yukarısı).
                 // Sağda 34px boşluk (paddingRight) bırakılıyor ki ikonlar köşedeki ✕ (mutlak konumlu) ile çakışmasın.
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingRight: 34 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingRight: 34, marginTop: -8 }}>
                   {!isDraft && <div className={'chk' + (ritDone(o.id) ? ' on' : '')} onClick={() => toggleRit(o.id)} title="Yaptım">{ritDone(o.id) ? '✓' : ''}</div>}
                   <div style={{ flex: 1, fontSize: 11.5, fontWeight: 800, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.4px' }}>{isDraft ? 'Yeni not' : 'Not Düzenle'}</div>
                   {!paylasilamaz && !isTaze && <button type="button" onClick={() => { setPaylasOpen(true); setKMsg(''); }} title="Paylaş" style={{ background: 'none', border: 'none', padding: 0, fontSize: 16, cursor: 'pointer', opacity: .55 }}>↪️</button>}
