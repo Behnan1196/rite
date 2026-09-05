@@ -11,13 +11,17 @@ export const runtime = 'nodejs';
 //   HOSTINGER_FTP_USER
 //   HOSTINGER_FTP_PASSWORD
 //   HOSTINGER_FTP_PORT      — ops., varsayılan 21
+//   HOSTINGER_FTP_SECURE    — ops., FTPS gerekiyorsa "true" yap (çoğu Hostinger hesabında gerekmez)
 //   HOSTINGER_FTP_DIR       — hedef klasör, ör. /public_html/rite-uploads
 //   HOSTINGER_PUBLIC_BASE_URL — o klasörün dışarıdan erişilen tam adresi, ör. https://alanadin.com/rite-uploads
 const MAX_BYTES = 8 * 1024 * 1024; // 8MB — istemci tarafında zaten küçültülüyor (bkz. BilgiKartEdit), bu son bir güvenlik sınırı
 const ALLOWED_EXT = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif']);
 
 export async function POST(req: Request) {
-  const host = process.env.HOSTINGER_FTP_HOST;
+  // HOSTINGER_FTP_HOST bazen "ftp://alanadin.com" ya da sonunda "/" ile girilebiliyor (Hostinger panelinden
+  // kopyalanınca ya da elle yazılınca) — basic-ftp bunu ÇIPLAK bir host/IP bekliyor, şema/slash kalırsa
+  // "getaddrinfo ENOTFOUND ftp://…" hatası veriyor. Burada temizleniyor ki kullanıcı nasıl yapıştırırsa yapıştırsın çalışsın.
+  const host = (process.env.HOSTINGER_FTP_HOST || '').trim().replace(/^ftps?:\/\//i, '').replace(/\/+$/, '');
   const user = process.env.HOSTINGER_FTP_USER;
   const password = process.env.HOSTINGER_FTP_PASSWORD;
   const dir = process.env.HOSTINGER_FTP_DIR || '/';
@@ -46,9 +50,11 @@ export async function POST(req: Request) {
 
   const name = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8) + '.' + ext;
 
+  // Bazı Hostinger hesapları düz FTP yerine FTPS (explicit TLS) istiyor — gerekirse HOSTINGER_FTP_SECURE=true ile açılabilir.
+  const secure = /^(1|true|yes)$/i.test(process.env.HOSTINGER_FTP_SECURE || '');
   const client = new Client();
   try {
-    await client.access({ host, user, password, port, secure: false });
+    await client.access({ host, user, password, port, secure });
     await client.ensureDir(dir);
     await client.uploadFrom(Readable.from(buf), name);
   } catch (e: any) {

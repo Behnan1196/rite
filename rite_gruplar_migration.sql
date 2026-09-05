@@ -13,6 +13,11 @@ create table if not exists dog_gruplar (
 );
 create index if not exists dog_gruplar_client_idx on dog_gruplar(client_id);
 create index if not exists dog_gruplar_ust_idx on dog_gruplar(ust_id);
+-- Uygulama diğer tüm tablolarda (dog_activities, dog_rituals, ...) olduğu gibi anon anahtarla + kendi
+-- client_id filtresiyle çalışıyor, Postgres RLS ile değil — yeni tablolarda Supabase varsayılan olarak
+-- RLS'i açık bırakabiliyor, o da "new row violates row-level security policy" hatası veriyordu. Diğer
+-- tablolarla tutarlı olsun diye burada da kapatılıyor.
+alter table dog_gruplar disable row level security;
 
 -- dog_activities'teki mevcut "grup" (metin) alanı Grup adını taşımaya devam ediyor; alt_grup ise
 -- yeni, opsiyonel ikinci seviye. Kasıtlı olarak dog_gruplar'a yabancı anahtarla bağlı DEĞİL — tıpkı
