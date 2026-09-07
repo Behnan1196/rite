@@ -216,6 +216,33 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi }: { cfg: a
     setVidSec(0);
     if (vidFormMode === 'edit') formuKapat();
   }
+  // notTasarimi'in düzenleme modundaki liste görünümünde, bir satıra dokununca hem seçip hem de formunu tek
+  // seferde açmak için — formuAc('edit') her zaman `secili`yi (bir önceki render'daki vidSec) okuduğundan, aynı
+  // tıklamada hem setVidSec(i) hem formuAc('edit') çağırmak bayat kapanış (stale closure) yüzünden yanlış
+  // videoyu doldururdu. Bu yüzden videolar[i]'den doğrudan okuyor.
+  function satirDuzenAc(i: number) {
+    const v = videolar[i];
+    if (!v) return;
+    setVAd(v.baslik || ''); setVUrl(v.url); setVBas(saniyeStr(v.bas)); setVBit(saniyeStr(v.bit)); setVAciklama(v.ozelNot || '');
+    setVidSec(i);
+    setVidFormMode('edit');
+  }
+  // notTasarimi'in düzenleme modunda video ekleme/düzenleme artık modal değil — satırın (ya da "＋ Video ekle"
+  // satırının) hemen altına açılan aynı alan seti (kullanıcı isteği: "fazladan bir modal çıkmasına gerek yok").
+  // Legacy (Havuz taslağı, howto) yol hâlâ kendi modalini kullanıyor, bu değişkeni paylaşmıyor.
+  const vidFormAlanlarJsx = (
+    <>
+      <div className="daterow" style={{ flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+        <input value={vUrl} onChange={(e) => setVUrl(e.target.value)} placeholder="https://… (şart)" style={{ flex: 2, minWidth: 160 }} />
+        <input value={vAd} onChange={(e) => setVAd(e.target.value)} placeholder="Video adı (ops.)" style={{ flex: 1, minWidth: 110 }} />
+      </div>
+      <div className="daterow" style={{ flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+        <input value={vBas} onChange={(e) => setVBas(e.target.value.replace(/[^\d:]/g, ''))} placeholder="Başlangıç dk:sn (ops.)" style={{ flex: 1, minWidth: 120 }} />
+        <input value={vBit} onChange={(e) => setVBit(e.target.value.replace(/[^\d:]/g, ''))} placeholder="Bitiş dk:sn (ops.)" style={{ flex: 1, minWidth: 120 }} />
+      </div>
+      <textarea value={vAciklama} onChange={(e) => setVAciklama(e.target.value)} placeholder="Bu videoya özel açıklama (ops.)" style={{ width: '100%', minHeight: 60 }} />
+    </>
+  );
   function icerikKaydet() {
     setIcerikEdit(false);
     if (icerikVal.trim() !== (cfg?.icerik || '')) onSave({ ...cfg, icerik: icerikVal.trim() || null });
@@ -412,20 +439,63 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi }: { cfg: a
             </div>
             <div style={{ order: notTasarimi ? 2 : 1 }}>
               {notTasarimi ? (
-                // notTasarimi: video (chip'ler) ve resim (kutucuklar) TEK bir "medya" şeridinde, aynı gri
-                // arkaplan/köşe içinde — kullanıcı isteği: "resim özelliği tek kart sistemine eklenebilir",
-                // yani Not/Alışkanlık da artık Randevu'nun resim yükleme özelliğini kullanabiliyor.
+                // notTasarimi: video ve resim TEK bir "medya" şeridinde, aynı gri arkaplan/köşe içinde —
+                // kullanıcı isteği: "resim özelliği tek kart sistemine eklenebilir". Görüntüleme modunda eski
+                // chip + seç + oynat davranışı aynen sürüyor (bkz. aşağıdaki EmbedVideo); düzenleme modunda ise
+                // oynatma yok, video linkleri düz bir LİSTE halinde — bir satıra dokununca hemen altında (modal
+                // değil) düzenle formu açılıyor, ayrı bir ✕ ile de silinebiliyor (kullanıcı isteği: "video
+                // linklerini liste halinde görüp, değiştirebilmeli ve silebilmeliyiz").
                 <div style={{ margin: '0 0 12px', padding: '7px 10px', borderRadius: 8, background: 'var(--card2,#f6f4ee)' }}>
-                  {(videolar.length > 0 || !readOnly) && (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+                  {readOnly ? (
+                    videolar.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+                        {videolar.map((v, i) => (
+                          <span key={i} className={'chip' + (i === vidSec ? ' on' : '')} onClick={() => setVidSec(i)}>
+                            {v.baslik || ('Video ' + (i + 1))}{(v.bas != null || v.bit != null) ? ` ⏱${saniyeStr(v.bas) || '0'}–${v.bit != null ? saniyeStr(v.bit) : '…'}` : ''}
+                          </span>
+                        ))}
+                      </div>
+                    )
+                  ) : (
+                    <div>
                       {videolar.map((v, i) => (
-                        <span key={i} className={'chip' + (i === vidSec ? ' on' : '')} onClick={() => { setVidSec(i); if (vidFormMode) formuKapat(); }}>
-                          {v.baslik || ('Video ' + (i + 1))}{(v.bas != null || v.bit != null) ? ` ⏱${saniyeStr(v.bas) || '0'}–${v.bit != null ? saniyeStr(v.bit) : '…'}` : ''}
-                          {!readOnly && <span style={{ marginLeft: 6, opacity: 0.55 }} onClick={(e) => { e.stopPropagation(); videoSil(i); }}>✕</span>}
-                        </span>
+                        <div key={i}>
+                          <div
+                            onClick={() => (vidFormMode === 'edit' && vidSec === i ? formuKapat() : satirDuzenAc(i))}
+                            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', cursor: 'pointer' }}
+                          >
+                            <span style={{ flex: 1, fontSize: 13 }}>🎬 {v.baslik || ('Video ' + (i + 1))}{(v.bas != null || v.bit != null) ? ` ⏱${saniyeStr(v.bas) || '0'}–${v.bit != null ? saniyeStr(v.bit) : '…'}` : ''}</span>
+                            <span style={{ fontSize: 11, color: 'var(--muted)', opacity: .6 }}>{(vidFormMode === 'edit' && vidSec === i) ? '▴' : '▾'}</span>
+                            <span style={{ opacity: 0.55 }} onClick={(e) => { e.stopPropagation(); videoSil(i); }}>✕</span>
+                          </div>
+                          {vidFormMode === 'edit' && vidSec === i && (
+                            <div style={{ padding: '7px 8px', borderRadius: 8, background: '#fff', border: '1px solid var(--line)', margin: '2px 0 8px' }}>
+                              {vidFormAlanlarJsx}
+                              <div className="rowbtns" style={{ marginTop: 6 }}>
+                                <button className="btn sm" onClick={videoKaydet} disabled={!vUrl.trim()}>Kaydet</button>
+                                <button className="btn ghost sm" onClick={() => videoSil(i)}>Sil</button>
+                                <button className="btn ghost sm" onClick={formuKapat}>Vazgeç</button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       ))}
-                      {!readOnly && secili && <span className="chip" style={{ borderStyle: 'dashed' }} onClick={() => (vidFormMode === 'edit' ? formuKapat() : formuAc('edit'))} title="Seçili videoyu düzenle">✎</span>}
-                      {!readOnly && <span className="chip" style={{ borderStyle: 'dashed' }} onClick={() => (vidFormMode === 'add' ? formuKapat() : formuAc('add'))} title="Video ekle">＋ Video</span>}
+                      <div
+                        onClick={() => (vidFormMode === 'add' ? formuKapat() : formuAc('add'))}
+                        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', cursor: 'pointer' }}
+                      >
+                        <span style={{ flex: 1, fontSize: 13, opacity: .7 }}>＋ Video ekle</span>
+                        <span style={{ fontSize: 11, color: 'var(--muted)', opacity: .6 }}>{vidFormMode === 'add' ? '▴' : '▾'}</span>
+                      </div>
+                      {vidFormMode === 'add' && (
+                        <div style={{ padding: '7px 8px', borderRadius: 8, background: '#fff', border: '1px solid var(--line)', margin: '2px 0 4px' }}>
+                          {vidFormAlanlarJsx}
+                          <div className="rowbtns" style={{ marginTop: 6 }}>
+                            <button className="btn sm" onClick={videoKaydet} disabled={!vUrl.trim()}>Ekle</button>
+                            <button className="btn ghost sm" onClick={formuKapat}>Vazgeç</button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                   {resimGridJsx}
@@ -454,9 +524,10 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi }: { cfg: a
                   )}
                 </>
               )}
-              {/* Video ekle/düzenle formu: bildirim/zamanlama seçenekleri gibi modal (üste açılan pencere) olarak
-                  geliyor — kullanıcı isteği: aynı tutarlılık için içeriğe gömülü kutu yerine modal. */}
-              {!readOnly && vidFormMode && (
+              {/* Video ekle/düzenle formu (SADECE legacy/howto yol — Havuz taslağı): modal olarak açılıyor.
+                  notTasarimi'de artık kendi satır-içi formu var (bkz. yukarısı), bu modal orada tekrar
+                  açılmasın diye !notTasarimi ile sınırlanıyor. */}
+              {!notTasarimi && !readOnly && vidFormMode && (
                 <div className="modal top2" onMouseDown={formuKapat}>
                   <div className="sheet small" onMouseDown={(e) => e.stopPropagation()}>
                     <button className="x" onClick={formuKapat}>×</button>
@@ -477,10 +548,12 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi }: { cfg: a
                   </div>
                 </div>
               )}
-              {secili && <div style={{ margin: '0 0 4px' }}><EmbedVideo url={secili.url} bas={secili.bas} bit={secili.bit} /></div>}
-              {/* Videoya özel açıklama: genel açıklamadan SONRA, salt okunur (düzenlemesi ✎'den) — genel açıklamayla
-                  karışmasın diye küçük bir "Bu videoya özel" etiketiyle ayrıştırılıyor. */}
-              {secili?.ozelNot && (
+              {/* Video oynatma: notTasarimi'de sadece görüntüleme modunda (kullanıcı isteği: "düzenleme modunda
+                  video oynatma gerekmiyor") — legacy (Havuz taslağı) yolda değişmedi, hep gösteriliyordu. */}
+              {(!notTasarimi || readOnly) && secili && <div style={{ margin: '0 0 4px' }}><EmbedVideo url={secili.url} bas={secili.bas} bit={secili.bit} /></div>}
+              {/* Videoya özel açıklama: genel açıklamadan SONRA, salt okunur — notTasarimi'in düzenleme modunda
+                  bu zaten satır-içi formun kendi alanı (vAciklama), o yüzden burada tekrar gösterilmiyor. */}
+              {(!notTasarimi || readOnly) && secili?.ozelNot && (
                 <div style={{ margin: '10px 0 0' }}>
                   <div className="note" style={{ margin: '0 0 2px', fontWeight: 700 }}>🎬 Bu videoya özel</div>
                   <div style={{ whiteSpace: 'pre-wrap' }}>{secili.ozelNot}</div>
@@ -1040,9 +1113,6 @@ export default function Rite() {
   // aşağıdaki Düzenle/Vazgeç/Kaydet butonları ve setRitAd/setBilgiCfg/ritTasi/setRitSure/setRitGunler/
   // setRitReminder'daki "duzenleModu ise sadece yerelde tut" dalları).
   const [duzenleOrijinal, setDuzenleOrijinal] = useState<any>(null);
-  // Bildirim şeridi (Not/Alışkanlık, düzenleme modu): artık ayrı bir modal açmıyor, dokununca şeridin altında
-  // saat alanı açılıp kapanıyor (kullanıcı isteği — "fazladan bir modal çıkmasına gerek yok").
-  const [bildirimAcik, setBildirimAcik] = useState(false);
   const lastDetayAnahtarRef = useRef<string | null>(null);
   useEffect(() => {
     if (!detay) { lastDetayAnahtarRef.current = null; return; }
@@ -1053,7 +1123,6 @@ export default function Rite() {
       const isDraft2 = !o2.id && !detay.preview;
       setDuzenleModu(isDraft2 || (!!o2.id && taze === o2.id));
       setDuzenleOrijinal(null);
-      setBildirimAcik(false);
     }
   }, [detay, taze]);
   const [grupEditOpen, setGrupEditOpen] = useState(false);
@@ -3144,10 +3213,10 @@ export default function Rite() {
         // bu kopyayla geri dönüyor, alan değişiklikleri (Ad, Zamanlama, Bildirim, video/resim — bkz.
         // setRitAd/setBilgiCfg/ritTasi/setRitSure/setRitGunler/setRitReminder'daki duzenleModu dalları)
         // veritabanına hiç yazılmadan siliniyor. "Kaydet" ise o anki (yerelde biriken) hâli tek seferde yazıyor.
-        const kisiselDuzenleAc = () => { setDuzenleOrijinal({ ...o, kart_config: { ...(o.kart_config || {}) } }); setDuzenleModu(true); setBildirimAcik(false); };
-        const kisiselDuzenleVazgec = () => { if (duzenleOrijinal) patchDetay(duzenleOrijinal); setDuzenleModu(false); setDuzenleOrijinal(null); setBildirimAcik(false); };
+        const kisiselDuzenleAc = () => { setDuzenleOrijinal({ ...o, kart_config: { ...(o.kart_config || {}) } }); setDuzenleModu(true); };
+        const kisiselDuzenleVazgec = () => { if (duzenleOrijinal) patchDetay(duzenleOrijinal); setDuzenleModu(false); setDuzenleOrijinal(null); };
         const kisiselDuzenleKaydet = async () => {
-          if (!client || !o.id) { setDuzenleModu(false); setDuzenleOrijinal(null); setBildirimAcik(false); return; }
+          if (!client || !o.id) { setDuzenleModu(false); setDuzenleOrijinal(null); return; }
           await supabase.from('dog_rituals').update({
             ad: (o.ad || '').trim() || kisiselYeni,
             kart_config: o.kart_config || {},
@@ -3160,7 +3229,6 @@ export default function Rite() {
           loadData(client.id);
           setDuzenleModu(false);
           setDuzenleOrijinal(null);
-          setBildirimAcik(false);
         };
         // Taslak (yeni oluşturma, henüz kaydedilmemiş) formu zaten dışarı/× ile kapanmıyordu (bkz. aşağısı) —
         // kayıtlı bir kartı düzenlerken de aynı sebepten (yanlışlıkla dışarı dokunup değişiklikleri kaybetme
@@ -3360,27 +3428,23 @@ export default function Rite() {
                     <span style={{ fontSize: 13, color: 'var(--muted)' }}>{gunOzet}</span>
                   </div>
                 )}
-                {/* Bildirim şeridi: düzenleme modunda dokununca ayrı bir modal AÇMIYOR, tam bunun yerine kendi
-                    altında bir saat alanı açılıp kapanıyor (kullanıcı isteği — "fazladan bir modal çıkmasına
-                    gerek yok"). setRitReminder zaten duzenleModu'da sadece yerelde tutuyor (bkz. o fonksiyon),
-                    o yüzden burada ayrı bir Kaydet/Vazgeç gerekmiyor — asıl kaydetme kartın kendi Kaydet'inde. */}
+                {/* Bildirim şeridi: düzenleme modunda artık ayrı bir modal AÇMIYOR, hatta ayrı bir "aç/kapa"
+                    adımı bile yok — saat alanı doğrudan şeridin üzerinde (kullanıcı isteği: "fazladan bir modal
+                    çıkmasına gerek yok", "belki şerit üzerinde de halledebiliriz"). setRitReminder zaten
+                    duzenleModu'da sadece yerelde tutuyor, o yüzden ayrı bir Kaydet/Vazgeç gerekmiyor — asıl
+                    kaydetme kartın kendi Kaydet'inde. */}
                 {(!kisiselGorunumModu || o.hatirlatma_saat) && (
-                  <>
-                    <div
-                      onClick={() => { if (!kisiselGorunumModu) setBildirimAcik((v) => !v); }}
-                      style={{ padding: '7px 10px', borderRadius: 8, background: 'var(--card2,#f6f4ee)', display: 'flex', alignItems: 'center', gap: 8, cursor: kisiselGorunumModu ? 'default' : 'pointer' }}
-                    >
-                      <span>🔔</span>
-                      <span style={{ fontSize: 13, color: 'var(--muted)', flex: 1 }}>{o.hatirlatma_saat ? o.hatirlatma_saat : 'Bildirim ekle'}</span>
-                      {!kisiselGorunumModu && <span style={{ fontSize: 11, color: 'var(--muted)', opacity: .6 }}>{bildirimAcik ? '▴' : '▾'}</span>}
-                    </div>
-                    {!kisiselGorunumModu && bildirimAcik && (
-                      <div style={{ padding: '7px 10px', borderRadius: 8, background: 'var(--card2,#f6f4ee)', display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                  <div style={{ padding: '7px 10px', borderRadius: 8, background: 'var(--card2,#f6f4ee)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span>🔔</span>
+                    {kisiselGorunumModu ? (
+                      <span style={{ fontSize: 13, color: 'var(--muted)' }}>{o.hatirlatma_saat}</span>
+                    ) : (
+                      <>
                         <input type="time" value={o.hatirlatma_saat || ''} onChange={(e) => setRitReminder(o.id, e.target.value)} style={{ width: 'auto', fontSize: 13 }} />
-                        {o.hatirlatma_saat && <span className="chip" style={{ borderStyle: 'dashed' }} onClick={() => setRitReminder(o.id, '')}>Kaldır</span>}
-                      </div>
+                        {o.hatirlatma_saat && <span className="chip" style={{ borderStyle: 'dashed', marginLeft: 'auto' }} onClick={() => setRitReminder(o.id, '')}>Kaldır</span>}
+                      </>
                     )}
-                  </>
+                  </div>
                 )}
               </div>
             )}
