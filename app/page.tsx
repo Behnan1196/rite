@@ -258,6 +258,96 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi }: { cfg: a
     if (v === (cfg?.yer || null)) return;
     onSave({ ...cfg, yer: v });
   }
+  // Resim kutucukları (en fazla RESIM_MAX): hem Randevu'nun kendi bölümünde hem de (yeni) Not/Alışkanlık'ın
+  // medya şeridinde aynı bileşen kullanılıyor — kullanıcı isteği: "oradaki resim özelliği tek kart sistemine
+  // eklenebilir". Bir fonksiyon bileşeni değil, düz bir JSX değeri: her render'da closure'daki güncel state'i
+  // okur ama React'ı yeni bir bileşen tipi sanıp DOM'u sıfırdan kurmasına yol açmaz.
+  const resimGridJsx = (
+    <>
+      {(resimler.length > 0 || !readOnly) && (
+        <div style={{ marginTop: 8 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {Array.from({ length: Math.min(resimler.length + (!readOnly && resimler.length < RESIM_MAX ? 1 : 0), RESIM_MAX) }).map((_, i) => {
+              const url = resimler[i];
+              const yukleniyorBu = resimYuklemeIndex === i;
+              return (
+                <div
+                  key={i}
+                  style={{
+                    position: 'relative', width: 108, height: 108, borderRadius: 14, overflow: 'hidden', flex: '0 0 auto',
+                    background: '#f4efe6', border: url ? '1px solid var(--line)' : '1px dashed var(--line)',
+                    cursor: url ? 'zoom-in' : (readOnly ? 'default' : 'pointer'),
+                  }}
+                  onClick={() => {
+                    if (url) setResimBuyukIndex(i);
+                    else if (!readOnly && resimYuklemeIndex == null) { setResimYuklemeIndex(i); resimInputRef.current?.click(); }
+                  }}
+                  title={url ? 'Büyütmek için tıkla' : (readOnly ? undefined : 'Resim eklemek için tıkla')}
+                >
+                  {url ? (
+                    <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                  ) : (
+                    !readOnly && (
+                      <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {yukleniyorBu ? (
+                          <span style={{ fontSize: 22, opacity: 0.55 }}>…</span>
+                        ) : (
+                          <>
+                            <span style={{ fontSize: 38, opacity: 0.5 }}>📷</span>
+                            <span style={{
+                              position: 'absolute', right: 14, bottom: 14, width: 24, height: 24, borderRadius: '50%',
+                              background: '#8a8168', color: '#fff', fontSize: 16, fontWeight: 700, lineHeight: 1,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none',
+                            }}>+</span>
+                          </>
+                        )}
+                      </div>
+                    )
+                  )}
+                  {!readOnly && url && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); if (resimYuklemeIndex == null) { setResimYuklemeIndex(i); resimInputRef.current?.click(); } }}
+                        disabled={resimYuklemeIndex != null}
+                        title="Resmi değiştir"
+                        style={{
+                          position: 'absolute', right: 5, bottom: 5, width: 28, height: 28, borderRadius: '50%',
+                          border: 'none', background: 'rgba(24,21,16,.6)', color: '#fff', fontSize: 13,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0,
+                        }}
+                      >
+                        {yukleniyorBu ? '…' : '✎'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); resimSil(i); }}
+                        title="Resmi kaldır"
+                        style={{
+                          position: 'absolute', right: 5, top: 5, width: 22, height: 22, borderRadius: '50%',
+                          border: 'none', background: 'rgba(24,21,16,.6)', color: '#fff', fontSize: 12,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0,
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {!readOnly && <input ref={resimInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={resimDosyaSecildi} />}
+          {resimHata && <div className="note" style={{ color: 'var(--red)', marginTop: 2 }}>{resimHata}</div>}
+        </div>
+      )}
+      {resimBuyukIndex != null && resimler[resimBuyukIndex] && (
+        <div className="modal" style={{ alignItems: 'center' }} onMouseDown={() => setResimBuyukIndex(null)}>
+          <img src={resimler[resimBuyukIndex]} alt="" style={{ maxWidth: '90vw', maxHeight: '85vh', borderRadius: 10, display: 'block' }} />
+        </div>
+      )}
+    </>
+  );
   return (
     // Not tasarımında (notTasarimi) bilerek kutu/yeşil-çizgi görünümü (.howto) yok — o, sanki bu kutu asıl
     // kart gibi görünmesine yol açıyordu (kullanıcı geri bildirimi). Düz metin tipografisi (.bilgi) kalıyor.
@@ -273,198 +363,130 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi }: { cfg: a
             ) : (
               <input value={yer} onChange={(e) => setYer(e.target.value)} onBlur={yerKaydet} placeholder="Detay / yer (ops.) — link, adres, doktor adı…" style={{ width: '100%' }} />
             )}
-            {/* Resim kutucukları (en fazla RESIM_MAX): her biri küçük bir önizleme, üzerine tıklayınca büyür;
-                ekleme/değiştirme/silme kutucuğun kendi üzerinde (ayrı, görünür bir link kutusu yok —
-                readOnly'de bu özellikler hiç görünmez, yalnız dolu kutucuklar gösterilir). */}
-            {(resimler.length > 0 || !readOnly) && (
-              <div style={{ marginTop: 8 }}>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  {Array.from({ length: Math.min(resimler.length + (!readOnly && resimler.length < RESIM_MAX ? 1 : 0), RESIM_MAX) }).map((_, i) => {
-                    const url = resimler[i];
-                    const yukleniyorBu = resimYuklemeIndex === i;
-                    return (
-                      <div
-                        key={i}
-                        style={{
-                          position: 'relative', width: 108, height: 108, borderRadius: 14, overflow: 'hidden', flex: '0 0 auto',
-                          background: '#f4efe6', border: url ? '1px solid var(--line)' : '1px dashed var(--line)',
-                          cursor: url ? 'zoom-in' : (readOnly ? 'default' : 'pointer'),
-                        }}
-                        onClick={() => {
-                          if (url) setResimBuyukIndex(i);
-                          else if (!readOnly && resimYuklemeIndex == null) { setResimYuklemeIndex(i); resimInputRef.current?.click(); }
-                        }}
-                        title={url ? 'Büyütmek için tıkla' : (readOnly ? undefined : 'Resim eklemek için tıkla')}
-                      >
-                        {url ? (
-                          <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                        ) : (
-                          !readOnly && (
-                            <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                              {yukleniyorBu ? (
-                                <span style={{ fontSize: 22, opacity: 0.55 }}>…</span>
-                              ) : (
-                                <>
-                                  <span style={{ fontSize: 38, opacity: 0.5 }}>📷</span>
-                                  <span style={{
-                                    position: 'absolute', right: 14, bottom: 14, width: 24, height: 24, borderRadius: '50%',
-                                    background: '#8a8168', color: '#fff', fontSize: 16, fontWeight: 700, lineHeight: 1,
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none',
-                                  }}>+</span>
-                                </>
-                              )}
-                            </div>
-                          )
-                        )}
-                        {!readOnly && url && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={(e) => { e.stopPropagation(); if (resimYuklemeIndex == null) { setResimYuklemeIndex(i); resimInputRef.current?.click(); } }}
-                              disabled={resimYuklemeIndex != null}
-                              title="Resmi değiştir"
-                              style={{
-                                position: 'absolute', right: 5, bottom: 5, width: 28, height: 28, borderRadius: '50%',
-                                border: 'none', background: 'rgba(24,21,16,.6)', color: '#fff', fontSize: 13,
-                                display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0,
-                              }}
-                            >
-                              {yukleniyorBu ? '…' : '✎'}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(e) => { e.stopPropagation(); resimSil(i); }}
-                              title="Resmi kaldır"
-                              style={{
-                                position: 'absolute', right: 5, top: 5, width: 22, height: 22, borderRadius: '50%',
-                                border: 'none', background: 'rgba(24,21,16,.6)', color: '#fff', fontSize: 12,
-                                display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0,
-                              }}
-                            >
-                              ✕
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    );
-                  })}
+            {resimGridJsx}
+          </div>
+        )}
+        {/* Not/Alışkanlık'ta (notTasarimi) Açıklama ve Video/Resim (medya) şeridinin sırası, eski tasarımdan
+            farklı olarak Açıklama ÖNCE geliyor (kullanıcı isteği — "kart adı, açıklama, altında video şeridi").
+            JSX'i iki kez yazmak yerine flex + order kullanıyoruz: notTasarimi'de açıklama=1/medya=2,
+            Randevu/Alışkanlık'ın eski (howto) tasarımında ise medya=1/açıklama=2 — Havuz taslağı hâlâ bu eski
+            sırayı kullanıyor (bkz. call site, orada notTasarimi=false kalıyor). */}
+        {!randevu && (
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <div style={{ order: notTasarimi ? 1 : 2 }}>
+              {/* Kişisel kartlarda Açıklama artık düz metin — Meridyen'in md ile yazdığı içerikten farklı olarak
+                  kullanıcıdan hiçbir sözdizimi (#, **, -…) beklemiyoruz, sadece satır aralarını koruyoruz. */}
+              {(!readOnly || icerikVal.trim()) && <div className="k">Açıklama</div>}
+              {readOnly ? (
+                icerikVal.trim() ? <div style={{ whiteSpace: 'pre-wrap' }}>{icerikVal}</div> : null
+              ) : icerikEdit ? (
+                // notTasarimi: Ad alanıyla aynı yalın karakter (şeffaf zemin, aynı yazı stili) ama ince bir çerçeve
+                // ile ayrı bir alan olduğu belli oluyor (kullanıcı isteği); baştan 3-4 satır yükseklikte açılsın
+                // diye rows kullanılıyor.
+                <textarea
+                  autoFocus
+                  rows={notTasarimi ? 4 : undefined}
+                  value={icerikVal}
+                  onChange={(e) => setIcerikVal(e.target.value)}
+                  onBlur={icerikKaydet}
+                  placeholder={'Notunu yaz…'}
+                  style={notTasarimi
+                    ? { width: '100%', minHeight: 0, border: '1px solid var(--line)', borderRadius: 8, outline: 'none', background: 'transparent', padding: 8, fontFamily: 'inherit', fontSize: 14, lineHeight: 1.6, color: 'var(--ink)', resize: 'vertical', boxSizing: 'border-box' }
+                    : { width: '100%', minHeight: 100 }}
+                />
+              ) : (
+                // notTasarimi: dokunmadan önceki bu görünüm de textarea ile aynı çerçeveyi ve min-yüksekliği (4 satır +
+                // padding) alıyor — yoksa tıklayınca kutu aniden büyüyüp kayıyormuş gibi bir sıçrama oluyordu
+                // (kullanıcı geri bildirimi).
+                <div onClick={() => setIcerikEdit(true)} style={notTasarimi
+                  ? { cursor: 'text', minHeight: 92, whiteSpace: 'pre-wrap', border: '1px solid var(--line)', borderRadius: 8, padding: 8, fontSize: 14, lineHeight: 1.6, boxSizing: 'border-box' }
+                  : { cursor: 'text', minHeight: 24, whiteSpace: 'pre-wrap' }}>
+                  {icerikVal.trim() ? icerikVal : (
+                    // notTasarimi: placeholder metni de textarea'nın kendi placeholder'ıyla (Notunu yaz…) AYNI
+                    // font büyüklüğünde — farklı olursa dokununca yazı boyu değişiyormuş gibi bir sıçrama izlenimi
+                    // veriyordu (kullanıcı geri bildirimi).
+                    <div className={notTasarimi ? undefined : 'note'} style={notTasarimi ? { marginTop: 0, fontSize: 14, lineHeight: 1.6, color: 'var(--muted)' } : { marginTop: 0 }}>Yazmak için dokun…</div>
+                  )}
                 </div>
-                {!readOnly && <input ref={resimInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={resimDosyaSecildi} />}
-                {resimHata && <div className="note" style={{ color: 'var(--red)', marginTop: 2 }}>{resimHata}</div>}
-              </div>
-            )}
-            {resimBuyukIndex != null && resimler[resimBuyukIndex] && (
-              <div className="modal" style={{ alignItems: 'center' }} onMouseDown={() => setResimBuyukIndex(null)}>
-                <img src={resimler[resimBuyukIndex]} alt="" style={{ maxWidth: '90vw', maxHeight: '85vh', borderRadius: 10, display: 'block' }} />
-              </div>
-            )}
-          </div>
-        )}
-        {/* Video şeridi Açıklama'nın ÜZERİNDE: videolar + (varsa seçili video için) ✎ düzenle + en sağda ＋ ekle
-            (kullanıcı isteği — düzenle, eklemenin solunda).
-            readOnly: sadece görüntüleme — ✕/✎/＋ ikonları gizlenir, chip'ler yalnız video seçmek için tıklanabilir kalır.
-            notTasarimi: dolu şerit de, boşken duran "hazır alan" ile AYNI gri arkaplan/köşe/boşluk stilini
-            kullanıyor — kullanıcı isteği: video eklenmeden önceki ve sonraki hal aynı "alan"ın devamı gibi
-            hissettirsin, yalnız kenar çizgisi olan çıplak bir şerit gibi değil. */}
-        {!randevu && videolar.length > 0 && (
-          <div style={notTasarimi
-            ? { margin: '0 0 12px', padding: '7px 10px', borderRadius: 8, background: 'var(--card2,#f6f4ee)', display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }
-            : { margin: '0 0 10px', display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
-            {videolar.map((v, i) => (
-              <span key={i} className={'chip' + (i === vidSec ? ' on' : '')} onClick={() => { setVidSec(i); if (vidFormMode) formuKapat(); }}>
-                {v.baslik || ('Video ' + (i + 1))}{(v.bas != null || v.bit != null) ? ` ⏱${saniyeStr(v.bas) || '0'}–${v.bit != null ? saniyeStr(v.bit) : '…'}` : ''}
-                {!readOnly && <span style={{ marginLeft: 6, opacity: 0.55 }} onClick={(e) => { e.stopPropagation(); videoSil(i); }}>✕</span>}
-              </span>
-            ))}
-            {!readOnly && secili && <span className="chip" style={{ borderStyle: 'dashed' }} onClick={() => (vidFormMode === 'edit' ? formuKapat() : formuAc('edit'))} title="Seçili videoyu düzenle">✎</span>}
-            {!readOnly && <span className="chip" style={{ borderStyle: 'dashed' }} onClick={() => (vidFormMode === 'add' ? formuKapat() : formuAc('add'))} title="Video ekle">＋ Video</span>}
-          </div>
-        )}
-        {/* Video yokken: eski tasarımda (Randevu/Alışkanlık) tek bir ＋ chip'i hep görünürdü — bu davranış
-            aynen korunuyor. "Not" tasarımında (notTasarimi) bunun yerine Ad ile Açıklama arasında ayrılmış,
-            sessiz duran gri bir "hazır alan" gösteriyoruz — video eklenince bu alan yukarıdaki gerçek şeride
-            dönüşür. Sağındaki soluk 🎬 ikonuna basmak doğrudan video ekleme formunu açıyor (kullanıcı isteği:
-            video farklı bir amaca hizmet ettiği için bildirim/paylaş gibi title ikonlarından ayrı duruyor). */}
-        {!randevu && videolar.length === 0 && !readOnly && (
-          notTasarimi ? (
-            <div
-              onClick={() => formuAc('add')}
-              title="Video ekle"
-              style={{ margin: '0 0 12px', padding: '7px 10px', borderRadius: 8, background: 'var(--card2,#f6f4ee)', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', cursor: 'pointer' }}
-            >
-              <span style={{ fontSize: 14, opacity: 0.35 }}>🎬</span>
+              )}
             </div>
-          ) : (
-            <div style={{ margin: '0 0 10px', display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
-              <span className="chip" style={{ borderStyle: 'dashed' }} onClick={() => (vidFormMode === 'add' ? formuKapat() : formuAc('add'))} title="Video ekle">＋ Video</span>
+            <div style={{ order: notTasarimi ? 2 : 1 }}>
+              {notTasarimi ? (
+                // notTasarimi: video (chip'ler) ve resim (kutucuklar) TEK bir "medya" şeridinde, aynı gri
+                // arkaplan/köşe içinde — kullanıcı isteği: "resim özelliği tek kart sistemine eklenebilir",
+                // yani Not/Alışkanlık da artık Randevu'nun resim yükleme özelliğini kullanabiliyor.
+                <div style={{ margin: '0 0 12px', padding: '7px 10px', borderRadius: 8, background: 'var(--card2,#f6f4ee)' }}>
+                  {(videolar.length > 0 || !readOnly) && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+                      {videolar.map((v, i) => (
+                        <span key={i} className={'chip' + (i === vidSec ? ' on' : '')} onClick={() => { setVidSec(i); if (vidFormMode) formuKapat(); }}>
+                          {v.baslik || ('Video ' + (i + 1))}{(v.bas != null || v.bit != null) ? ` ⏱${saniyeStr(v.bas) || '0'}–${v.bit != null ? saniyeStr(v.bit) : '…'}` : ''}
+                          {!readOnly && <span style={{ marginLeft: 6, opacity: 0.55 }} onClick={(e) => { e.stopPropagation(); videoSil(i); }}>✕</span>}
+                        </span>
+                      ))}
+                      {!readOnly && secili && <span className="chip" style={{ borderStyle: 'dashed' }} onClick={() => (vidFormMode === 'edit' ? formuKapat() : formuAc('edit'))} title="Seçili videoyu düzenle">✎</span>}
+                      {!readOnly && <span className="chip" style={{ borderStyle: 'dashed' }} onClick={() => (vidFormMode === 'add' ? formuKapat() : formuAc('add'))} title="Video ekle">＋ Video</span>}
+                    </div>
+                  )}
+                  {resimGridJsx}
+                </div>
+              ) : (
+                <>
+                  {/* Video şeridi Açıklama'nın ÜZERİNDE: videolar + (varsa seçili video için) ✎ düzenle + en sağda
+                      ＋ ekle (kullanıcı isteği — düzenle, eklemenin solunda). Eski (Randevu dışı, howto) tasarım —
+                      Havuz taslağında hâlâ bu haliyle kullanılıyor. */}
+                  {videolar.length > 0 && (
+                    <div style={{ margin: '0 0 10px', display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+                      {videolar.map((v, i) => (
+                        <span key={i} className={'chip' + (i === vidSec ? ' on' : '')} onClick={() => { setVidSec(i); if (vidFormMode) formuKapat(); }}>
+                          {v.baslik || ('Video ' + (i + 1))}{(v.bas != null || v.bit != null) ? ` ⏱${saniyeStr(v.bas) || '0'}–${v.bit != null ? saniyeStr(v.bit) : '…'}` : ''}
+                          {!readOnly && <span style={{ marginLeft: 6, opacity: 0.55 }} onClick={(e) => { e.stopPropagation(); videoSil(i); }}>✕</span>}
+                        </span>
+                      ))}
+                      {!readOnly && secili && <span className="chip" style={{ borderStyle: 'dashed' }} onClick={() => (vidFormMode === 'edit' ? formuKapat() : formuAc('edit'))} title="Seçili videoyu düzenle">✎</span>}
+                      {!readOnly && <span className="chip" style={{ borderStyle: 'dashed' }} onClick={() => (vidFormMode === 'add' ? formuKapat() : formuAc('add'))} title="Video ekle">＋ Video</span>}
+                    </div>
+                  )}
+                  {videolar.length === 0 && !readOnly && (
+                    <div style={{ margin: '0 0 10px', display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+                      <span className="chip" style={{ borderStyle: 'dashed' }} onClick={() => (vidFormMode === 'add' ? formuKapat() : formuAc('add'))} title="Video ekle">＋ Video</span>
+                    </div>
+                  )}
+                </>
+              )}
+              {/* Video ekle/düzenle formu: bildirim/zamanlama seçenekleri gibi modal (üste açılan pencere) olarak
+                  geliyor — kullanıcı isteği: aynı tutarlılık için içeriğe gömülü kutu yerine modal. */}
+              {!readOnly && vidFormMode && (
+                <div className="modal top2" onMouseDown={formuKapat}>
+                  <div className="sheet small" onMouseDown={(e) => e.stopPropagation()}>
+                    <button className="x" onClick={formuKapat}>×</button>
+                    <h3 style={{ marginBottom: 8 }}>🎬 {vidFormMode === 'edit' ? 'Videoyu düzenle' : 'Video ekle'}</h3>
+                    <div className="daterow" style={{ flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+                      <input value={vUrl} onChange={(e) => setVUrl(e.target.value)} placeholder="https://… (şart)" style={{ flex: 2, minWidth: 160 }} />
+                      <input value={vAd} onChange={(e) => setVAd(e.target.value)} placeholder="Video adı (ops.)" style={{ flex: 1, minWidth: 110 }} />
+                    </div>
+                    <div className="daterow" style={{ flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+                      <input value={vBas} onChange={(e) => setVBas(e.target.value.replace(/[^\d:]/g, ''))} placeholder="Başlangıç dk:sn (ops.)" style={{ flex: 1, minWidth: 120 }} />
+                      <input value={vBit} onChange={(e) => setVBit(e.target.value.replace(/[^\d:]/g, ''))} placeholder="Bitiş dk:sn (ops.)" style={{ flex: 1, minWidth: 120 }} />
+                    </div>
+                    <textarea value={vAciklama} onChange={(e) => setVAciklama(e.target.value)} placeholder={'Bu videoya özel açıklama (ops.)'} style={{ width: '100%', minHeight: 70 }} />
+                    <div className="rowbtns" style={{ marginTop: 6 }}>
+                      <button className="btn sm" onClick={videoKaydet} disabled={!vUrl.trim()}>{vidFormMode === 'edit' ? 'Kaydet' : 'Ekle'}</button>
+                      <button className="btn ghost sm" onClick={formuKapat}>Vazgeç</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {secili && <div style={{ margin: '0 0 4px' }}><EmbedVideo url={secili.url} bas={secili.bas} bit={secili.bit} /></div>}
+              {/* Videoya özel açıklama: genel açıklamadan SONRA, salt okunur (düzenlemesi ✎'den) — genel açıklamayla
+                  karışmasın diye küçük bir "Bu videoya özel" etiketiyle ayrıştırılıyor. */}
+              {secili?.ozelNot && (
+                <div style={{ margin: '10px 0 0' }}>
+                  <div className="note" style={{ margin: '0 0 2px', fontWeight: 700 }}>🎬 Bu videoya özel</div>
+                  <div style={{ whiteSpace: 'pre-wrap' }}>{secili.ozelNot}</div>
+                </div>
+              )}
             </div>
-          )
-        )}
-        {/* Video ekle/düzenle formu: bildirim/zamanlama seçenekleri gibi modal (üste açılan pencere) olarak
-            geliyor — kullanıcı isteği: aynı tutarlılık için içeriğe gömülü kutu yerine modal. */}
-        {!randevu && !readOnly && vidFormMode && (
-          <div className="modal top2" onMouseDown={formuKapat}>
-            <div className="sheet small" onMouseDown={(e) => e.stopPropagation()}>
-              <button className="x" onClick={formuKapat}>×</button>
-              <h3 style={{ marginBottom: 8 }}>🎬 {vidFormMode === 'edit' ? 'Videoyu düzenle' : 'Video ekle'}</h3>
-              <div className="daterow" style={{ flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
-                <input value={vUrl} onChange={(e) => setVUrl(e.target.value)} placeholder="https://… (şart)" style={{ flex: 2, minWidth: 160 }} />
-                <input value={vAd} onChange={(e) => setVAd(e.target.value)} placeholder="Video adı (ops.)" style={{ flex: 1, minWidth: 110 }} />
-              </div>
-              <div className="daterow" style={{ flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
-                <input value={vBas} onChange={(e) => setVBas(e.target.value.replace(/[^\d:]/g, ''))} placeholder="Başlangıç dk:sn (ops.)" style={{ flex: 1, minWidth: 120 }} />
-                <input value={vBit} onChange={(e) => setVBit(e.target.value.replace(/[^\d:]/g, ''))} placeholder="Bitiş dk:sn (ops.)" style={{ flex: 1, minWidth: 120 }} />
-              </div>
-              <textarea value={vAciklama} onChange={(e) => setVAciklama(e.target.value)} placeholder={'Bu videoya özel açıklama (ops.)'} style={{ width: '100%', minHeight: 70 }} />
-              <div className="rowbtns" style={{ marginTop: 6 }}>
-                <button className="btn sm" onClick={videoKaydet} disabled={!vUrl.trim()}>{vidFormMode === 'edit' ? 'Kaydet' : 'Ekle'}</button>
-                <button className="btn ghost sm" onClick={formuKapat}>Vazgeç</button>
-              </div>
-            </div>
-          </div>
-        )}
-        {!randevu && secili && <div style={{ margin: '0 0 4px' }}><EmbedVideo url={secili.url} bas={secili.bas} bit={secili.bit} /></div>}
-        {/* Kişisel kartlarda Açıklama artık düz metin — Meridyen'in md ile yazdığı içerikten farklı olarak
-            kullanıcıdan hiçbir sözdizimi (#, **, -…) beklemiyoruz, sadece satır aralarını koruyoruz. */}
-        {(!readOnly || icerikVal.trim()) && <div className="k">Açıklama</div>}
-        {readOnly ? (
-          icerikVal.trim() ? <div style={{ whiteSpace: 'pre-wrap' }}>{icerikVal}</div> : null
-        ) : icerikEdit ? (
-          // notTasarimi: Ad alanıyla aynı yalın karakter (şeffaf zemin, aynı yazı stili) ama ince bir çerçeve
-          // ile ayrı bir alan olduğu belli oluyor (kullanıcı isteği); baştan 3-4 satır yükseklikte açılsın
-          // diye rows kullanılıyor.
-          <textarea
-            autoFocus
-            rows={notTasarimi ? 4 : undefined}
-            value={icerikVal}
-            onChange={(e) => setIcerikVal(e.target.value)}
-            onBlur={icerikKaydet}
-            placeholder={'Notunu yaz…'}
-            style={notTasarimi
-              ? { width: '100%', minHeight: 0, border: '1px solid var(--line)', borderRadius: 8, outline: 'none', background: 'transparent', padding: 8, fontFamily: 'inherit', fontSize: 14, lineHeight: 1.6, color: 'var(--ink)', resize: 'vertical', boxSizing: 'border-box' }
-              : { width: '100%', minHeight: 100 }}
-          />
-        ) : (
-          // notTasarimi: dokunmadan önceki bu görünüm de textarea ile aynı çerçeveyi ve min-yüksekliği (4 satır +
-          // padding) alıyor — yoksa tıklayınca kutu aniden büyüyüp kayıyormuş gibi bir sıçrama oluyordu
-          // (kullanıcı geri bildirimi).
-          <div onClick={() => setIcerikEdit(true)} style={notTasarimi
-            ? { cursor: 'text', minHeight: 92, whiteSpace: 'pre-wrap', border: '1px solid var(--line)', borderRadius: 8, padding: 8, fontSize: 14, lineHeight: 1.6, boxSizing: 'border-box' }
-            : { cursor: 'text', minHeight: 24, whiteSpace: 'pre-wrap' }}>
-            {icerikVal.trim() ? icerikVal : (
-              // notTasarimi: placeholder metni de textarea'nın kendi placeholder'ıyla (Notunu yaz…) AYNI
-              // font büyüklüğünde — farklı olursa dokununca yazı boyu değişiyormuş gibi bir sıçrama izlenimi
-              // veriyordu (kullanıcı geri bildirimi).
-              <div className={notTasarimi ? undefined : 'note'} style={notTasarimi ? { marginTop: 0, fontSize: 14, lineHeight: 1.6, color: 'var(--muted)' } : { marginTop: 0 }}>Yazmak için dokun…</div>
-            )}
-          </div>
-        )}
-        {/* Videoya özel açıklama: genel açıklamadan SONRA, salt okunur (düzenlemesi ✎'den) — genel açıklamayla
-            karışmasın diye küçük bir "Bu videoya özel" etiketiyle ayrıştırılıyor. */}
-        {!randevu && secili?.ozelNot && (
-          <div style={{ margin: '10px 0 0' }}>
-            <div className="note" style={{ margin: '0 0 2px', fontWeight: 700 }}>🎬 Bu videoya özel</div>
-            <div style={{ whiteSpace: 'pre-wrap' }}>{secili.ozelNot}</div>
           </div>
         )}
       </div>
@@ -1007,6 +1029,23 @@ export default function Rite() {
   // detay açılınca canlı çekilir; içerik gösterirken önce buna, yoksa ritüelin kendi (o anki) kopyasına bakılır.
   const [detaySablon, setDetaySablon] = useState<any>(null);
   const [zamanOpen, setZamanOpen] = useState(false);
+  // Kişisel kartlarda (Not/Alışkanlık) görüntüleme/düzenleme modu ayrımı: yeni oluşturulan (taze) bir kart hep
+  // düzenleme modunda açılır; kaydedilmiş bir kart sonradan açıldığında önce görüntüleme modunda gelir, alttaki
+  // "Düzenle"ye basınca bu moda geçilir (kullanıcı isteği). Aynı kart açık kaldığı sürece (kaydetseler bile)
+  // moddan çıkmasın diye, gerçekten YENİ bir kart açıldığında (ya da sheet kapanıp tekrar açıldığında) sıfırlanır
+  // — bkz. aşağıdaki useEffect + lastDetayAnahtarRef.
+  const [duzenleModu, setDuzenleModu] = useState(false);
+  const lastDetayAnahtarRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!detay) { lastDetayAnahtarRef.current = null; return; }
+    const o2 = detay.obj || {};
+    const anahtar = o2.id || ('taslak:' + (detay.tur || ''));
+    if (lastDetayAnahtarRef.current !== anahtar) {
+      lastDetayAnahtarRef.current = anahtar;
+      const isDraft2 = !o2.id && !detay.preview;
+      setDuzenleModu(isDraft2 || (!!o2.id && taze === o2.id));
+    }
+  }, [detay, taze]);
   const [grupEditOpen, setGrupEditOpen] = useState(false);
   const [grupEditVal, setGrupEditVal] = useState('');
   const [grupEditAltVal, setGrupEditAltVal] = useState('');
@@ -3086,6 +3125,9 @@ export default function Rite() {
         // için anlamlı mezun et / paylaş seçenekleri gizli kalır (kullanıcı isteği) — hem aşağıdaki genel
         // zamanlama şeridinde hem de kişisel kartın kendi ince başlık şeridinde kullanılıyor.
         const isTaze = isDraft || (!!o.id && taze === o.id);
+        // Görüntüleme/düzenleme modu ayrımı şimdilik sadece Not ve Alışkanlık'ta — Randevu henüz ele alınmadı
+        // (kullanıcı isteği: "randevuyu şimdilik es geçebiliriz").
+        const kisiselGorunumModu = isKisisel && kisiselTur !== 'randevu' && !duzenleModu;
         return (
         <div className="modal full" onMouseDown={() => closeDetay()}>
           <div className="sheet fullsheet" onMouseDown={(e) => e.stopPropagation()} style={stilP ? { borderTop: '4px solid ' + stilP.ac } : undefined}>
@@ -3093,26 +3135,23 @@ export default function Rite() {
             <button className="x" onClick={() => closeDetay()}>×</button>
             {isRit ? (
               isKisisel ? (
-                // İnce başlık şeridi: sabit etiket (gerçek "başlık" artık aşağıdaki Ad alanı) + sağda
-                // (Alışkanlık'ta ayrıca 🗓️/🎓) 🔔/↪️ — ayrı, kendi başına boşluk yaratan genel zamanlama şeridi
-                // kişisel kartlarda hiç render edilmiyor; hepsi bu tek şeride toplandı (kullanıcı isteği —
-                // önceki ayrı alt satırda 🗓️ diğerlerinden daha aşağıda kalıyordu).
+                // İnce başlık şeridi: sabit etiket (gerçek "başlık" artık aşağıdaki Ad alanı) + sağda ↪️
+                // (Alışkanlık'ta ayrıca 🎓) — Zamanlama (🗓️) ve Bildirim (🔔) artık burada değil, gövdede kendi
+                // şeritleri var (kullanıcı isteği: Ad, Açıklama, Video, Zamanlama, Bildirim aynı sırada, tek
+                // tasarım). Randevu şimdilik eski haliyle (🔔 burada) kalıyor — henüz ele alınmadı.
                 // Sağda 34px boşluk (paddingRight) bırakılıyor ki ikonlar köşedeki ✕ (mutlak konumlu) ile çakışmasın.
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingRight: 34, marginTop: -8 }}>
                   {!isDraft && <div className={'chk' + (ritDone(o.id) ? ' on' : '')} onClick={() => toggleRit(o.id)} title="Yaptım">{ritDone(o.id) ? '✓' : ''}</div>}
-                  <div style={{ flex: 1, fontSize: 11.5, fontWeight: 800, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.4px' }}>{isDraft ? kisiselYeni : kisiselEtiket + ' Düzenle'}</div>
-                  {kisiselTur === 'aliskanlik' && !preview && (
-                    <button type="button" onClick={() => setZamanOpen(true)} title={gunOzet} aria-label="Zamanlama" style={{ background: 'none', border: 'none', padding: 0, fontSize: 16, cursor: 'pointer', opacity: .55 }}>🗓️</button>
-                  )}
+                  <div style={{ flex: 1, fontSize: 11.5, fontWeight: 800, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.4px' }}>{isDraft ? kisiselYeni : (duzenleModu ? kisiselEtiket + ' Düzenle' : kisiselEtiket)}</div>
                   {kisiselTur === 'aliskanlik' && !preview && !isTaze && !o.mezun && (
                     <button type="button" onClick={() => setHabitMenuFor(o)} title="Alışkanlık seçenekleri" aria-label="Alışkanlık seçenekleri" style={{ background: 'none', border: 'none', padding: 0, fontSize: 16, cursor: 'pointer', opacity: .55 }}>🎓</button>
                   )}
                   {!paylasilamaz && !isTaze && <button type="button" onClick={() => { setPaylasOpen(true); setKMsg(''); }} title="Paylaş" style={{ background: 'none', border: 'none', padding: 0, fontSize: 16, cursor: 'pointer', opacity: .55 }}>↪️</button>}
-                  {o.hatirlatma_saat ? (
-                    <button type="button" onClick={() => { setRemInput(o.hatirlatma_saat || ''); setRemTarihInput(kCfg?.hatirlatma_tarih || o.baslangic || ''); setRemMenuFor({ ...o, _randevu: kisiselTur === 'randevu' }); }} title="Bildirim seçenekleri" style={{ background: 'none', border: 'none', padding: 0, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 2 }}>🔔<span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--muted)' }}>{o.hatirlatma_saat}</span></button>
+                  {kisiselTur === 'randevu' && (o.hatirlatma_saat ? (
+                    <button type="button" onClick={() => { setRemInput(o.hatirlatma_saat || ''); setRemTarihInput(kCfg?.hatirlatma_tarih || o.baslangic || ''); setRemMenuFor({ ...o, _randevu: true }); }} title="Bildirim seçenekleri" style={{ background: 'none', border: 'none', padding: 0, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 2 }}>🔔<span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--muted)' }}>{o.hatirlatma_saat}</span></button>
                   ) : (
-                    <button type="button" onClick={() => { setRemInput(kCfg?.saat || ''); setRemTarihInput(kCfg?.hatirlatma_tarih || o.baslangic || ''); setRemMenuFor({ ...o, _randevu: kisiselTur === 'randevu' }); }} title="Bildirim ekle" style={{ background: 'none', border: 'none', padding: 0, fontSize: 16, cursor: 'pointer', opacity: .4 }}>🔔</button>
-                  )}
+                    <button type="button" onClick={() => { setRemInput(kCfg?.saat || ''); setRemTarihInput(kCfg?.hatirlatma_tarih || o.baslangic || ''); setRemMenuFor({ ...o, _randevu: true }); }} title="Bildirim ekle" style={{ background: 'none', border: 'none', padding: 0, fontSize: 16, cursor: 'pointer', opacity: .4 }}>🔔</button>
+                  ))}
                 </div>
               ) : (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -3126,18 +3165,23 @@ export default function Rite() {
               <input className="detbaslik" value={adInput} autoFocus onFocus={(e) => e.target.select()} onChange={(e) => setAdInput(e.target.value)} onBlur={() => { if (adInput.trim() && adInput.trim() !== (o.ad || '')) patchDetay({ ad: adInput.trim() }); }} style={{ width: '100%' }} />
             ) : <h2 style={{ paddingRight: 34 }}>{o.ad}</h2>}
             {isKisisel && (
-              // Gerçek "başlık" artık bu — ince etiketten belirgin şekilde ayrışsın diye daha büyük/kalın,
-              // ve etiketten biraz mesafeli (kullanıcı isteği — "kart adı biraz aşağıdan başlamalı").
-              <input
-                className="detbaslik"
-                value={adInput}
-                onFocus={(e) => e.target.select()}
-                onChange={(e) => setAdInput(e.target.value)}
-                onBlur={() => { if (adInput.trim() && adInput.trim() !== (o.ad || '')) setRitAd(o.id, adInput); }}
-                placeholder={kisiselEtiket + ' adı'}
-                autoFocus={isDraft}
-                style={{ width: '100%', padding: 0, margin: '10px 0 14px', fontSize: 21 }}
-              />
+              kisiselGorunumModu ? (
+                // Görüntüleme modu: Ad artık bir giriş alanı değil, düz metin — input'la aynı boyut/boşluk.
+                <div style={{ width: '100%', margin: '10px 0 14px', fontSize: 21, fontWeight: 700 }}>{o.ad}</div>
+              ) : (
+                // Gerçek "başlık" artık bu — ince etiketten belirgin şekilde ayrışsın diye daha büyük/kalın,
+                // ve etiketten biraz mesafeli (kullanıcı isteği — "kart adı biraz aşağıdan başlamalı").
+                <input
+                  className="detbaslik"
+                  value={adInput}
+                  onFocus={(e) => e.target.select()}
+                  onChange={(e) => setAdInput(e.target.value)}
+                  onBlur={() => { if (adInput.trim() && adInput.trim() !== (o.ad || '')) setRitAd(o.id, adInput); }}
+                  placeholder={kisiselEtiket + ' adı'}
+                  autoFocus={isDraft}
+                  style={{ width: '100%', padding: 0, margin: '10px 0 14px', fontSize: 21 }}
+                />
+              )
             )}
             <div className="m">
               {isRit ? null : (
@@ -3201,15 +3245,14 @@ export default function Rite() {
             {/* Not eklerken/düzenlerken "bu bir randevu" seçme kutusu artık yok — Randevu, alttaki ＋ menüsünden
                 kendi başına oluşturuluyor. Randevunun kendi tarihi/saati burada (kart_config.saat, baslangic);
                 bildirimin ne zaman geleceği ayrı — 🔔'den, farklı bir tarih/saat olarak ayarlanabilir (kullanıcı isteği).
-                Not ve Alışkanlık'ta da aynı yerde kendi tarih alanları var — "başka güne taşıma" artık ayrı bir
-                ikon/modal değil, direkt buradaki tarihi değiştirerek yapılıyor (kullanıcı isteği — Zamanlama
-                penceresindeki "hangi güne taşı" kaldırıldı, orası artık sadece Süre/Günler'e ait). */}
-            {isRit && isKisisel && (
+                Not ve Alışkanlık artık aynı işi kendi Zamanlama şeritlerinden yapıyor (bkz. aşağısı) — Randevu
+                henüz ele alınmadı, o yüzden bu blok sadece Randevu'da kalıyor. */}
+            {isRit && isKisisel && kisiselTur === 'randevu' && (
               <div className="kv" style={{ margin: '4px 0 10px' }}>
-                <div className="k">📅 {kisiselTur === 'randevu' ? 'Randevu ne zaman' : kisiselTur === 'aliskanlik' ? 'Başlangıç tarihi' : 'Tarih'}</div>
+                <div className="k">📅 Randevu ne zaman</div>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                   <input type="date" value={o.baslangic || ''} onChange={(e) => e.target.value && ritTasi(o.id, e.target.value)} style={{ width: 'auto' }} />
-                  {kisiselTur === 'randevu' && <input type="time" value={kCfg?.saat || ''} onChange={(e) => bilgiKaydet({ ...kCfg, saat: e.target.value || null })} style={{ width: 'auto' }} />}
+                  <input type="time" value={kCfg?.saat || ''} onChange={(e) => bilgiKaydet({ ...kCfg, saat: e.target.value || null })} style={{ width: 'auto' }} />
                 </div>
               </div>
             )}
@@ -3244,10 +3287,49 @@ export default function Rite() {
                 böylece Ajandama eklemeden kart orada da (Havuz'da olduğu gibi) açılabiliyor. */}
             {kTip === 'bilgi' && (() => {
               const editable = !preview && (isRit ? o.kaynak === 'Kendi' : isDraft);
-              if (editable) return <BilgiKartEdit cfg={kCfg} onSave={bilgiKaydet} randevu={!!kCfg?.randevu} notTasarimi={isKisisel} />;
+              if (editable) return <BilgiKartEdit cfg={kCfg} onSave={bilgiKaydet} randevu={!!kCfg?.randevu} notTasarimi={isKisisel} readOnly={kisiselGorunumModu} />;
               if (!preview && isRit) return <BilgiKart cfg={kCfg} onSave={bilgiKaydet} />;
               return <BilgiKartEdit cfg={kCfg} onSave={() => {}} randevu={!!kCfg?.randevu} readOnly />;
             })()}
+            {/* Zamanlama + Bildirim şeritleri — Ad/Açıklama/Video'nun altında, tek düzenleme iskeletinin son iki
+                parçası (kullanıcı isteği: "altında zamanlama şeridi, onun altında bildirim şeridi olsun").
+                Randevu şimdilik dışarıda (henüz ele alınmadı) — o hâlâ kendi 📅/🔔 alanlarını kullanıyor.
+                Not'ta şerit doğrudan bir tarih alanı (taşıma buradan olur); Alışkanlık'ta ise Süre/Günler de
+                barındıran Zamanlama panosunu açan bir özet satırı — bkz. yukarısı "Hangi güne taşı" notu. */}
+            {isRit && isKisisel && kisiselTur !== 'randevu' && (
+              <div style={{ margin: '0 0 8px' }}>
+                {kisiselTur === 'not' ? (
+                  <div style={{ padding: '7px 10px', borderRadius: 8, background: 'var(--card2,#f6f4ee)', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    <span>🗓️</span>
+                    {kisiselGorunumModu ? (
+                      <span style={{ fontSize: 13, color: 'var(--muted)' }}>{gunOzet}</span>
+                    ) : (
+                      <input type="date" value={o.baslangic || ''} onChange={(e) => e.target.value && ritTasi(o.id, e.target.value)} style={{ width: 'auto', background: 'transparent', border: 'none', fontSize: 13, padding: 0 }} />
+                    )}
+                  </div>
+                ) : (
+                  <div
+                    onClick={() => { if (!kisiselGorunumModu) setZamanOpen(true); }}
+                    style={{ padding: '7px 10px', borderRadius: 8, background: 'var(--card2,#f6f4ee)', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, cursor: kisiselGorunumModu ? 'default' : 'pointer' }}
+                  >
+                    <span>🗓️</span>
+                    <span style={{ fontSize: 13, color: 'var(--muted)' }}>{gunOzet}</span>
+                  </div>
+                )}
+                {(!kisiselGorunumModu || o.hatirlatma_saat) && (
+                  <div
+                    onClick={() => { if (kisiselGorunumModu) return; setRemInput(o.hatirlatma_saat || ''); setRemTarihInput(kCfg?.hatirlatma_tarih || o.baslangic || ''); setRemMenuFor({ ...o, _randevu: false }); }}
+                    style={{ padding: '7px 10px', borderRadius: 8, background: 'var(--card2,#f6f4ee)', display: 'flex', alignItems: 'center', gap: 8, cursor: kisiselGorunumModu ? 'default' : 'pointer' }}
+                  >
+                    <span>🔔</span>
+                    <span style={{ fontSize: 13, color: 'var(--muted)' }}>{o.hatirlatma_saat ? o.hatirlatma_saat : 'Bildirim ekle'}</span>
+                  </div>
+                )}
+              </div>
+            )}
+            {isRit && isKisisel && kisiselTur !== 'randevu' && !isTaze && (
+              <button className="btn ghost sm" style={{ width: '100%', margin: '2px 0 8px' }} onClick={() => setDuzenleModu((v) => !v)}>{duzenleModu ? '✓ Bitti' : '✎ Düzenle'}</button>
+            )}
             {isDraft && <button className="btn" style={{ width: '100%', margin: '2px 0 8px' }} onClick={taslakKaydet}>Kaydet</button>}
             {isRit && kTip === 'video' && <div style={{ margin: '4px 0 8px' }}>
               {(kCfg.url || o.url) && <EmbedVideo url={kCfg.url || o.url} />}
@@ -3286,11 +3368,11 @@ export default function Rite() {
               <div className="sheet" onMouseDown={(e) => e.stopPropagation()}>
                 <button className="x" onClick={() => setZamanOpen(false)}>×</button>
                 <h3 style={{ marginBottom: 6 }}>🗓️ Zamanlama</h3>
-                {/* Kişisel kartlarda (isKisisel) "hangi güne taşı" artık burada değil — kartın kendi gövdesindeki
-                    tarih alanından yapılıyor (bkz. yukarısı, kullanıcı isteği: bu ikisi aynı işi ayrı yerlerden
-                    yapıyordu). Kişisel olmayan ritüellerde (Meridyen vb.) taşıma başka bir yol sunmuyor, o yüzden
-                    onlarda bu bölüm aynen kalıyor. */}
-                {!isKisisel && (
+                {/* Not'ta "hangi güne taşı" burada değil — kartın kendi gövdesindeki Zamanlama şeridi doğrudan
+                    tarih alanı olarak çalışıyor. Alışkanlık'ta ise Zamanlama şeridi bu modalı açıyor (Süre/Günler
+                    de zaten burada olduğu için), o yüzden taşıma da yine burada kalıyor. Kişisel olmayan
+                    ritüellerde (Meridyen vb.) zaten tek yol burası. */}
+                {(!isKisisel || kisiselTur === 'aliskanlik') && (
                   <div className="kv"><div className="k">Hangi güne taşı</div>
                     <div>
                       <span className={'chip' + (o.baslangic === today ? ' on' : '')} onClick={() => ritTasi(o.id, today)}>Bugün</span>
