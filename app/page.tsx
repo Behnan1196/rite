@@ -1035,6 +1035,11 @@ export default function Rite() {
   // moddan çıkmasın diye, gerçekten YENİ bir kart açıldığında (ya da sheet kapanıp tekrar açıldığında) sıfırlanır
   // — bkz. aşağıdaki useEffect + lastDetayAnahtarRef.
   const [duzenleModu, setDuzenleModu] = useState(false);
+  // Düzenleme moduna girerken kartın o anki hâlinin bir kopyası — "Vazgeç" basılınca alan değişiklikleri
+  // (Ad, Zamanlama, Bildirim, video/resim) veritabanına hiç yazılmadan bu kopyayla geri yüklenir (bkz.
+  // aşağıdaki Düzenle/Vazgeç/Kaydet butonları ve setRitAd/setBilgiCfg/ritTasi/setRitSure/setRitGunler/
+  // setRitReminder'daki "duzenleModu ise sadece yerelde tut" dalları).
+  const [duzenleOrijinal, setDuzenleOrijinal] = useState<any>(null);
   const lastDetayAnahtarRef = useRef<string | null>(null);
   useEffect(() => {
     if (!detay) { lastDetayAnahtarRef.current = null; return; }
@@ -1044,6 +1049,7 @@ export default function Rite() {
       lastDetayAnahtarRef.current = anahtar;
       const isDraft2 = !o2.id && !detay.preview;
       setDuzenleModu(isDraft2 || (!!o2.id && taze === o2.id));
+      setDuzenleOrijinal(null);
     }
   }, [detay, taze]);
   const [grupEditOpen, setGrupEditOpen] = useState(false);
@@ -1606,7 +1612,7 @@ export default function Rite() {
     openDetay(obj, 'aktivite', { preview: true });
   }
   function openRit(rt: any) { openDetay(rt, 'ritual'); }
-  function closeDetay() { setDetay(null); setTaze(null); }
+  function closeDetay() { setDetay(null); setTaze(null); setDuzenleOrijinal(null); }
   // Havuzdaki (kişisel) bir aktivite/programın grubunu (ve varsa alt grubunu) değiştir — aktivite ve program için ortak.
   async function setAktGrup(id: string, grup: string, altGrup?: string) {
     if (!client) return;
@@ -1627,7 +1633,9 @@ export default function Rite() {
   }
   async function setRitAd(id: string, ad: string) {
     if (!client || !ad.trim()) return;
-    if (!id) { patchDetay({ ad: ad.trim() }); return; } // taslak — henüz kaydedilmedi, sadece yerelde tut
+    // taslakta (id yok) ya da kayıtlı bir kişisel kart düzenleme modundayken (duzenleModu) canlı/online yazma
+    // yok — sadece yerel detay.obj güncellenir, asıl kayıt Kaydet butonuna (kisiselDuzenleKaydet) kalır.
+    if (!id || duzenleModu) { patchDetay({ ad: ad.trim() }); return; }
     await supabase.from('dog_rituals').update({ ad: ad.trim() }).eq('id', id);
     patchDetay({ ad: ad.trim() });
     loadData(client.id);
@@ -1652,7 +1660,7 @@ export default function Rite() {
   async function setBilgiCfg(id: string, cfg: any) {
     if (!client) return;
     const patch = { kart_config: cfg, kart_tipi: 'bilgi' };
-    if (!id) { patchDetay(patch); return; } // taslak — henüz kart yok, içerik/video sadece ekranda tutuluyor
+    if (!id || duzenleModu) { patchDetay(patch); return; } // taslak ya da düzenleme modu — sadece yerelde tut
     await supabase.from('dog_rituals').update(patch).eq('id', id);
     patchDetay(patch);
     loadData(client.id);
@@ -1796,7 +1804,7 @@ export default function Rite() {
       const e = parseD(hedefBas); e.setDate(e.getDate() + delta);
       yeniBit = iso(e);
     }
-    if (!id) { patchDetay({ baslangic: hedefBas, bitis: yeniBit }); return; } // taslak
+    if (!id || duzenleModu) { patchDetay({ baslangic: hedefBas, bitis: yeniBit }); return; } // taslak / düzenleme modu
     await supabase.from('dog_rituals').update({ baslangic: hedefBas, bitis: yeniBit }).eq('id', id);
     patchDetay({ baslangic: hedefBas, bitis: yeniBit });
     loadData(client.id);
@@ -1823,7 +1831,7 @@ export default function Rite() {
       const bas = ilkUygunGun(bas0, rt?.gunler || null);
       const e = parseD(bas); e.setDate(e.getDate() + gun - 1); patch = { baslangic: bas, bitis: iso(e) };
     }
-    if (!id) { patchDetay(patch); return; } // taslak
+    if (!id || duzenleModu) { patchDetay(patch); return; } // taslak / düzenleme modu
     await supabase.from('dog_rituals').update(patch).eq('id', id);
     patchDetay(patch);
     loadData(client.id);
@@ -1845,7 +1853,7 @@ export default function Rite() {
         patch = { gunler: arr, baslangic: yeniBas, bitis: iso(e) };
       }
     }
-    if (!id) { patchDetay(patch); return; } // taslak
+    if (!id || duzenleModu) { patchDetay(patch); return; } // taslak / düzenleme modu
     await supabase.from('dog_rituals').update(patch).eq('id', id);
     patchDetay(patch);
     loadData(client.id);
@@ -1864,7 +1872,7 @@ export default function Rite() {
   }
   async function setRitReminder(id: string, saat: string) {
     if (!client) return;
-    if (!id) { patchDetay({ hatirlatma_saat: saat || null, son_bildirim: null }); return; } // taslak
+    if (!id || duzenleModu) { patchDetay({ hatirlatma_saat: saat || null, son_bildirim: null }); return; } // taslak / düzenleme modu
     // Saati değiştirince "bugün gönderildi" işaretini sıfırla → yeni saat aynı gün de tetiklenir
     await supabase.from('dog_rituals').update({ hatirlatma_saat: saat || null, son_bildirim: null }).eq('id', id);
     patchDetay({ hatirlatma_saat: saat || null, son_bildirim: null });
@@ -3128,15 +3136,42 @@ export default function Rite() {
         // Görüntüleme/düzenleme modu ayrımı şimdilik sadece Not ve Alışkanlık'ta — Randevu henüz ele alınmadı
         // (kullanıcı isteği: "randevuyu şimdilik es geçebiliriz").
         const kisiselGorunumModu = isKisisel && kisiselTur !== 'randevu' && !duzenleModu;
+        // Kayıtlı bir kişisel kartı (Not/Alışkanlık) düzenleme moduna alırken o anki hâli saklanıyor — "Vazgeç"
+        // bu kopyayla geri dönüyor, alan değişiklikleri (Ad, Zamanlama, Bildirim, video/resim — bkz.
+        // setRitAd/setBilgiCfg/ritTasi/setRitSure/setRitGunler/setRitReminder'daki duzenleModu dalları)
+        // veritabanına hiç yazılmadan siliniyor. "Kaydet" ise o anki (yerelde biriken) hâli tek seferde yazıyor.
+        const kisiselDuzenleAc = () => { setDuzenleOrijinal({ ...o, kart_config: { ...(o.kart_config || {}) } }); setDuzenleModu(true); };
+        const kisiselDuzenleVazgec = () => { if (duzenleOrijinal) patchDetay(duzenleOrijinal); setDuzenleModu(false); setDuzenleOrijinal(null); };
+        const kisiselDuzenleKaydet = async () => {
+          if (!client || !o.id) { setDuzenleModu(false); setDuzenleOrijinal(null); return; }
+          await supabase.from('dog_rituals').update({
+            ad: (o.ad || '').trim() || kisiselYeni,
+            kart_config: o.kart_config || {},
+            baslangic: o.baslangic || null,
+            bitis: o.bitis ?? null,
+            gunler: o.gunler || null,
+            hatirlatma_saat: o.hatirlatma_saat || null,
+            son_bildirim: o.son_bildirim ?? null,
+          }).eq('id', o.id);
+          loadData(client.id);
+          setDuzenleModu(false);
+          setDuzenleOrijinal(null);
+        };
+        // Taslak (yeni oluşturma, henüz kaydedilmemiş) formu zaten dışarı/× ile kapanmıyordu (bkz. aşağısı) —
+        // kayıtlı bir kartı düzenlerken de aynı sebepten (yanlışlıkla dışarı dokunup değişiklikleri kaybetme
+        // riski) aynı kilit uygulanıyor; sadece görüntüleme modunda (kilitli değilken) dışarı/× yine çalışır.
+        const kilitliForm = isDraft || (isKisisel && kisiselTur !== 'randevu' && duzenleModu);
         return (
-        // Taslak (henüz kaydedilmemiş, ＋'dan yeni açılmış "İlk ekle") formu gerçek bir modal gibi davranıyor:
-        // dışarı dokununca ya da üstteki tutamaç/× ile kapanmıyor — kullanıcı isteği: yanlışlıkla dışarı dokunup
-        // az önce girilen bilgiyi kaybetmesin. Kapanış sadece en alttaki Vazgeç/Kaydet butonlarından oluyor
-        // (bkz. aşağısı). Zaten kaydedilmiş kartlarda (isDraft=false) eski davranış aynen sürüyor.
-        <div className="modal full" onMouseDown={() => { if (!isDraft) closeDetay(); }}>
+        // Taslak (henüz kaydedilmemiş, ＋'dan yeni açılmış "İlk ekle") YA DA kayıtlı bir kişisel kartı düzenleme
+        // modundayken (kilitliForm) form gerçek bir modal gibi davranıyor: dışarı dokununca ya da üstteki
+        // tutamaç/× ile kapanmıyor — kullanıcı isteği: yanlışlıkla dışarı dokunup girilen/değişen bilgiyi
+        // kaybetmesin. Kapanış sadece en alttaki buton çiftinden oluyor (Vazgeç/Kaydet taslakta, kayıtlı bir
+        // kartı düzenlerken de Vazgeç/Kaydet — bkz. aşağısı). Görüntüleme modunda ve kişisel olmayan/Randevu
+        // kartlarında eski davranış (dışarı/×/tutamaç ile kapanma) aynen sürüyor.
+        <div className="modal full" onMouseDown={() => { if (!kilitliForm) closeDetay(); }}>
           <div className="sheet fullsheet" onMouseDown={(e) => e.stopPropagation()} style={stilP ? { borderTop: '4px solid ' + stilP.ac } : undefined}>
-            {!isDraft && <div className="sheetgrip" onClick={() => closeDetay()} />}
-            {!isDraft && <button className="x" onClick={() => closeDetay()}>×</button>}
+            {!kilitliForm && <div className="sheetgrip" onClick={() => closeDetay()} />}
+            {!kilitliForm && <button className="x" onClick={() => closeDetay()}>×</button>}
             {isRit ? (
               isKisisel ? (
                 // İnce başlık şeridi: sabit etiket (gerçek "başlık" artık aşağıdaki Ad alanı) + sağda ↪️
@@ -3331,8 +3366,23 @@ export default function Rite() {
                 )}
               </div>
             )}
+            {/* Kayıtlı kişisel kartlarda (Not/Alışkanlık) da taslak formuyla tutarlı bir buton çifti: görüntüleme
+                modunda Kapat/Düzenle, düzenleme modunda Vazgeç/Kaydet (kullanıcı isteği — "tutarlılık açısından
+                altta Kapat ve Düzenle butonları olsun" / "düzenle dediğimizde ... Vazgeç ve Kaydet"). */}
             {isRit && isKisisel && kisiselTur !== 'randevu' && !isTaze && (
-              <button className="btn ghost sm" style={{ width: '100%', margin: '2px 0 8px' }} onClick={() => setDuzenleModu((v) => !v)}>{duzenleModu ? '✓ Bitti' : '✎ Düzenle'}</button>
+              <div style={{ display: 'flex', gap: 8, margin: '2px 0 8px' }}>
+                {duzenleModu ? (
+                  <>
+                    <button className="btn ghost" style={{ flex: 1 }} onClick={kisiselDuzenleVazgec}>Vazgeç</button>
+                    <button className="btn" style={{ flex: 1 }} onClick={kisiselDuzenleKaydet}>Kaydet</button>
+                  </>
+                ) : (
+                  <>
+                    <button className="btn ghost" style={{ flex: 1 }} onClick={closeDetay}>Kapat</button>
+                    <button className="btn" style={{ flex: 1 }} onClick={kisiselDuzenleAc}>Düzenle</button>
+                  </>
+                )}
+              </div>
             )}
             {isDraft && (
               <div style={{ display: 'flex', gap: 8, margin: '2px 0 8px' }}>
