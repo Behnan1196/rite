@@ -1123,6 +1123,7 @@ export default function Rite() {
       const isDraft2 = !o2.id && !detay.preview;
       setDuzenleModu(isDraft2 || (!!o2.id && taze === o2.id));
       setDuzenleOrijinal(null);
+      setZamanOpen(false);
     }
   }, [detay, taze]);
   const [grupEditOpen, setGrupEditOpen] = useState(false);
@@ -3213,10 +3214,10 @@ export default function Rite() {
         // bu kopyayla geri dönüyor, alan değişiklikleri (Ad, Zamanlama, Bildirim, video/resim — bkz.
         // setRitAd/setBilgiCfg/ritTasi/setRitSure/setRitGunler/setRitReminder'daki duzenleModu dalları)
         // veritabanına hiç yazılmadan siliniyor. "Kaydet" ise o anki (yerelde biriken) hâli tek seferde yazıyor.
-        const kisiselDuzenleAc = () => { setDuzenleOrijinal({ ...o, kart_config: { ...(o.kart_config || {}) } }); setDuzenleModu(true); };
-        const kisiselDuzenleVazgec = () => { if (duzenleOrijinal) patchDetay(duzenleOrijinal); setDuzenleModu(false); setDuzenleOrijinal(null); };
+        const kisiselDuzenleAc = () => { setDuzenleOrijinal({ ...o, kart_config: { ...(o.kart_config || {}) } }); setDuzenleModu(true); setZamanOpen(false); };
+        const kisiselDuzenleVazgec = () => { if (duzenleOrijinal) patchDetay(duzenleOrijinal); setDuzenleModu(false); setDuzenleOrijinal(null); setZamanOpen(false); };
         const kisiselDuzenleKaydet = async () => {
-          if (!client || !o.id) { setDuzenleModu(false); setDuzenleOrijinal(null); return; }
+          if (!client || !o.id) { setDuzenleModu(false); setDuzenleOrijinal(null); setZamanOpen(false); return; }
           await supabase.from('dog_rituals').update({
             ad: (o.ad || '').trim() || kisiselYeni,
             kart_config: o.kart_config || {},
@@ -3229,6 +3230,7 @@ export default function Rite() {
           loadData(client.id);
           setDuzenleModu(false);
           setDuzenleOrijinal(null);
+          setZamanOpen(false);
         };
         // Taslak (yeni oluşturma, henüz kaydedilmemiş) formu zaten dışarı/× ile kapanmıyordu (bkz. aşağısı) —
         // kayıtlı bir kartı düzenlerken de aynı sebepten (yanlışlıkla dışarı dokunup değişiklikleri kaybetme
@@ -3420,13 +3422,50 @@ export default function Rite() {
                     )}
                   </div>
                 ) : (
-                  <div
-                    onClick={() => { if (!kisiselGorunumModu) setZamanOpen(true); }}
-                    style={{ padding: '7px 10px', borderRadius: 8, background: 'var(--card2,#f6f4ee)', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, cursor: kisiselGorunumModu ? 'default' : 'pointer' }}
-                  >
-                    <span>🗓️</span>
-                    <span style={{ fontSize: 13, color: 'var(--muted)' }}>{gunOzet}</span>
-                  </div>
+                  // Alışkanlık: Süre/Günler/taşı artık ayrı bir modal AÇMIYOR — video ve bildirimdeki gibi,
+                  // dokununca hemen altında (kullanıcı isteği: "zamanlama için de benzer şekilde düzenleyelim").
+                  // Kişisel olmayan ritüellerde aynı içerik hâlâ kendi modalinde (bkz. aşağısı, isRit && !isKisisel).
+                  <>
+                    <div
+                      onClick={() => { if (!kisiselGorunumModu) setZamanOpen((v) => !v); }}
+                      style={{ padding: '7px 10px', borderRadius: 8, background: 'var(--card2,#f6f4ee)', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, cursor: kisiselGorunumModu ? 'default' : 'pointer' }}
+                    >
+                      <span>🗓️</span>
+                      <span style={{ fontSize: 13, color: 'var(--muted)', flex: 1 }}>{gunOzet}</span>
+                      {!kisiselGorunumModu && <span style={{ fontSize: 11, color: 'var(--muted)', opacity: .6 }}>{zamanOpen ? '▴' : '▾'}</span>}
+                    </div>
+                    {!kisiselGorunumModu && zamanOpen && (
+                      <div style={{ padding: '7px 8px', borderRadius: 8, background: '#fff', border: '1px solid var(--line)', margin: '2px 0 8px' }}>
+                        <div className="kv" style={{ marginTop: 0 }}><div className="k">Hangi güne taşı</div>
+                          <div>
+                            <span className={'chip' + (o.baslangic === today ? ' on' : '')} onClick={() => ritTasi(o.id, today)}>Bugün</span>
+                            <span className={'chip' + (o.baslangic === yarin ? ' on' : '')} onClick={() => ritTasi(o.id, yarin)}>Yarın</span>
+                            <input type="date" value={o.baslangic || ''} onChange={(e) => e.target.value && ritTasi(o.id, e.target.value)} style={{ width: 'auto', marginLeft: 4 }} />
+                          </div>
+                        </div>
+                        <div className="kv"><div className="k">Süre</div>
+                          <div>
+                            <span className={'chip' + (!o.bitis ? ' on' : '')} onClick={() => setRitSure(o.id, null)}>Süregelen</span>
+                            <span className={'chip' + (o.bitis ? ' on' : '')} onClick={() => setRitSure(o.id, parseInt(sureInput) || 21)}>Süreli</span>
+                            {o.bitis && <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', marginLeft: 8 }}>
+                              <input type="number" min={1} value={sureInput} onChange={(e) => setSureInput(e.target.value)} style={{ width: 60 }} /> gün
+                              <button className="btn sm" onClick={() => setRitSure(o.id, parseInt(sureInput) || 21)}>Uygula</button>
+                            </span>}
+                          </div>
+                          {o.bitis && <div className="note">Başlangıç {kisaTarih(o.baslangic)} · bitiş {kisaTarih(o.bitis)}</div>}
+                        </div>
+                        <div className="kv"><div className="k">Günler</div>
+                          <div>
+                            <span className={'chip' + ((!o.gunler || o.gunler.length === 0) ? ' on' : '')} onClick={() => setRitGunler(o.id, [])}>Her gün</span>
+                            {GUNLER.map(([n, l]) => {
+                              const sel = !!(o.gunler && o.gunler.includes(n));
+                              return <span key={n} className={'chip' + (sel ? ' on' : '')} onClick={() => { const cur: number[] = o.gunler ? [...o.gunler] : []; const nx = cur.includes(n) ? cur.filter((x) => x !== n) : [...cur, n]; setRitGunler(o.id, nx); }}>{l}</span>;
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
                 {/* Bildirim şeridi: düzenleme modunda artık ayrı bir modal AÇMIYOR, hatta ayrı bir "aç/kapa"
                     adımı bile yok — saat alanı doğrudan şeridin üzerinde (kullanıcı isteği: "fazladan bir modal
@@ -3504,25 +3543,23 @@ export default function Rite() {
               <button className={'btn' + (ritDone(o.id) ? ' ghost' : '')} style={{ width: '100%', margin: '2px 0 8px' }} onClick={() => toggleRit(o.id)}>{ritDone(o.id) ? '✓ Yaptım — geri al' : '✓ Yaptım'}</button>
             )}
 
-            {isRit && zamanOpen && (
+            {/* Bu modal artık SADECE kişisel olmayan ritüellerde (Meridyen/program vb.) açılıyor — Not kendi
+                gövdesinde doğrudan bir tarih alanı kullanıyor, Alışkanlık da artık kendi Zamanlama şeridinin
+                altında aynı içeriği (Taşı/Süre/Günler) modal açmadan gösteriyor (bkz. yukarısı, kullanıcı
+                isteği: "zamanlama için de benzer şekilde düzenleyelim"). */}
+            {isRit && !isKisisel && zamanOpen && (
               <div className="modal top2" onMouseDown={() => setZamanOpen(false)}>
               <div className="sheet" onMouseDown={(e) => e.stopPropagation()}>
                 <button className="x" onClick={() => setZamanOpen(false)}>×</button>
                 <h3 style={{ marginBottom: 6 }}>🗓️ Zamanlama</h3>
-                {/* Not'ta "hangi güne taşı" burada değil — kartın kendi gövdesindeki Zamanlama şeridi doğrudan
-                    tarih alanı olarak çalışıyor. Alışkanlık'ta ise Zamanlama şeridi bu modalı açıyor (Süre/Günler
-                    de zaten burada olduğu için), o yüzden taşıma da yine burada kalıyor. Kişisel olmayan
-                    ritüellerde (Meridyen vb.) zaten tek yol burası. */}
-                {(!isKisisel || kisiselTur === 'aliskanlik') && (
-                  <div className="kv"><div className="k">Hangi güne taşı</div>
-                    <div>
-                      <span className={'chip' + (o.baslangic === today ? ' on' : '')} onClick={() => ritTasi(o.id, today)}>Bugün</span>
-                      <span className={'chip' + (o.baslangic === yarin ? ' on' : '')} onClick={() => ritTasi(o.id, yarin)}>Yarın</span>
-                      <input type="date" value={o.baslangic || ''} onChange={(e) => e.target.value && ritTasi(o.id, e.target.value)} style={{ width: 'auto', marginLeft: 4 }} />
-                    </div>
-                    <div className="note">{gunOzet}{o.bitis && o.bitis !== o.baslangic ? ' — süresi korunarak taşınır' : ''}</div>
+                <div className="kv"><div className="k">Hangi güne taşı</div>
+                  <div>
+                    <span className={'chip' + (o.baslangic === today ? ' on' : '')} onClick={() => ritTasi(o.id, today)}>Bugün</span>
+                    <span className={'chip' + (o.baslangic === yarin ? ' on' : '')} onClick={() => ritTasi(o.id, yarin)}>Yarın</span>
+                    <input type="date" value={o.baslangic || ''} onChange={(e) => e.target.value && ritTasi(o.id, e.target.value)} style={{ width: 'auto', marginLeft: 4 }} />
                   </div>
-                )}
+                  <div className="note">{gunOzet}{o.bitis && o.bitis !== o.baslangic ? ' — süresi korunarak taşınır' : ''}</div>
+                </div>
                 <div className="kv"><div className="k">Süre</div>
                   <div>
                     <span className={'chip' + (!o.bitis ? ' on' : '')} onClick={() => setRitSure(o.id, null)}>Süregelen</span>
