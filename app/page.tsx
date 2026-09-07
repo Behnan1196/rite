@@ -1040,6 +1040,9 @@ export default function Rite() {
   // aşağıdaki Düzenle/Vazgeç/Kaydet butonları ve setRitAd/setBilgiCfg/ritTasi/setRitSure/setRitGunler/
   // setRitReminder'daki "duzenleModu ise sadece yerelde tut" dalları).
   const [duzenleOrijinal, setDuzenleOrijinal] = useState<any>(null);
+  // Bildirim şeridi (Not/Alışkanlık, düzenleme modu): artık ayrı bir modal açmıyor, dokununca şeridin altında
+  // saat alanı açılıp kapanıyor (kullanıcı isteği — "fazladan bir modal çıkmasına gerek yok").
+  const [bildirimAcik, setBildirimAcik] = useState(false);
   const lastDetayAnahtarRef = useRef<string | null>(null);
   useEffect(() => {
     if (!detay) { lastDetayAnahtarRef.current = null; return; }
@@ -1050,6 +1053,7 @@ export default function Rite() {
       const isDraft2 = !o2.id && !detay.preview;
       setDuzenleModu(isDraft2 || (!!o2.id && taze === o2.id));
       setDuzenleOrijinal(null);
+      setBildirimAcik(false);
     }
   }, [detay, taze]);
   const [grupEditOpen, setGrupEditOpen] = useState(false);
@@ -3140,10 +3144,10 @@ export default function Rite() {
         // bu kopyayla geri dönüyor, alan değişiklikleri (Ad, Zamanlama, Bildirim, video/resim — bkz.
         // setRitAd/setBilgiCfg/ritTasi/setRitSure/setRitGunler/setRitReminder'daki duzenleModu dalları)
         // veritabanına hiç yazılmadan siliniyor. "Kaydet" ise o anki (yerelde biriken) hâli tek seferde yazıyor.
-        const kisiselDuzenleAc = () => { setDuzenleOrijinal({ ...o, kart_config: { ...(o.kart_config || {}) } }); setDuzenleModu(true); };
-        const kisiselDuzenleVazgec = () => { if (duzenleOrijinal) patchDetay(duzenleOrijinal); setDuzenleModu(false); setDuzenleOrijinal(null); };
+        const kisiselDuzenleAc = () => { setDuzenleOrijinal({ ...o, kart_config: { ...(o.kart_config || {}) } }); setDuzenleModu(true); setBildirimAcik(false); };
+        const kisiselDuzenleVazgec = () => { if (duzenleOrijinal) patchDetay(duzenleOrijinal); setDuzenleModu(false); setDuzenleOrijinal(null); setBildirimAcik(false); };
         const kisiselDuzenleKaydet = async () => {
-          if (!client || !o.id) { setDuzenleModu(false); setDuzenleOrijinal(null); return; }
+          if (!client || !o.id) { setDuzenleModu(false); setDuzenleOrijinal(null); setBildirimAcik(false); return; }
           await supabase.from('dog_rituals').update({
             ad: (o.ad || '').trim() || kisiselYeni,
             kart_config: o.kart_config || {},
@@ -3156,6 +3160,7 @@ export default function Rite() {
           loadData(client.id);
           setDuzenleModu(false);
           setDuzenleOrijinal(null);
+          setBildirimAcik(false);
         };
         // Taslak (yeni oluşturma, henüz kaydedilmemiş) formu zaten dışarı/× ile kapanmıyordu (bkz. aşağısı) —
         // kayıtlı bir kartı düzenlerken de aynı sebepten (yanlışlıkla dışarı dokunup değişiklikleri kaybetme
@@ -3355,14 +3360,27 @@ export default function Rite() {
                     <span style={{ fontSize: 13, color: 'var(--muted)' }}>{gunOzet}</span>
                   </div>
                 )}
+                {/* Bildirim şeridi: düzenleme modunda dokununca ayrı bir modal AÇMIYOR, tam bunun yerine kendi
+                    altında bir saat alanı açılıp kapanıyor (kullanıcı isteği — "fazladan bir modal çıkmasına
+                    gerek yok"). setRitReminder zaten duzenleModu'da sadece yerelde tutuyor (bkz. o fonksiyon),
+                    o yüzden burada ayrı bir Kaydet/Vazgeç gerekmiyor — asıl kaydetme kartın kendi Kaydet'inde. */}
                 {(!kisiselGorunumModu || o.hatirlatma_saat) && (
-                  <div
-                    onClick={() => { if (kisiselGorunumModu) return; setRemInput(o.hatirlatma_saat || ''); setRemTarihInput(kCfg?.hatirlatma_tarih || o.baslangic || ''); setRemMenuFor({ ...o, _randevu: false }); }}
-                    style={{ padding: '7px 10px', borderRadius: 8, background: 'var(--card2,#f6f4ee)', display: 'flex', alignItems: 'center', gap: 8, cursor: kisiselGorunumModu ? 'default' : 'pointer' }}
-                  >
-                    <span>🔔</span>
-                    <span style={{ fontSize: 13, color: 'var(--muted)' }}>{o.hatirlatma_saat ? o.hatirlatma_saat : 'Bildirim ekle'}</span>
-                  </div>
+                  <>
+                    <div
+                      onClick={() => { if (!kisiselGorunumModu) setBildirimAcik((v) => !v); }}
+                      style={{ padding: '7px 10px', borderRadius: 8, background: 'var(--card2,#f6f4ee)', display: 'flex', alignItems: 'center', gap: 8, cursor: kisiselGorunumModu ? 'default' : 'pointer' }}
+                    >
+                      <span>🔔</span>
+                      <span style={{ fontSize: 13, color: 'var(--muted)', flex: 1 }}>{o.hatirlatma_saat ? o.hatirlatma_saat : 'Bildirim ekle'}</span>
+                      {!kisiselGorunumModu && <span style={{ fontSize: 11, color: 'var(--muted)', opacity: .6 }}>{bildirimAcik ? '▴' : '▾'}</span>}
+                    </div>
+                    {!kisiselGorunumModu && bildirimAcik && (
+                      <div style={{ padding: '7px 10px', borderRadius: 8, background: 'var(--card2,#f6f4ee)', display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                        <input type="time" value={o.hatirlatma_saat || ''} onChange={(e) => setRitReminder(o.id, e.target.value)} style={{ width: 'auto', fontSize: 13 }} />
+                        {o.hatirlatma_saat && <span className="chip" style={{ borderStyle: 'dashed' }} onClick={() => setRitReminder(o.id, '')}>Kaldır</span>}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             )}
