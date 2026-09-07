@@ -2308,6 +2308,49 @@ export default function Rite() {
           {vurl && <a className="playbtn" href={vurl} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} title="Aç">▶</a>}
           <button className="rmx" onClick={() => ritSil(rt.id)} title="Kaldır">✕</button>
         </div>
+        {/* Alışkanlık ilerlemesi kartın kendi üzerinde: süreli alışkanlıklarda (bitis var) üstte haftalık
+            doluluk çubukları (başlangıçtan itibaren 7'şer günlük dilimler, o dilimdeki aktif günlerin ne kadarı
+            yapıldıysa o oranda dolu), altta bu haftanın 7 günü — ayrı bir gelişim ekranına girmeden, listeyi
+            hiç açmadan görülsün diye (kullanıcı isteği). Sadece liste/ajanda satırında — kart detayında yok. */}
+        {rt.aliskanlik && !rt.mezun && (() => {
+          let bloklar: number[] | null = null;
+          if (rt.bitis) {
+            bloklar = [];
+            const end = parseD(rt.bitis);
+            const cur = parseD(rt.baslangic);
+            while (cur <= end && bloklar.length < 60) {
+              let toplam = 0, yapilan = 0;
+              for (let i = 0; i < 7; i++) {
+                const dt = new Date(cur); dt.setDate(dt.getDate() + i);
+                if (dt > end) break;
+                const ds = iso(dt);
+                if (activeOn(rt, ds)) { toplam++; if (logs.some((l) => l.ritual_id === rt.id && l.tarih === ds && l.yapildi)) yapilan++; }
+              }
+              bloklar.push(toplam ? yapilan / toplam : 0);
+              cur.setDate(cur.getDate() + 7);
+            }
+          }
+          return (
+            <div style={{ margin: '0 2px 10px' }}>
+              {bloklar && bloklar.length > 0 && (
+                <div style={{ display: 'flex', gap: 3, marginBottom: 3 }}>
+                  {bloklar.map((f, i) => (
+                    <div key={i} style={{ flex: 1, height: 6, borderRadius: 4, background: '#efe8da', overflow: 'hidden' }} title={'Hafta ' + (i + 1)}>
+                      <div style={{ width: Math.round(f * 100) + '%', height: '100%', background: 'var(--green)', borderRadius: 4 }} />
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 3 }}>
+                {weekArr.map((d) => {
+                  if (!activeOn(rt, d)) return <div key={d} style={{ flex: 1, height: 8, borderRadius: 3, border: '1px dashed #e3dbca' }} />;
+                  const ok = logs.some((l) => l.ritual_id === rt.id && l.tarih === d && l.yapildi);
+                  return <div key={d} style={{ flex: 1, height: 8, borderRadius: 3, background: ok ? 'var(--green)' : '#efe8da' }} title={WD[wday(d)]} />;
+                })}
+              </div>
+            </div>
+          );
+        })()}
         {!rt.mezun && !rt.bitis && rt.aliskanlik && total >= 21 && (
           <div className="retirebox">🎉 <div>&quot;{rt.ad}&quot; {total} kez yapıldı — artık otomatik. <b>Mezun edip</b> listeni sadeleştirelim mi?</div><button className="rb" onClick={() => { setMezunPuan(0); setMezunModal(rt); }}>Mezun et</button></div>
         )}
@@ -3157,13 +3200,16 @@ export default function Rite() {
             })()}
             {/* Not eklerken/düzenlerken "bu bir randevu" seçme kutusu artık yok — Randevu, alttaki ＋ menüsünden
                 kendi başına oluşturuluyor. Randevunun kendi tarihi/saati burada (kart_config.saat, baslangic);
-                bildirimin ne zaman geleceği ayrı — 🔔'den, farklı bir tarih/saat olarak ayarlanabilir (kullanıcı isteği). */}
-            {isRit && o.kaynak === 'Kendi' && kTip === 'bilgi' && !!kCfg?.randevu && (
+                bildirimin ne zaman geleceği ayrı — 🔔'den, farklı bir tarih/saat olarak ayarlanabilir (kullanıcı isteği).
+                Not ve Alışkanlık'ta da aynı yerde kendi tarih alanları var — "başka güne taşıma" artık ayrı bir
+                ikon/modal değil, direkt buradaki tarihi değiştirerek yapılıyor (kullanıcı isteği — Zamanlama
+                penceresindeki "hangi güne taşı" kaldırıldı, orası artık sadece Süre/Günler'e ait). */}
+            {isRit && isKisisel && (
               <div className="kv" style={{ margin: '4px 0 10px' }}>
-                <div className="k">📅 Randevu ne zaman</div>
+                <div className="k">📅 {kisiselTur === 'randevu' ? 'Randevu ne zaman' : kisiselTur === 'aliskanlik' ? 'Başlangıç tarihi' : 'Tarih'}</div>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                   <input type="date" value={o.baslangic || ''} onChange={(e) => e.target.value && ritTasi(o.id, e.target.value)} style={{ width: 'auto' }} />
-                  <input type="time" value={kCfg?.saat || ''} onChange={(e) => bilgiKaydet({ ...kCfg, saat: e.target.value || null })} style={{ width: 'auto' }} />
+                  {kisiselTur === 'randevu' && <input type="time" value={kCfg?.saat || ''} onChange={(e) => bilgiKaydet({ ...kCfg, saat: e.target.value || null })} style={{ width: 'auto' }} />}
                 </div>
               </div>
             )}
@@ -3240,14 +3286,20 @@ export default function Rite() {
               <div className="sheet" onMouseDown={(e) => e.stopPropagation()}>
                 <button className="x" onClick={() => setZamanOpen(false)}>×</button>
                 <h3 style={{ marginBottom: 6 }}>🗓️ Zamanlama</h3>
-                <div className="kv"><div className="k">Hangi güne taşı</div>
-                  <div>
-                    <span className={'chip' + (o.baslangic === today ? ' on' : '')} onClick={() => ritTasi(o.id, today)}>Bugün</span>
-                    <span className={'chip' + (o.baslangic === yarin ? ' on' : '')} onClick={() => ritTasi(o.id, yarin)}>Yarın</span>
-                    <input type="date" value={o.baslangic || ''} onChange={(e) => e.target.value && ritTasi(o.id, e.target.value)} style={{ width: 'auto', marginLeft: 4 }} />
+                {/* Kişisel kartlarda (isKisisel) "hangi güne taşı" artık burada değil — kartın kendi gövdesindeki
+                    tarih alanından yapılıyor (bkz. yukarısı, kullanıcı isteği: bu ikisi aynı işi ayrı yerlerden
+                    yapıyordu). Kişisel olmayan ritüellerde (Meridyen vb.) taşıma başka bir yol sunmuyor, o yüzden
+                    onlarda bu bölüm aynen kalıyor. */}
+                {!isKisisel && (
+                  <div className="kv"><div className="k">Hangi güne taşı</div>
+                    <div>
+                      <span className={'chip' + (o.baslangic === today ? ' on' : '')} onClick={() => ritTasi(o.id, today)}>Bugün</span>
+                      <span className={'chip' + (o.baslangic === yarin ? ' on' : '')} onClick={() => ritTasi(o.id, yarin)}>Yarın</span>
+                      <input type="date" value={o.baslangic || ''} onChange={(e) => e.target.value && ritTasi(o.id, e.target.value)} style={{ width: 'auto', marginLeft: 4 }} />
+                    </div>
+                    <div className="note">{gunOzet}{o.bitis && o.bitis !== o.baslangic ? ' — süresi korunarak taşınır' : ''}</div>
                   </div>
-                  <div className="note">{gunOzet}{o.bitis && o.bitis !== o.baslangic ? ' — süresi korunarak taşınır' : ''}</div>
-                </div>
+                )}
                 <div className="kv"><div className="k">Süre</div>
                   <div>
                     <span className={'chip' + (!o.bitis ? ' on' : '')} onClick={() => setRitSure(o.id, null)}>Süregelen</span>
