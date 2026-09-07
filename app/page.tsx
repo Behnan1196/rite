@@ -3129,10 +3129,14 @@ export default function Rite() {
         // (kullanıcı isteği: "randevuyu şimdilik es geçebiliriz").
         const kisiselGorunumModu = isKisisel && kisiselTur !== 'randevu' && !duzenleModu;
         return (
-        <div className="modal full" onMouseDown={() => closeDetay()}>
+        // Taslak (henüz kaydedilmemiş, ＋'dan yeni açılmış "İlk ekle") formu gerçek bir modal gibi davranıyor:
+        // dışarı dokununca ya da üstteki tutamaç/× ile kapanmıyor — kullanıcı isteği: yanlışlıkla dışarı dokunup
+        // az önce girilen bilgiyi kaybetmesin. Kapanış sadece en alttaki Vazgeç/Kaydet butonlarından oluyor
+        // (bkz. aşağısı). Zaten kaydedilmiş kartlarda (isDraft=false) eski davranış aynen sürüyor.
+        <div className="modal full" onMouseDown={() => { if (!isDraft) closeDetay(); }}>
           <div className="sheet fullsheet" onMouseDown={(e) => e.stopPropagation()} style={stilP ? { borderTop: '4px solid ' + stilP.ac } : undefined}>
-            <div className="sheetgrip" onClick={() => closeDetay()} />
-            <button className="x" onClick={() => closeDetay()}>×</button>
+            {!isDraft && <div className="sheetgrip" onClick={() => closeDetay()} />}
+            {!isDraft && <button className="x" onClick={() => closeDetay()}>×</button>}
             {isRit ? (
               isKisisel ? (
                 // İnce başlık şeridi: sabit etiket (gerçek "başlık" artık aşağıdaki Ad alanı) + sağda ↪️
@@ -3330,7 +3334,12 @@ export default function Rite() {
             {isRit && isKisisel && kisiselTur !== 'randevu' && !isTaze && (
               <button className="btn ghost sm" style={{ width: '100%', margin: '2px 0 8px' }} onClick={() => setDuzenleModu((v) => !v)}>{duzenleModu ? '✓ Bitti' : '✎ Düzenle'}</button>
             )}
-            {isDraft && <button className="btn" style={{ width: '100%', margin: '2px 0 8px' }} onClick={taslakKaydet}>Kaydet</button>}
+            {isDraft && (
+              <div style={{ display: 'flex', gap: 8, margin: '2px 0 8px' }}>
+                <button className="btn ghost" style={{ flex: 1 }} onClick={closeDetay}>Vazgeç</button>
+                <button className="btn" style={{ flex: 1 }} onClick={taslakKaydet}>Kaydet</button>
+              </div>
+            )}
             {isRit && kTip === 'video' && <div style={{ margin: '4px 0 8px' }}>
               {(kCfg.url || o.url) && <EmbedVideo url={kCfg.url || o.url} />}
               {!o.sablon_id && <div className="daterow" style={{ marginTop: 6 }}><input value={kartUrlInput} onChange={(e) => setKartUrlInput(e.target.value)} onBlur={() => { if (kartUrlInput.trim() !== ((o.kart_config && o.kart_config.url) || o.url || '')) setRitKartUrl(o.id, kartUrlInput); }} placeholder="Video linki (düzenle)…" style={{ flex: 1 }} /></div>}
