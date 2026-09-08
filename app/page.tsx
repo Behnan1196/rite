@@ -159,7 +159,7 @@ async function resimKucult(file: File, maxDim = 1600, quality = 0.82): Promise<B
   const blob: Blob | null = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
   return blob || file;
 }
-function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi, sadeceAciklama }: { cfg: any; onSave: (cfg: any) => void; randevu?: boolean; readOnly?: boolean; notTasarimi?: boolean; sadeceAciklama?: boolean }) {
+function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi, sadeceAciklama, tekVideo }: { cfg: any; onSave: (cfg: any) => void; randevu?: boolean; readOnly?: boolean; notTasarimi?: boolean; sadeceAciklama?: boolean; tekVideo?: boolean }) {
   const videolar: { baslik?: string; url: string; bas?: number; bit?: number; ozelNot?: string }[] = cfg?.videolar || [];
   const [vidSec, setVidSec] = useState(0);
   // vidFormMode: 'add' = boş formla yeni video; 'edit' = seçili videoyu (secili) doldurup düzenler; null = kapalı.
@@ -182,6 +182,10 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi, sadeceAcik
   const [resimBuyukIndex, setResimBuyukIndex] = useState<number | null>(null);
   const resimInputRef = useRef<HTMLInputElement>(null);
   const [yer, setYer] = useState(cfg?.yer || '');
+  // tekVideo ("Kart" tipi — kullanıcı isteği: "sadece bir video linki girmesi yeterli, isim/saniye/açıklama
+  // olmasın") — tek satırlık link alanı doğrudan cfg.videolar[0]'ı okur/yazar, formuAc/vidFormMode akışını hiç
+  // kullanmıyor; vUrl'i cfg değiştiğinde (kart değişince ya da kayıt sonrası) senkron tutuyoruz.
+  useEffect(() => { if (tekVideo) setVUrl(cfg?.videolar?.[0]?.url || ''); }, [tekVideo, cfg?.videolar]);
   useEffect(() => { setIcerikVal(cfg?.icerik || ''); }, [cfg?.icerik]);
   useEffect(() => { setResimler(resimlerdenAl(cfg)); }, [cfg?.resim, cfg?.resimler]);
   useEffect(() => { setYer(cfg?.yer || ''); }, [cfg?.yer]);
@@ -497,7 +501,28 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi, sadeceAcik
                 geçmiyor (undefined → aşağıdaki koşul her zaman true), o yüzden davranışları değişmiyor. */}
             {!(notTasarimi && sadeceAciklama) && (
             <div style={{ order: notTasarimi ? 2 : 1 }}>
-              {notTasarimi ? (
+              {tekVideo ? (
+                // "Kart" tipi — kullanıcı isteği: "sadece bir video linki girmesi yeterli, ismi zaten kartın
+                // adından belli olur, saniye ayarları ve videoya özel açıklama da olmasın". Liste/ekle-formu
+                // yerine tek satırlık link alanı; videolar[0] dışında hiçbir alan kullanılmıyor.
+                <div style={{ margin: '0 0 12px', padding: '7px 10px', borderRadius: 8, background: 'var(--card2,#f6f4ee)' }}>
+                  {readOnly ? (
+                    videolar[0]?.url && <EmbedVideo url={videolar[0].url} />
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span>🎬</span>
+                      <input
+                        value={vUrl}
+                        onChange={(e) => setVUrl(e.target.value)}
+                        onBlur={() => { const u = vUrl.trim(); const eski = videolar[0]?.url || ''; if (u !== eski) onSave({ ...cfg, videolar: u ? [{ url: u }] : [] }); }}
+                        placeholder="Video linki (ops.) — https://…"
+                        style={{ flex: 1, fontSize: 13 }}
+                      />
+                      {videolar[0]?.url && <span className="chip" style={{ borderStyle: 'dashed' }} onClick={() => { setVUrl(''); onSave({ ...cfg, videolar: [] }); }}>Kaldır</span>}
+                    </div>
+                  )}
+                </div>
+              ) : notTasarimi ? (
                 // notTasarimi: video ve resim TEK bir "medya" şeridinde, aynı gri arkaplan/köşe içinde —
                 // kullanıcı isteği: "resim özelliği tek kart sistemine eklenebilir". Görüntüleme modunda eski
                 // chip + seç + oynat davranışı aynen sürüyor (bkz. aşağıdaki EmbedVideo); düzenleme modunda ise
@@ -1484,6 +1509,23 @@ export default function Rite() {
     const ex = logs.filter((l) => l.ritual_id === ritId && l.tarih === day)[0];
     if (ex) await supabase.from('dog_ritual_logs').update({ yapildi: !ex.yapildi }).eq('id', ex.id);
     else await supabase.from('dog_ritual_logs').insert({ client_id: client.id, ritual_id: ritId, tarih: day, yapildi: true });
+    loadData(client.id);
+  }
+  // "Kart"ın "Yapılacak" hâli (bkz. kartYapilacakSec — kart_config.gorev, bitissiz, alışkanlık değil) için
+  // ayrı bir tamamlama: alışkanlıktaki gibi sadece o günün kaydı değil, kalıcı bir kapanış (kullanıcı isteği:
+  // "yapıncaya kadar devam edebilir" — işaretlenince kart bir daha görünmemeli). toggleRit'in kendisine hiç
+  // dokunmuyoruz (Not/Alışkanlık/Randevu aynen eski davranışında kalsın diye), bu tamamen ayrı, Kart'a özel bir
+  // fonksiyon — sadece isYeniKart dalındaki "yaptım" tikinden çağrılıyor.
+  async function kartYapildiToggle(rt: any) {
+    if (!client) return;
+    const oncekiYapildi = ritDone(rt.id);
+    const ex = logs.filter((l) => l.ritual_id === rt.id && l.tarih === day)[0];
+    if (ex) await supabase.from('dog_ritual_logs').update({ yapildi: !ex.yapildi }).eq('id', ex.id);
+    else await supabase.from('dog_ritual_logs').insert({ client_id: client.id, ritual_id: rt.id, tarih: day, yapildi: true });
+    if (!rt.aliskanlik && rt.kart_config?.gorev) {
+      if (!oncekiYapildi) await supabase.from('dog_rituals').update({ bitis: day }).eq('id', rt.id);
+      else if (rt.bitis === day) await supabase.from('dog_rituals').update({ bitis: null }).eq('id', rt.id);
+    }
     loadData(client.id);
   }
   async function ritEkle(ad: string, zaman = 'gün', kaynak = 'Kendi', tip = 'aliskanlik', alan: string | null = null, activityId: string | null = null, faydalar: string[] = [], url: string | null = null, gunler: number[] | null = null, sureG: number | null = null, programId: string | null = null, programAd: string | null = null, reload = true, basGun = 0, rutin: string | null = null, sira = 0, kartTipi: string | null = null, kartConfig: any = null, aliskanlikP: boolean | null = null, sablonId: string | null = null, sablonAdim: number | null = null, rutinAd: string | null = null) {
@@ -3264,7 +3306,9 @@ export default function Rite() {
           ? (c: any) => setSablonAdimKart(o.sablon_id, o.sablon_adim ?? 0, c)
           : (c: any) => setBilgiCfg(o.id, c);
         const noDone = kTip === 'anket' || kTip === 'coktan' || kTip === 'nefes' || kTip === 'ruhhali' || kTip === 'tarif' || kTip === 'sukran' || kTip === 'topraklama' || kTip === 'pomodoro' || kTip === 'beden' || kTip === 'uykuoncesi' || kTip === 'su' || kTip === 'maruz' || kTip === 'niyet' || kTip === 'workout' || (kTip === 'video' && kCfg.done === false) || (kTip === 'randevu' && kCfg.done === false);
-        const gunOzet = !o.baslangic ? "📥 Inbox'ta bekliyor" : (o.baslangic === o.bitis ? '📅 ' + kisaTarih(o.baslangic) : (o.bitis ? kisaTarih(o.baslangic) + ' → ' + kisaTarih(o.bitis) : 'süregelen · ' + kisaTarih(o.baslangic) + "'den"));
+        // kCfg?.gorev SADECE "Kart"ın "Yapılacak" modunda set edilir (bkz. kartYapilacakSec) — Not/Alışkanlık/
+        // Randevu bu alanı hiç yazmıyor, o yüzden onların "süregelen" etiketi burada değişmiyor.
+        const gunOzet = !o.baslangic ? "📥 Inbox'ta bekliyor" : (o.baslangic === o.bitis ? '📅 ' + kisaTarih(o.baslangic) : (o.bitis ? kisaTarih(o.baslangic) + ' → ' + kisaTarih(o.bitis) : (kCfg?.gorev ? 'yapılacak · ' + kisaTarih(o.baslangic) + "'den" : 'süregelen · ' + kisaTarih(o.baslangic) + "'den")));
         const yarin = (() => { const d = parseD(today); d.setDate(d.getDate() + 1); return iso(d); })();
         // Meridyen'den (koçtan) gelen kart/program — doğrudan atanmış ya da şablona bağlı (sablon_id) — danışan
         // tarafından başka birine paylaşılamaz. Kendi yazdığı ya da bir arkadaşından aldığı kişisel kartlar serbest.
@@ -3338,6 +3382,14 @@ export default function Rite() {
         const kartSuregelenSec = () => { setRitSure(o.id, null); if (!o.aliskanlik) patchDetay({ aliskanlik: true }); };
         const kartSureliSec = () => { setRitSure(o.id, parseInt(sureInput) || 21); if (!o.aliskanlik) patchDetay({ aliskanlik: true }); };
         const kartGunSec = (nx: number[]) => { setRitGunler(o.id, nx); if (!o.aliskanlik) patchDetay({ aliskanlik: true }); };
+        // "Kart"ın üç basit hâli (kullanıcı isteği — temelden tartışma sonucu): Bugün / Yapılacak / Alışkanlık.
+        // Zamanlama şeridi ve tamamlanma DAVRANIŞI (bkz. kartYapildiToggle) aynı tek seçime bağlı — kullanıcı
+        // hiçbir zaman "zamanlama tipi" ve "tamamlanma tipi" diye iki ayrı soru görmüyor. gorev (kart_config
+        // içinde) SADECE bu üç fonksiyonla yazılıyor, Not/Alışkanlık/Randevu hiç dokunmuyor.
+        const kartTur: 'bugun' | 'yapilacak' | 'aliskanlik' = o.aliskanlik ? 'aliskanlik' : (kCfg?.gorev ? 'yapilacak' : 'bugun');
+        const kartBugunSec = () => { patchDetay({ aliskanlik: false, bitis: o.baslangic || day, gunler: null, kart_config: { ...(kCfg || {}), gorev: false } }); };
+        const kartYapilacakSec = () => { patchDetay({ aliskanlik: false, bitis: null, kart_config: { ...(kCfg || {}), gorev: true } }); };
+        const kartAliskanlikSec = () => { setRitSure(o.id, null); patchDetay({ aliskanlik: true, kart_config: { ...(kCfg || {}), gorev: false } }); };
         return (
         // Taslak (henüz kaydedilmemiş, ＋'dan yeni açılmış "İlk ekle") YA DA kayıtlı bir kişisel kartı düzenleme
         // modundayken (kilitliForm) form gerçek bir modal gibi davranıyor: dışarı dokununca ya da üstteki
@@ -3374,7 +3426,10 @@ export default function Rite() {
                 // kendi dalı: isKisisel'e hiç dokunmuyor. 🎓 (mezun) yok — otomatik alışkanlığa dönüşüm burada
                 // henüz bir "mezun ol" kavramı taşımıyor, sade tutuluyor.
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingRight: 34, marginTop: -8 }}>
-                  {!isDraft && <div className={'chk' + (ritDone(o.id) ? ' on' : '')} onClick={() => toggleRit(o.id)} title="Yaptım">{ritDone(o.id) ? '✓' : ''}</div>}
+                  {/* "Yaptım" burada toggleRit değil kartYapildiToggle çağırıyor — "Yapılacak" hâlinde (bkz.
+                      kartYapilacakSec) tamamlama kalıcı bir kapanış olmalı, alışkanlıktaki gibi günlük bir kayıt
+                      değil (kullanıcı isteği). isKisisel'in kendi tiki (yukarısı) buna hiç dokunmuyor. */}
+                  {!isDraft && <div className={'chk' + (ritDone(o.id) ? ' on' : '')} onClick={() => kartYapildiToggle(o)} title="Yaptım">{ritDone(o.id) ? '✓' : ''}</div>}
                   <div style={{ flex: 1, fontSize: 11.5, fontWeight: 800, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.4px' }}>{isDraft ? 'Yeni kart' : (duzenleModu ? 'Kart Düzenle' : 'Kart')}</div>
                   {!paylasilamaz && !isTaze && <button type="button" onClick={() => { setPaylasOpen(true); setKMsg(''); }} title="Paylaş" style={{ background: 'none', border: 'none', padding: 0, fontSize: 16, cursor: 'pointer', opacity: .55 }}>↪️</button>}
                 </div>
@@ -3529,7 +3584,7 @@ export default function Rite() {
                 böylece Ajandama eklemeden kart orada da (Havuz'da olduğu gibi) açılabiliyor. */}
             {kTip === 'bilgi' && (() => {
               const editable = !preview && (isRit ? o.kaynak === 'Kendi' : isDraft);
-              if (editable) return <BilgiKartEdit cfg={kCfg} onSave={bilgiKaydet} randevu={!!kCfg?.randevu} notTasarimi={isKisisel || isYeniKart} readOnly={isYeniKart ? yeniKartGorunumModu : kisiselGorunumModu} sadeceAciklama={isYeniKart && !dahaFazlaAcik} />;
+              if (editable) return <BilgiKartEdit cfg={kCfg} onSave={bilgiKaydet} randevu={!!kCfg?.randevu} notTasarimi={isKisisel || isYeniKart} readOnly={isYeniKart ? yeniKartGorunumModu : kisiselGorunumModu} sadeceAciklama={isYeniKart && !dahaFazlaAcik} tekVideo={isYeniKart} />;
               if (!preview && isRit) return <BilgiKart cfg={kCfg} onSave={bilgiKaydet} />;
               return <BilgiKartEdit cfg={kCfg} onSave={() => {}} randevu={!!kCfg?.randevu} readOnly />;
             })()}
@@ -3662,27 +3717,43 @@ export default function Rite() {
                             <input type="date" value={o.baslangic || ''} onChange={(e) => e.target.value && ritTasi(o.id, e.target.value)} style={{ width: 'auto', marginLeft: 4 }} />
                           </div>
                         </div>
-                        <div className="kv"><div className="k">Süre</div>
+                        {/* Kullanıcıyla "temelden" tartışıp vardığımız üç basit hâl — jargon (süregelen/süreli)
+                            sadece Alışkanlık seçilince görünüyor, ilk bakışta hep üç düz kelime var. Hangisi
+                            seçilirse hem zamanlama hem tamamlanma davranışı (bkz. kartYapildiToggle) o an
+                            birlikte ayarlanıyor, kullanıcı bunu iki ayrı karar olarak hiç görmüyor. */}
+                        <div className="kv" style={{ marginTop: 0 }}><div className="k">Tür</div>
                           <div>
-                            <span className={'chip' + (!o.bitis ? ' on' : '')} onClick={kartSuregelenSec}>Süregelen</span>
-                            <span className={'chip' + (o.bitis ? ' on' : '')} onClick={kartSureliSec}>Süreli</span>
-                            {o.bitis && <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', marginLeft: 8 }}>
-                              <input type="number" min={1} value={sureInput} onChange={(e) => setSureInput(e.target.value)} style={{ width: 60 }} /> gün
-                              <button className="btn sm" onClick={kartSureliSec}>Uygula</button>
-                            </span>}
+                            <span className={'chip' + (kartTur === 'bugun' ? ' on' : '')} onClick={kartBugunSec}>Bugün</span>
+                            <span className={'chip' + (kartTur === 'yapilacak' ? ' on' : '')} onClick={kartYapilacakSec}>Yapılacak</span>
+                            <span className={'chip' + (kartTur === 'aliskanlik' ? ' on' : '')} onClick={kartAliskanlikSec}>Alışkanlık</span>
                           </div>
-                          {o.bitis && <div className="note">Başlangıç {kisaTarih(o.baslangic)} · bitiş {kisaTarih(o.bitis)}</div>}
-                          {!o.bitis && <div className="note">Süregelen ya da belirli günler seçince kart otomatik alışkanlığa dönüşür.</div>}
+                          {kartTur === 'bugun' && <div className="note">Sadece bugün görünür.</div>}
+                          {kartTur === 'yapilacak' && <div className="note">İşaretleyip tamamlayana kadar her gün görünür, işaretlenince kapanır.</div>}
                         </div>
-                        <div className="kv"><div className="k">Günler</div>
-                          <div>
-                            <span className={'chip' + ((!o.gunler || o.gunler.length === 0) ? ' on' : '')} onClick={() => kartGunSec([])}>Her gün</span>
-                            {GUNLER.map(([n, l]) => {
-                              const sel = !!(o.gunler && o.gunler.includes(n));
-                              return <span key={n} className={'chip' + (sel ? ' on' : '')} onClick={() => { const cur: number[] = o.gunler ? [...o.gunler] : []; const nx = cur.includes(n) ? cur.filter((x) => x !== n) : [...cur, n]; kartGunSec(nx); }}>{l}</span>;
-                            })}
-                          </div>
-                        </div>
+                        {kartTur === 'aliskanlik' && (
+                          <>
+                            <div className="kv"><div className="k">Süre</div>
+                              <div>
+                                <span className={'chip' + (!o.bitis ? ' on' : '')} onClick={kartSuregelenSec}>Süregelen</span>
+                                <span className={'chip' + (o.bitis ? ' on' : '')} onClick={kartSureliSec}>Süreli</span>
+                                {o.bitis && <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', marginLeft: 8 }}>
+                                  <input type="number" min={1} value={sureInput} onChange={(e) => setSureInput(e.target.value)} style={{ width: 60 }} /> gün
+                                  <button className="btn sm" onClick={kartSureliSec}>Uygula</button>
+                                </span>}
+                              </div>
+                              {o.bitis && <div className="note">Başlangıç {kisaTarih(o.baslangic)} · bitiş {kisaTarih(o.bitis)}</div>}
+                            </div>
+                            <div className="kv"><div className="k">Günler</div>
+                              <div>
+                                <span className={'chip' + ((!o.gunler || o.gunler.length === 0) ? ' on' : '')} onClick={() => kartGunSec([])}>Her gün</span>
+                                {GUNLER.map(([n, l]) => {
+                                  const sel = !!(o.gunler && o.gunler.includes(n));
+                                  return <span key={n} className={'chip' + (sel ? ' on' : '')} onClick={() => { const cur: number[] = o.gunler ? [...o.gunler] : []; const nx = cur.includes(n) ? cur.filter((x) => x !== n) : [...cur, n]; kartGunSec(nx); }}>{l}</span>;
+                                })}
+                              </div>
+                            </div>
+                          </>
+                        )}
                       </div>
                     )}
                     <div style={{ padding: '7px 10px', borderRadius: 8, background: 'var(--card2,#f6f4ee)', display: 'flex', alignItems: 'center', gap: 8 }}>
