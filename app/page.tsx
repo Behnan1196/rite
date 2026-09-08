@@ -289,6 +289,60 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi, sadeceAcik
   // medya şeridinde aynı bileşen kullanılıyor — kullanıcı isteği: "oradaki resim özelliği tek kart sistemine
   // eklenebilir". Bir fonksiyon bileşeni değil, düz bir JSX değeri: her render'da closure'daki güncel state'i
   // okur ama React'ı yeni bir bileşen tipi sanıp DOM'u sıfırdan kurmasına yol açmaz.
+  // Kompakt "ek" (attachment) görünümü — SADECE notTasarimi'nin (Not/Alışkanlık/Kart) medya şeridinde
+  // kullanılıyor; Randevu kendi bölümünde hâlâ yukarıdaki büyük resimGridJsx'i kullanıyor, bu yüzden Randevu'nun
+  // görünümü değişmiyor. Kullanıcı isteği: "foto yükleme çok yer tutuyor boş görünümde, onu bir attachment
+  // olarak düşünelim ve en altta olabilir" — 108px'lik boş kutu yerine küçük (36px) küçük resimler + ince bir
+  // "📎 Fotoğraf ekle" satırı; video şeridinin altında, bölümün en altında gösteriliyor.
+  const resimAttachmentJsx = (
+    <>
+      {(resimler.length > 0 || (!readOnly && resimler.length < RESIM_MAX)) && (
+        <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          {resimler.map((url, i) => (
+            <div
+              key={i}
+              style={{ position: 'relative', width: 36, height: 36, borderRadius: 8, overflow: 'hidden', flex: '0 0 auto', border: '1px solid var(--line)', cursor: 'zoom-in' }}
+              onClick={() => setResimBuyukIndex(i)}
+              title="Büyütmek için tıkla"
+            >
+              <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+              {!readOnly && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); resimSil(i); }}
+                  title="Kaldır"
+                  style={{
+                    position: 'absolute', right: 0, top: 0, width: 14, height: 14, borderRadius: '0 0 0 7px',
+                    border: 'none', background: 'rgba(24,21,16,.65)', color: '#fff', fontSize: 8, lineHeight: 1,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0,
+                  }}
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          ))}
+          {!readOnly && resimler.length < RESIM_MAX && (
+            <span
+              className="chip"
+              style={{ borderStyle: 'dashed' }}
+              onClick={() => { if (resimYuklemeIndex == null) resimInputRef.current?.click(); }}
+              title="Fotoğraf ekle"
+            >
+              {resimYuklemeIndex != null ? '…' : '📎 Fotoğraf ekle'}
+            </span>
+          )}
+          {!readOnly && <input ref={resimInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={resimDosyaSecildi} />}
+        </div>
+      )}
+      {resimHata && <div className="note" style={{ color: 'var(--red)', marginTop: 2 }}>{resimHata}</div>}
+      {resimBuyukIndex != null && resimler[resimBuyukIndex] && (
+        <div className="modal" style={{ alignItems: 'center' }} onMouseDown={() => setResimBuyukIndex(null)}>
+          <img src={resimler[resimBuyukIndex]} alt="" style={{ maxWidth: '90vw', maxHeight: '85vh', borderRadius: 10, display: 'block' }} />
+        </div>
+      )}
+    </>
+  );
   const resimGridJsx = (
     <>
       {(resimler.length > 0 || !readOnly) && (
@@ -503,7 +557,6 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi, sadeceAcik
                       )}
                     </div>
                   )}
-                  {resimGridJsx}
                 </div>
               ) : (
                 <>
@@ -564,6 +617,7 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi, sadeceAcik
                   <div style={{ whiteSpace: 'pre-wrap' }}>{secili.ozelNot}</div>
                 </div>
               )}
+              {notTasarimi && resimAttachmentJsx}
             </div>
             )}
           </div>
