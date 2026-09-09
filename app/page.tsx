@@ -3779,15 +3779,11 @@ export default function Rite() {
                   <div style={{ padding: '7px 10px', borderRadius: 8, background: 'var(--card2,#f6f4ee)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                     <span>🔔</span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
-                      {kisiselTur === 'randevu' ? (
-                        // Randevu'nun bildirimi kendi tarih/saatinden bağımsız olabilir (ör. bir gün önce) —
-                        // bunun için tek satırlık saat girişi yetmiyor, o yüzden hâlâ aynı seçenekler modali
-                        // (remMenuFor/setRandevuBildirim) kullanılıyor; sadece tetikleyici artık başlıkta değil,
-                        // diğer kartlarla aynı gövde şeridinde (kullanıcı isteği).
-                        <button type="button" onClick={() => { setRemInput(o.hatirlatma_saat || ''); setRemTarihInput(kCfg?.hatirlatma_tarih || o.baslangic || ''); setRemMenuFor({ ...o, _randevu: true }); }} style={{ background: 'none', border: 'none', padding: 0, fontSize: 13, color: 'var(--muted)', cursor: 'pointer', textAlign: 'left' }}>
-                          {o.hatirlatma_saat ? o.hatirlatma_saat + (kCfg?.hatirlatma_tarih && kCfg.hatirlatma_tarih !== o.baslangic ? ' · ' + kisaTarih(kCfg.hatirlatma_tarih) : '') : 'Bildirim ekle'}
-                        </button>
-                      ) : kisiselGorunumModu ? (
+                      {/* Randevu'nun bildirimi artık diğerleriyle birebir aynı — inline saat + Kaldır (kullanıcı
+                        isteği: "diğerlerinin aynısı yani inline şeklinde eşitleyelim"). Randevuya özel ayrı
+                        bir hatırlatma tarihi (kart_config.hatirlatma_tarih, remMenuFor modali) artık burada
+                        kullanılmıyor — sadeleştirme için bilerek bırakıldı. */}
+                      {kisiselGorunumModu ? (
                         <span style={{ fontSize: 13, color: 'var(--muted)' }}>{o.hatirlatma_saat}</span>
                       ) : (
                         <>
@@ -3797,9 +3793,10 @@ export default function Rite() {
                       )}
                     </div>
                     {/* Ek (attachment) — Bildirim'le aynı satırda, tek dosya (kullanıcı isteği). Şimdilik yine
-                        fotoğrafla sınırlı (📎 ikonu zaten genel/attachment simgesi — "her türlü dosya"ya
-                        genişletmek ayrı bir backend adımı olarak bırakıldı). Randevu'nun eski büyük foto
-                        ızgarasının (resimGridJsx) yerini de bu tek satır alıyor. */}
+                        fotoğrafla sınırlı ("her türlü dosya"ya genişletmek ayrı bir backend adımı olarak
+                        bırakıldı). Randevu'nun eski büyük foto ızgarasının (resimGridJsx) yerini de bu tek
+                        satır alıyor. Sadece ikon pek belli olmuyordu (kullanıcı geri bildirimi) — yanına kısa
+                        bir "Ek" etiketi eklendi. */}
                     {ekUrl ? (
                       <>
                         <div style={{ position: 'relative', width: 28, height: 28, borderRadius: 6, overflow: 'hidden', flex: '0 0 auto', border: '1px solid var(--line)', cursor: 'zoom-in' }} onClick={() => setEkBuyuk(true)} title="Büyütmek için tıkla">
@@ -3809,7 +3806,7 @@ export default function Rite() {
                       </>
                     ) : !kisiselGorunumModu ? (
                       <span className="chip" style={{ borderStyle: 'dashed', flex: '0 0 auto' }} onClick={() => { if (!ekYukleniyor) ekInputRef.current?.click(); }} title="Ek ekle">
-                        {ekYukleniyor ? '…' : '📎'}
+                        {ekYukleniyor ? '…' : '📎 Ek'}
                       </span>
                     ) : null}
                     {!kisiselGorunumModu && <input ref={ekInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={ekYukle} />}
