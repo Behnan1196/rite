@@ -3446,13 +3446,24 @@ export default function Rite() {
                   {kisiselTur === 'aliskanlik' && !preview && !isTaze && !o.mezun && (
                     <button type="button" onClick={() => setHabitMenuFor(o)} title="Alışkanlık seçenekleri" aria-label="Alışkanlık seçenekleri" style={{ background: 'none', border: 'none', padding: 0, fontSize: 16, cursor: 'pointer', opacity: .55 }}>🎓</button>
                   )}
+                  {/* Alışkanlık'ın tarihini Zamanlama panosunun içinden değiştirmek pratik değildi (kullanıcı
+                      isteği: "başka bir yerden tarih seçimiyle daha pratik yapılmalı") — başlıkta doğrudan
+                      erişilebilir bir 📅 rozeti/native tarih seçici eklendi. Zamanlama içindeki "Hangi güne
+                      taşı" satırı da duruyor (aynı ritTasi'yi çağırıyor), bu sadece daha hızlı bir kısayol. */}
+                  {kisiselTur === 'aliskanlik' && (
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 2, cursor: 'pointer' }} title="Tarih">
+                      <span style={{ fontSize: 13 }}>📅</span>
+                      <input type="date" value={o.baslangic || ''} onChange={(e) => e.target.value && ritTasi(o.id, e.target.value)} style={{ width: 90, border: 'none', background: 'none', padding: 0, fontSize: 10.5, fontWeight: 700, color: 'var(--muted)' }} />
+                    </label>
+                  )}
                   {/* Not'ta tarih seçimi/rozeti YOK (bu bir yanlış anlamaydı — Not zaten tarihsiz, "silininceye
                       kadar duran" bir yapışkan not; kullanıcı isteği "tarih seçimi öyle mi konuşmuştuk"
                       sonrası kaldırıldı). baslangic hâlâ dahili olarak var (Ayraç mantığıyla "hangi günden
                       itibaren görünsün" için) ama kullanıcıya hiç gösterilmiyor/değiştirilmiyor. */}
-                  {/* Not'ta Paylaş da yok (kullanıcı isteği — çoklu video/zengin içerik olmadığı için paylaşımın
-                      pek bir anlamı kalmıyor; sadece Randevu'da kalıyor). */}
-                  {kisiselTur !== 'not' && !paylasilamaz && !isTaze && <button type="button" onClick={() => { setPaylasOpen(true); setKMsg(''); }} title="Paylaş" style={{ background: 'none', border: 'none', padding: 0, fontSize: 16, cursor: 'pointer', opacity: .55 }}>↪️</button>}
+                  {/* Not'ta ve Alışkanlık'ta Paylaş yok artık (kullanıcı isteği — çoklu video/zengin içerik
+                      olmadığı için paylaşımın pek bir anlamı kalmıyor; sadece ailece kullanılan Randevu'da
+                      kalıyor). */}
+                  {kisiselTur === 'randevu' && !paylasilamaz && !isTaze && <button type="button" onClick={() => { setPaylasOpen(true); setKMsg(''); }} title="Paylaş" style={{ background: 'none', border: 'none', padding: 0, fontSize: 16, cursor: 'pointer', opacity: .55 }}>↪️</button>}
                   {kisiselTur === 'randevu' && (o.hatirlatma_saat ? (
                     <button type="button" onClick={() => { setRemInput(o.hatirlatma_saat || ''); setRemTarihInput(kCfg?.hatirlatma_tarih || o.baslangic || ''); setRemMenuFor({ ...o, _randevu: true }); }} title="Bildirim seçenekleri" style={{ background: 'none', border: 'none', padding: 0, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 2 }}>🔔<span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--muted)' }}>{o.hatirlatma_saat}</span></button>
                   ) : (
@@ -3622,7 +3633,7 @@ export default function Rite() {
                 böylece Ajandama eklemeden kart orada da (Havuz'da olduğu gibi) açılabiliyor. */}
             {kTip === 'bilgi' && (() => {
               const editable = !preview && (isRit ? o.kaynak === 'Kendi' : isDraft);
-              if (editable) return <BilgiKartEdit cfg={kCfg} onSave={bilgiKaydet} randevu={!!kCfg?.randevu} notTasarimi={isKisisel || isYeniKart} readOnly={isYeniKart ? yeniKartGorunumModu : kisiselGorunumModu} sadeceAciklama={isYeniKart && !dahaFazlaAcik} tekVideo={isYeniKart} videoYok={isKisisel && kisiselTur === 'not'} />;
+              if (editable) return <BilgiKartEdit cfg={kCfg} onSave={bilgiKaydet} randevu={!!kCfg?.randevu} notTasarimi={isKisisel || isYeniKart} readOnly={isYeniKart ? yeniKartGorunumModu : kisiselGorunumModu} sadeceAciklama={isYeniKart && !dahaFazlaAcik} tekVideo={isYeniKart || (isKisisel && kisiselTur === 'aliskanlik')} videoYok={isKisisel && kisiselTur === 'not'} />;
               if (!preview && isRit) return <BilgiKart cfg={kCfg} onSave={bilgiKaydet} />;
               return <BilgiKartEdit cfg={kCfg} onSave={() => {}} randevu={!!kCfg?.randevu} readOnly />;
             })()}
