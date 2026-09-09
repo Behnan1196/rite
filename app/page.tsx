@@ -167,7 +167,7 @@ async function resimKucult(file: File, maxDim = 1600, quality = 0.82): Promise<B
   const blob: Blob | null = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
   return blob || file;
 }
-function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi, sadeceAciklama, tekVideo, videoYok }: { cfg: any; onSave: (cfg: any) => void; randevu?: boolean; readOnly?: boolean; notTasarimi?: boolean; sadeceAciklama?: boolean; tekVideo?: boolean; videoYok?: boolean }) {
+function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi, sadeceAciklama, tekVideo, videoYok, ekAyri }: { cfg: any; onSave: (cfg: any) => void; randevu?: boolean; readOnly?: boolean; notTasarimi?: boolean; sadeceAciklama?: boolean; tekVideo?: boolean; videoYok?: boolean; ekAyri?: boolean }) {
   const videolar: { baslik?: string; url: string; bas?: number; bit?: number; ozelNot?: string }[] = cfg?.videolar || [];
   const [vidSec, setVidSec] = useState(0);
   // vidFormMode: 'add' = boş formla yeni video; 'edit' = seçili videoyu (secili) doldurup düzenler; null = kapalı.
@@ -456,7 +456,9 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi, sadeceAcik
             ) : (
               <input value={yer} onChange={(e) => setYer(e.target.value)} onBlur={yerKaydet} placeholder="Detay / yer (ops.) — link, adres, doktor adı…" style={{ width: '100%' }} />
             )}
-            {resimGridJsx}
+            {/* ekAyri (Randevu, isKisisel altında): eski büyük foto ızgarası burada artık gösterilmiyor —
+                tek dosyalık ek, sayfa seviyesinde Bildirim'le aynı satıra taşındı (kullanıcı isteği). */}
+            {!ekAyri && resimGridJsx}
           </div>
         )}
         {/* Not/Alışkanlık'ta (notTasarimi) Açıklama ve Video/Resim (medya) şeridinin sırası, eski tasarımdan
@@ -657,7 +659,11 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi, sadeceAcik
                   <div style={{ whiteSpace: 'pre-wrap' }}>{secili.ozelNot}</div>
                 </div>
               )}
-              {notTasarimi && resimAttachmentJsx}
+              {/* ekAyri (Not/Alışkanlık/Yapılacak, isKisisel altında): kompakt foto eki burada artık
+                  gösterilmiyor — tek dosyaya indirilip Bildirim'le aynı satıra, sayfa seviyesine taşındı
+                  (kullanıcı isteği: "bildirimle aynı satırda olabilir mi"). Kart (isYeniKart) ekAyri
+                  geçmiyor, o yüzden kendi eski konumunda (video şeridinin altında) kalmaya devam ediyor. */}
+              {notTasarimi && !ekAyri && resimAttachmentJsx}
             </div>
             )}
           </div>
@@ -1223,6 +1229,17 @@ export default function Rite() {
   // altında açılıp özel gün seçimine izin veriyor. Kart zaten özel günlerle geldiyse (gunler doluysa) baştan
   // açık başlıyor ki kullanıcı mevcut seçimini görsün — bkz. aşağıdaki useEffect.
   const [gunlerAcik, setGunlerAcik] = useState(false);
+  // Kişisel kartların (Not/Alışkanlık/Yapılacak/Randevu) ortak "ek" (attachment) satırı — Bildirim'le aynı
+  // şeritte, tek dosya (kullanıcı isteği: "resim yüklemeyi attachment ikonuyla... bildirimle aynı satırda...
+  // birden çok dosya yüklemeyi gerekirse tek dosyaya düşürebiliriz"). Randevu'nun eski büyük foto ızgarası da
+  // (resimGridJsx) bunun yerini alıyor — hepsi kart_config.resimler[0] (geriye dönük uyum için resim de) üstünde
+  // aynı tek-dosya mantığını paylaşıyor; yükleme mantığı BilgiKartEdit'teki resimDosyaSecildi ile birebir aynı
+  // (resimKucult + /api/upload), sadece burada sayfa seviyesinde (BilgiKartEdit'in dışında) tutuluyor ki
+  // Bildirim satırıyla aynı flex satıra girebilsin.
+  const [ekYukleniyor, setEkYukleniyor] = useState(false);
+  const [ekHata, setEkHata] = useState('');
+  const [ekBuyuk, setEkBuyuk] = useState(false);
+  const ekInputRef = useRef<HTMLInputElement>(null);
   const lastDetayAnahtarRef = useRef<string | null>(null);
   useEffect(() => {
     if (!detay) { lastDetayAnahtarRef.current = null; return; }
@@ -1246,6 +1263,9 @@ export default function Rite() {
       const cfg2 = o2.kart_config || {};
       setDahaFazlaAcik(!!(cfg2.videolar?.length || cfg2.resimler?.length || cfg2.resim || o2.hatirlatma_saat || (o2.bitis && o2.bitis !== o2.baslangic) || (o2.gunler && o2.gunler.length)));
       setGunlerAcik(!!(o2.gunler && o2.gunler.length));
+      setEkYukleniyor(false);
+      setEkHata('');
+      setEkBuyuk(false);
     }
   }, [detay, taze]);
   const [grupEditOpen, setGrupEditOpen] = useState(false);
@@ -3361,6 +3381,35 @@ export default function Rite() {
         const bilgiKaydet = canliAdim && o.sablon_id
           ? (c: any) => setSablonAdimKart(o.sablon_id, o.sablon_adim ?? 0, c)
           : (c: any) => setBilgiCfg(o.id, c);
+        // Kişisel kartların (Not/Alışkanlık/Yapılacak/Randevu) ortak, tek dosyalık "ek" — Bildirim satırıyla
+        // aynı yerde (kullanıcı isteği). BilgiKartEdit'in kendi resimAttachmentJsx/resimGridJsx'iyle AYNI
+        // yükleme akışı (resimKucult + /api/upload), ama burada sayfa seviyesinde tutuluyor ki Bildirim'le
+        // aynı flex satıra girebilsin — Kart (isYeniKart) buna dokunulmuyor, o hâlâ kendi eski konumunda.
+        const ekUrl: string | null = (Array.isArray(kCfg?.resimler) && kCfg.resimler[0]) || kCfg?.resim || null;
+        async function ekYukle(e: React.ChangeEvent<HTMLInputElement>) {
+          const f = e.target.files?.[0];
+          e.target.value = '';
+          if (!f) return;
+          setEkHata('');
+          setEkYukleniyor(true);
+          try {
+            const kucuk = await resimKucult(f);
+            const fd = new FormData();
+            fd.append('file', kucuk, 'resim.jpg');
+            const r = await fetch('/api/upload', { method: 'POST', body: fd });
+            const data = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(data.error || 'Yükleme başarısız');
+            bilgiKaydet({ ...kCfg, resimler: [data.url], resim: data.url });
+          } catch (err: any) {
+            setEkHata(err?.message || 'Yükleme başarısız');
+          } finally {
+            setEkYukleniyor(false);
+          }
+        }
+        function ekSil() {
+          bilgiKaydet({ ...kCfg, resimler: [], resim: null });
+          setEkBuyuk(false);
+        }
         const noDone = kTip === 'anket' || kTip === 'coktan' || kTip === 'nefes' || kTip === 'ruhhali' || kTip === 'tarif' || kTip === 'sukran' || kTip === 'topraklama' || kTip === 'pomodoro' || kTip === 'beden' || kTip === 'uykuoncesi' || kTip === 'su' || kTip === 'maruz' || kTip === 'niyet' || kTip === 'workout' || (kTip === 'video' && kCfg.done === false) || (kTip === 'randevu' && kCfg.done === false);
         // kCfg?.gorev SADECE "Kart"ın "Yapılacak" modunda set edilir (bkz. kartYapilacakSec) — Not/Alışkanlık/
         // Randevu bu alanı hiç yazmıyor, o yüzden onların "süregelen" etiketi burada değişmiyor.
@@ -3507,11 +3556,9 @@ export default function Rite() {
                       olmadığı için paylaşımın pek bir anlamı kalmıyor; sadece ailece kullanılan Randevu'da
                       kalıyor). */}
                   {kisiselTur === 'randevu' && !paylasilamaz && !isTaze && <button type="button" onClick={() => { setPaylasOpen(true); setKMsg(''); }} title="Paylaş" style={{ background: 'none', border: 'none', padding: 0, fontSize: 16, cursor: 'pointer', opacity: .55 }}>↪️</button>}
-                  {kisiselTur === 'randevu' && (o.hatirlatma_saat ? (
-                    <button type="button" onClick={() => { setRemInput(o.hatirlatma_saat || ''); setRemTarihInput(kCfg?.hatirlatma_tarih || o.baslangic || ''); setRemMenuFor({ ...o, _randevu: true }); }} title="Bildirim seçenekleri" style={{ background: 'none', border: 'none', padding: 0, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 2 }}>🔔<span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--muted)' }}>{o.hatirlatma_saat}</span></button>
-                  ) : (
-                    <button type="button" onClick={() => { setRemInput(kCfg?.saat || ''); setRemTarihInput(kCfg?.hatirlatma_tarih || o.baslangic || ''); setRemMenuFor({ ...o, _randevu: true }); }} title="Bildirim ekle" style={{ background: 'none', border: 'none', padding: 0, fontSize: 16, cursor: 'pointer', opacity: .4 }}>🔔</button>
-                  ))}
+                  {/* Randevu'nun 🔔'ü artık burada değil — diğer kartlarla aynı yerde, gövdedeki standart
+                      Bildirim şeridinde (kullanıcı isteği: "bildirimin yerini standart yapacağız, randevuda
+                      da aynen gövdede olacak"). */}
                 </div>
               ) : isYeniKart ? (
                 // "Kart" (deneysel yeni tip) — Not/Alışkanlık'ın ince başlık şeridiyle aynı iskelet, ama tamamen
@@ -3676,21 +3723,23 @@ export default function Rite() {
                 böylece Ajandama eklemeden kart orada da (Havuz'da olduğu gibi) açılabiliyor. */}
             {kTip === 'bilgi' && (() => {
               const editable = !preview && (isRit ? o.kaynak === 'Kendi' : isDraft);
-              if (editable) return <BilgiKartEdit cfg={kCfg} onSave={bilgiKaydet} randevu={!!kCfg?.randevu} notTasarimi={isKisisel || isYeniKart} readOnly={isYeniKart ? yeniKartGorunumModu : kisiselGorunumModu} sadeceAciklama={isYeniKart && !dahaFazlaAcik} tekVideo={isYeniKart || (isKisisel && kisiselTur === 'aliskanlik')} videoYok={isKisisel && (kisiselTur === 'not' || kisiselTur === 'yapilacak')} />;
+              if (editable) return <BilgiKartEdit cfg={kCfg} onSave={bilgiKaydet} randevu={!!kCfg?.randevu} notTasarimi={isKisisel || isYeniKart} readOnly={isYeniKart ? yeniKartGorunumModu : kisiselGorunumModu} sadeceAciklama={isYeniKart && !dahaFazlaAcik} tekVideo={isYeniKart || (isKisisel && kisiselTur === 'aliskanlik')} videoYok={isKisisel && (kisiselTur === 'not' || kisiselTur === 'yapilacak')} ekAyri={isKisisel} />;
               if (!preview && isRit) return <BilgiKart cfg={kCfg} onSave={bilgiKaydet} />;
               return <BilgiKartEdit cfg={kCfg} onSave={() => {}} randevu={!!kCfg?.randevu} readOnly />;
             })()}
             {/* Zamanlama + Bildirim şeritleri — Ad/Açıklama/Video'nun altında, tek düzenleme iskeletinin son iki
                 parçası (kullanıcı isteği: "altında zamanlama şeridi, onun altında bildirim şeridi olsun").
-                Randevu şimdilik dışarıda (henüz ele alınmadı) — o hâlâ kendi 📅/🔔 alanlarını kullanıyor.
-                Not'ta şerit doğrudan bir tarih alanı (taşıma buradan olur); Alışkanlık'ta ise Süre/Günler de
-                barındıran Zamanlama panosunu açan bir özet satırı — bkz. yukarısı "Hangi güne taşı" notu. */}
-            {isRit && isKisisel && kisiselTur !== 'randevu' && (
+                Randevu'nun kendi tarih/saati hâlâ yukarıdaki ayrı "Randevu ne zaman" bloğunda (henüz ele
+                alınmadı) ama bildirimi artık burada, diğer kartlarla aynı standart şeritte (kullanıcı isteği:
+                "bildirimin yerini standart yapacağız, randevuda da aynen gövdede olacak"). Not'ta şerit
+                doğrudan bir tarih alanı (taşıma buradan olur); Alışkanlık'ta ise Süre/Günler de barındıran
+                Zamanlama panosunu açan bir özet satırı — bkz. yukarısı "Hangi güne taşı" notu. */}
+            {isRit && isKisisel && (
               <div style={{ margin: '0 0 8px' }}>
-                {/* Yapılacak'ta da Süre/Günler yok — Not gibi sade: bitissiz, her gün görünür, tek fark
-                    tamamlanınca kalıcı kapanması (kullanıcı isteği doğrultusunda, tablodaki "İşaretleyip
-                    tamamlayana kadar her gün görünür" ile uyumlu). */}
-                {(kisiselTur === 'not' || kisiselTur === 'yapilacak') ? null : (
+                {/* Yapılacak'ta ve Randevu'da da Süre/Günler yok — Randevu'nun kendi tarihi zaten yukarıdaki
+                    ayrı bloktan yönetiliyor, Süregelen/Süreli/Günler kavramı hiç yok (kullanıcı isteği
+                    doğrultusunda, tablodaki "İşaretleyip tamamlayana kadar her gün görünür" Yapılacak için). */}
+                {(kisiselTur === 'not' || kisiselTur === 'yapilacak' || kisiselTur === 'randevu') ? null : (
                   // Alışkanlık: Süre/Günler artık açılıp kapanan bir panel değil — dokununca açılan bir şerit
                   // yerine doğrudan görünüyor (kullanıcı isteği: "şeride basıp açılmasına gerek yok artık").
                   // "Süregelen" seçeneği de kalktı, Süre hep bir gün sayısı (varsayılan 21) — "Uygula" butonu
@@ -3726,17 +3775,50 @@ export default function Rite() {
                     çıkmasına gerek yok", "belki şerit üzerinde de halledebiliriz"). setRitReminder zaten
                     duzenleModu'da sadece yerelde tutuyor, o yüzden ayrı bir Kaydet/Vazgeç gerekmiyor — asıl
                     kaydetme kartın kendi Kaydet'inde. */}
-                {(!kisiselGorunumModu || o.hatirlatma_saat) && (
-                  <div style={{ padding: '7px 10px', borderRadius: 8, background: 'var(--card2,#f6f4ee)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                {(!kisiselGorunumModu || o.hatirlatma_saat || ekUrl) && (
+                  <div style={{ padding: '7px 10px', borderRadius: 8, background: 'var(--card2,#f6f4ee)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                     <span>🔔</span>
-                    {kisiselGorunumModu ? (
-                      <span style={{ fontSize: 13, color: 'var(--muted)' }}>{o.hatirlatma_saat}</span>
-                    ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
+                      {kisiselTur === 'randevu' ? (
+                        // Randevu'nun bildirimi kendi tarih/saatinden bağımsız olabilir (ör. bir gün önce) —
+                        // bunun için tek satırlık saat girişi yetmiyor, o yüzden hâlâ aynı seçenekler modali
+                        // (remMenuFor/setRandevuBildirim) kullanılıyor; sadece tetikleyici artık başlıkta değil,
+                        // diğer kartlarla aynı gövde şeridinde (kullanıcı isteği).
+                        <button type="button" onClick={() => { setRemInput(o.hatirlatma_saat || ''); setRemTarihInput(kCfg?.hatirlatma_tarih || o.baslangic || ''); setRemMenuFor({ ...o, _randevu: true }); }} style={{ background: 'none', border: 'none', padding: 0, fontSize: 13, color: 'var(--muted)', cursor: 'pointer', textAlign: 'left' }}>
+                          {o.hatirlatma_saat ? o.hatirlatma_saat + (kCfg?.hatirlatma_tarih && kCfg.hatirlatma_tarih !== o.baslangic ? ' · ' + kisaTarih(kCfg.hatirlatma_tarih) : '') : 'Bildirim ekle'}
+                        </button>
+                      ) : kisiselGorunumModu ? (
+                        <span style={{ fontSize: 13, color: 'var(--muted)' }}>{o.hatirlatma_saat}</span>
+                      ) : (
+                        <>
+                          <input type="time" value={o.hatirlatma_saat || ''} onChange={(e) => setRitReminder(o.id, e.target.value)} style={{ width: 'auto', fontSize: 13 }} />
+                          {o.hatirlatma_saat && <span className="chip" style={{ borderStyle: 'dashed' }} onClick={() => setRitReminder(o.id, '')}>Kaldır</span>}
+                        </>
+                      )}
+                    </div>
+                    {/* Ek (attachment) — Bildirim'le aynı satırda, tek dosya (kullanıcı isteği). Şimdilik yine
+                        fotoğrafla sınırlı (📎 ikonu zaten genel/attachment simgesi — "her türlü dosya"ya
+                        genişletmek ayrı bir backend adımı olarak bırakıldı). Randevu'nun eski büyük foto
+                        ızgarasının (resimGridJsx) yerini de bu tek satır alıyor. */}
+                    {ekUrl ? (
                       <>
-                        <input type="time" value={o.hatirlatma_saat || ''} onChange={(e) => setRitReminder(o.id, e.target.value)} style={{ width: 'auto', fontSize: 13 }} />
-                        {o.hatirlatma_saat && <span className="chip" style={{ borderStyle: 'dashed', marginLeft: 'auto' }} onClick={() => setRitReminder(o.id, '')}>Kaldır</span>}
+                        <div style={{ position: 'relative', width: 28, height: 28, borderRadius: 6, overflow: 'hidden', flex: '0 0 auto', border: '1px solid var(--line)', cursor: 'zoom-in' }} onClick={() => setEkBuyuk(true)} title="Büyütmek için tıkla">
+                          <img src={ekUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                        </div>
+                        {!kisiselGorunumModu && <button type="button" onClick={ekSil} title="Kaldır" style={{ background: 'none', border: 'none', padding: 0, fontSize: 13, color: 'var(--muted)', cursor: 'pointer', opacity: .6, flex: '0 0 auto' }}>✕</button>}
                       </>
-                    )}
+                    ) : !kisiselGorunumModu ? (
+                      <span className="chip" style={{ borderStyle: 'dashed', flex: '0 0 auto' }} onClick={() => { if (!ekYukleniyor) ekInputRef.current?.click(); }} title="Ek ekle">
+                        {ekYukleniyor ? '…' : '📎'}
+                      </span>
+                    ) : null}
+                    {!kisiselGorunumModu && <input ref={ekInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={ekYukle} />}
+                  </div>
+                )}
+                {ekHata && <div className="note" style={{ color: 'var(--red)', marginTop: 2 }}>{ekHata}</div>}
+                {ekBuyuk && ekUrl && (
+                  <div className="modal" style={{ alignItems: 'center' }} onMouseDown={() => setEkBuyuk(false)}>
+                    <img src={ekUrl} alt="" style={{ maxWidth: '90vw', maxHeight: '85vh', borderRadius: 10, display: 'block' }} />
                   </div>
                 )}
               </div>
