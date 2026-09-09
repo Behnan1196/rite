@@ -3451,23 +3451,28 @@ export default function Rite() {
                 // şeritleri var (kullanıcı isteği: Ad, Açıklama, Video, Zamanlama, Bildirim aynı sırada, tek
                 // tasarım). Randevu şimdilik eski haliyle (🔔 burada) kalıyor — henüz ele alınmadı.
                 // Sağda 34px boşluk (paddingRight) bırakılıyor ki ikonlar köşedeki ✕ (mutlak konumlu) ile çakışmasın.
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingRight: 34, marginTop: -8 }}>
+                // Alışkanlık'ta şerit ayrıca biraz daha yüksek ve koyu bir zeminle (var(--line)) öne çıkıyor,
+                // sheet'in üst köşe yuvarlaklığıyla aynı hizada kenardan kenara uzanıyor (kullanıcı isteği:
+                // "biraz daha yüksek bir şerit ve biraz koyu bir arkaplan rengi ile daha hoş olabilir mi").
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingRight: 34, marginTop: -8, ...(kisiselTur === 'aliskanlik' ? { background: 'var(--line)', margin: '-16px -16px 12px', padding: '14px 34px 14px 16px', borderRadius: '18px 18px 0 0' } : undefined) }}>
                   {/* Not'ta "yaptım" tiki yok (kullanıcı isteği — tablo: "Tamamlanma: Yok, checkbox bile yok"),
-                      bir yapışkan not tamamlanacak bir şey değil, sadece silininceye kadar duran bir bilgi. */}
-                  {!isDraft && kisiselTur !== 'not' && <div className={'chk' + (ritDone(o.id) ? ' on' : '')} onClick={() => toggleRit(o.id)} title="Yaptım">{ritDone(o.id) ? '✓' : ''}</div>}
+                      bir yapışkan not tamamlanacak bir şey değil, sadece silininceye kadar duran bir bilgi.
+                      Alışkanlık'ta da detay formundan kalktı (kullanıcı isteği: "en azından alışkanlık için
+                      olmasın") — listedeki günlük "yaptım" tiki (RitItem, haftalık ilerleme çubuklarıyla
+                      birlikte) hâlâ duruyor, bu sadece detay ekranından kalkıyor. */}
+                  {!isDraft && kisiselTur !== 'not' && kisiselTur !== 'aliskanlik' && <div className={'chk' + (ritDone(o.id) ? ' on' : '')} onClick={() => toggleRit(o.id)} title="Yaptım">{ritDone(o.id) ? '✓' : ''}</div>}
                   <div style={{ flex: 1, fontSize: 11.5, fontWeight: 800, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.4px' }}>{isDraft ? kisiselYeni : (duzenleModu ? kisiselEtiket + ' Düzenle' : kisiselEtiket)}</div>
                   {kisiselTur === 'aliskanlik' && !preview && !isTaze && !o.mezun && (
                     <button type="button" onClick={() => setHabitMenuFor(o)} title="Alışkanlık seçenekleri" aria-label="Alışkanlık seçenekleri" style={{ background: 'none', border: 'none', padding: 0, fontSize: 16, cursor: 'pointer', opacity: .55 }}>🎓</button>
                   )}
                   {/* Alışkanlık'ın tarihini Zamanlama panosunun içinden değiştirmek pratik değildi (kullanıcı
                       isteği: "başka bir yerden tarih seçimiyle daha pratik yapılmalı") — başlıkta doğrudan
-                      erişilebilir bir 📅 rozeti/native tarih seçici eklendi. Zamanlama içindeki "Hangi güne
-                      taşı" satırı da duruyor (aynı ritTasi'yi çağırıyor), bu sadece daha hızlı bir kısayol. */}
+                      erişilebilir bir native tarih seçici eklendi. Ayrı bir 📅 ikonu kalktı (kullanıcı isteği:
+                      "önemli olan tarih seçen sağdaki, ilk ikon kalkabilir") — asıl işlevi gören zaten input'un
+                      kendisi. Zamanlama içindeki "Hangi güne taşı" satırı da duruyor (aynı ritTasi'yi çağırıyor),
+                      bu sadece daha hızlı bir kısayol. */}
                   {kisiselTur === 'aliskanlik' && (
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 2, cursor: 'pointer' }} title="Tarih">
-                      <span style={{ fontSize: 13 }}>📅</span>
-                      <input type="date" value={o.baslangic || ''} onChange={(e) => e.target.value && ritTasi(o.id, e.target.value)} style={{ width: 90, border: 'none', background: 'none', padding: 0, fontSize: 10.5, fontWeight: 700, color: 'var(--muted)' }} />
-                    </label>
+                    <input type="date" value={o.baslangic || ''} onChange={(e) => e.target.value && ritTasi(o.id, e.target.value)} title="Tarih" style={{ width: 90, border: 'none', background: 'none', padding: 0, fontSize: 10.5, fontWeight: 700, color: 'var(--muted)' }} />
                   )}
                   {/* Not'ta tarih seçimi/rozeti YOK (bu bir yanlış anlamaydı — Not zaten tarihsiz, "silininceye
                       kadar duran" bir yapışkan not; kullanıcı isteği "tarih seçimi öyle mi konuşmuştuk"
@@ -3664,11 +3669,15 @@ export default function Rite() {
                   // da kalktı, gün sayısı değiştirilince yerel arabelleğe (buffer) yazılıyor, asıl kaydetme
                   // yine kartın kendi Kaydet'inde (kullanıcı isteği: "kaydetle uygulayacak").
                   <div style={{ padding: '7px 8px', borderRadius: 8, background: '#fff', border: '1px solid var(--line)', margin: '0 0 8px' }}>
+                    {/* Gün sayısı + başlangıç/bitiş artık aynı satırda (kullanıcı isteği: "3 satırı kaplıyor,
+                        gün sayısı alanı biraz küçülebilir ve başlangıç-bitiş sağında gösterilebilir"). */}
                     <div className="kv" style={{ marginTop: 0 }}><div className="k">🗓️ Süre</div>
-                      <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-                        <input type="number" min={1} value={sureInput} onChange={(e) => setSureInput(e.target.value)} onBlur={() => setRitSure(o.id, parseInt(sureInput) || 21)} style={{ width: 60 }} /> gün
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <input type="number" min={1} value={sureInput} onChange={(e) => setSureInput(e.target.value)} onBlur={() => setRitSure(o.id, parseInt(sureInput) || 21)} style={{ width: 46, padding: '7px 8px' }} /> gün
+                        </span>
+                        <span className="note" style={{ marginTop: 0 }}>Başlangıç {kisaTarih(o.baslangic)}{o.bitis ? ' · bitiş ' + kisaTarih(o.bitis) : ''}</span>
                       </div>
-                      <div className="note">Başlangıç {kisaTarih(o.baslangic)}{o.bitis ? ' · bitiş ' + kisaTarih(o.bitis) : ''}</div>
                     </div>
                     <div className="kv"><div className="k">Günler</div>
                       <div>
