@@ -3454,7 +3454,11 @@ export default function Rite() {
                 // Alışkanlık'ta şerit ayrıca biraz daha yüksek ve koyu bir zeminle (var(--line)) öne çıkıyor,
                 // sheet'in üst köşe yuvarlaklığıyla aynı hizada kenardan kenara uzanıyor (kullanıcı isteği:
                 // "biraz daha yüksek bir şerit ve biraz koyu bir arkaplan rengi ile daha hoş olabilir mi").
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingRight: 34, marginTop: -8, ...(kisiselTur === 'aliskanlik' ? { background: 'var(--line)', margin: '-16px -16px 12px', padding: '14px 34px 14px 16px', borderRadius: '18px 18px 0 0' } : undefined) }}>
+                // Randevu'da (kullanıcı isteği: "diğer kartları da aynı şekilde yapalım", kapsam sadece görsel
+                // stil — Kapat/Düzenle akışına dokunulmadı) aynı zemin/yükseklik uygulanıyor, ama grip/✕ hâlâ
+                // (kilitliForm burada false) normal akışta olduğu için kenardan kenara değil, sheet'in kendi
+                // iç boşluğu içinde yuvarlak köşeli bir kutu olarak — negatif margin ile taşıp grip/✕'i ezmesin.
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingRight: 34, marginTop: -8, ...(kisiselTur === 'aliskanlik' ? { background: 'var(--line)', margin: '-16px -16px 12px', padding: '14px 34px 14px 16px', borderRadius: '18px 18px 0 0' } : kisiselTur === 'randevu' ? { background: 'var(--line)', margin: '0 0 12px', padding: '12px 34px 12px 12px', borderRadius: 10 } : undefined) }}>
                   {/* Not'ta "yaptım" tiki yok (kullanıcı isteği — tablo: "Tamamlanma: Yok, checkbox bile yok"),
                       bir yapışkan not tamamlanacak bir şey değil, sadece silininceye kadar duran bir bilgi.
                       Alışkanlık'ta da detay formundan kalktı (kullanıcı isteği: "en azından alışkanlık için
