@@ -1213,7 +1213,14 @@ export default function Rite() {
     if (lastDetayAnahtarRef.current !== anahtar) {
       lastDetayAnahtarRef.current = anahtar;
       const isDraft2 = !o2.id && !detay.preview;
-      setDuzenleModu(isDraft2 || (!!o2.id && taze === o2.id));
+      // Not/Alışkanlık/Kart artık her açıldığında doğrudan düzenleme modunda gelir — ayrı bir "Düzenle"ye
+      // basma adımı yok (kullanıcı isteği: "artık hiçbir kartta... Kapat, Düzenle butonları olmayacak, doğrudan
+      // düzenleme modunda açılacak"). Randevu ve diğer (Meridyen/Havuz) tipler eski davranışında kalıyor —
+      // onlar sadece taslakken ya da yeni kaydedilmiş/taze iken bu moddaydı, o mantık değişmedi.
+      const cfg2pre = o2.kart_config || {};
+      // isKisisel (Not/Alışkanlık, Randevu hariç) || isYeniKart (Kart) ile birebir aynı koşul.
+      const zorunluDuzenle = detay.tur === 'ritual' && o2.kart_tipi === 'bilgi' && o2.kaynak === 'Kendi' && (!!cfg2pre.genel || !cfg2pre.randevu);
+      setDuzenleModu(zorunluDuzenle || isDraft2 || (!!o2.id && taze === o2.id));
       setDuzenleOrijinal(null);
       setZamanOpen(false);
       const cfg2 = o2.kart_config || {};
@@ -2545,13 +2552,17 @@ export default function Rite() {
     const ipucu = tip === 'anket' ? '📋 doldur' : tip === 'coktan' ? '❓ yanıtla' : tip === 'diyet' ? '🍽 öğün' : tip === 'tarif' ? '🍳 tarif' : tip === 'video' ? '🎬 izle' : tip === 'nefes' ? '🫁 nefes' : tip === 'ruhhali' ? '🙂 check-in' : tip === 'workout' ? '🏋️ egzersiz' : bilgiAltTip ? bilgiAltTip : tip === 'sukran' ? '🙏 şükran' : tip === 'topraklama' ? '🖐 topraklan' : tip === 'pomodoro' ? '🍅 odaklan' : tip === 'beden' ? '🧘 taransın' : tip === 'uykuoncesi' ? '🌙 hazırlan' : tip === 'su' ? '💧 iç' : tip === 'maruz' ? '🎯 uygula' : tip === 'niyet' ? '🧭 niyet belirle' : tip === 'randevu' ? '📅 randevu' : '';
     const meridyen = rt.kaynak === 'Meridyen'; // sağlayıcı-kaynaklı kart — kişisel kartlardan çerçeveyle ayrıştır
     const stilP = cfg.stil ? STIL_LOOKUP[cfg.stil] : null;
-    // Not (yapışkan not): Ajanda satırında da aynı sarı zemin — detay açmadan da bir bakışta ayırt edilsin
-    // (kullanıcı isteği). Randevu ve Alışkanlık'a hiç dokunmuyor (ikisi de bu koşulun dışında kalıyor).
+    // Not (yapışkan not): Ajanda satırında da aynı sarı zemin, TAM bir dikdörtgen olarak — üstteki ayırıcı
+    // çizgi kaldırılıp etrafına boşluk (margin) ve kenar dolgusu (padding) eklendi ki liste satırı gibi değil,
+    // ayrı, kendi başına duran bir yapışkan not kartı gibi görünsün (kullanıcı isteği: "tamamı sarı ve tam
+    // dikdörtgen olsa daha hoş görünür"). Randevu ve Alışkanlık'a hiç dokunmuyor.
     const notRow = tip === 'bilgi' && rt.kaynak === 'Kendi' && !cfg?.genel && !cfg?.randevu && !rt.aliskanlik;
     return (
       <div>
-        <div className={'rit' + (meridyen && !stilP ? ' rit-mer' : '')} style={{ ...(stilP ? { borderLeft: '3px solid ' + stilP.ac, paddingLeft: 9 } : undefined), ...(notRow ? { background: '#fdf6d3', borderRadius: 10 } : undefined) }}>
-          <div className={'chk' + (done ? ' on' : '')} onClick={() => (noDone ? openRit(rt) : toggleRit(rt.id))} title={noDone ? 'Aç' : 'Yaptım'}>{done ? '✓' : (noDone ? kartIkon(tip) : (bilgiIkon || ''))}</div>
+        <div className={'rit' + (meridyen && !stilP ? ' rit-mer' : '')} style={{ ...(stilP ? { borderLeft: '3px solid ' + stilP.ac, paddingLeft: 9 } : undefined), ...(notRow ? { background: '#fdf6d3', borderRadius: 3, borderTop: 'none', padding: '12px 10px', margin: '6px 0' } : undefined) }}>
+          {/* Not satırında checkbox yok — dokununca sadece kartı açar (kullanıcı isteği: "listedeki kartta
+              checkbox var, olmayacak diye konuşmuştuk"). Diğer tüm tipler eskisi gibi "yaptım" tiki. */}
+          <div className={notRow ? 'chk' : 'chk' + (done ? ' on' : '')} style={notRow ? { border: 'none', background: 'transparent', cursor: 'pointer' } : undefined} onClick={() => (noDone || notRow ? openRit(rt) : toggleRit(rt.id))} title={(noDone || notRow) ? 'Aç' : 'Yaptım'}>{notRow ? (bilgiIkon || '📄') : done ? '✓' : (noDone ? kartIkon(tip) : (bilgiIkon || ''))}</div>
           <div style={{ flex: 1, cursor: 'pointer' }} onClick={() => openRit(rt)}>
             <div className="t">{rt.ad}
               {ritAreas(rt).map((a) => <span key={a} className="tagp p-alan">{a}</span>)}
@@ -3348,20 +3359,20 @@ export default function Rite() {
         // için anlamlı mezun et / paylaş seçenekleri gizli kalır (kullanıcı isteği) — hem aşağıdaki genel
         // zamanlama şeridinde hem de kişisel kartın kendi ince başlık şeridinde kullanılıyor.
         const isTaze = isDraft || (!!o.id && taze === o.id);
-        // Görüntüleme/düzenleme modu ayrımı şimdilik sadece Not ve Alışkanlık'ta — Randevu henüz ele alınmadı
-        // (kullanıcı isteği: "randevuyu şimdilik es geçebiliriz").
-        const kisiselGorunumModu = isKisisel && kisiselTur !== 'randevu' && !duzenleModu;
-        // "Kart" için aynı görüntüleme/düzenleme ayrımı — isKisisel'den bağımsız kendi bayrağı.
-        const yeniKartGorunumModu = isYeniKart && !duzenleModu;
-        // Kayıtlı bir kişisel kartı (Not/Alışkanlık/Kart) düzenleme moduna alırken o anki hâli saklanıyor —
-        // "Vazgeç" bu kopyayla geri dönüyor, alan değişiklikleri (Ad, Zamanlama, Bildirim, video/resim — bkz.
-        // setRitAd/setBilgiCfg/ritTasi/setRitSure/setRitGunler/setRitReminder'daki duzenleModu dalları)
-        // veritabanına hiç yazılmadan siliniyor. "Kaydet" ise o anki (yerelde biriken) hâli tek seferde yazıyor.
-        // Bu üç fonksiyon jenerik (o'ya bakıyor, tipe özel değil) — Kart da aynen kullanıyor.
-        const kisiselDuzenleAc = () => { setDuzenleOrijinal({ ...o, kart_config: { ...(o.kart_config || {}) } }); setDuzenleModu(true); setZamanOpen(false); };
-        const kisiselDuzenleVazgec = () => { if (duzenleOrijinal) patchDetay(duzenleOrijinal); setDuzenleModu(false); setDuzenleOrijinal(null); setZamanOpen(false); };
+        // Görüntüleme modu KALKTI (kullanıcı isteği — "artık hiçbir kartta... Kapat, Düzenle butonları
+        // olmayacak, doğrudan düzenleme modunda açılacak"): Not/Alışkanlık/Kart artık her zaman düzenlenebilir
+        // açılıyor, bu iki değişken hep false — geri kalan onlarca yerdeki "kisiselGorunumModu ? görüntüle :
+        // düzenle" ifadeleri tek satırlık bu değişikliklerle otomatik olarak hep "düzenle" dalına düşüyor,
+        // tek tek dokunmaya gerek kalmadı. Randevu zaten hiç bu ayrımı kullanmıyordu, değişmedi.
+        const kisiselGorunumModu = false;
+        const yeniKartGorunumModu = false;
+        // "Vazgeç"/"Kaydet" artık kartı kapatıyor da (eskiden sadece görüntüleme moduna dönüyordu — o mod
+        // kalmadığı için artık anlamı yok). Değişiklikler zaten hep yerelde tutuluyor (duzenleModu useEffect'te
+        // bu tipler için hep zorunlu true — bkz. yukarısı), o yüzden Vazgeç'in ayrıca bir şey geri yazmasına
+        // gerek yok, veritabanına hiç yazılmamıştı zaten.
+        const kisiselDuzenleVazgec = () => { setZamanOpen(false); closeDetay(); };
         const kisiselDuzenleKaydet = async () => {
-          if (!client || !o.id) { setDuzenleModu(false); setDuzenleOrijinal(null); setZamanOpen(false); return; }
+          if (!client || !o.id) { setZamanOpen(false); closeDetay(); return; }
           await supabase.from('dog_rituals').update({
             ad: (o.ad || '').trim() || kisiselYeni,
             kart_config: o.kart_config || {},
@@ -3376,14 +3387,14 @@ export default function Rite() {
             aliskanlik: !!o.aliskanlik,
           }).eq('id', o.id);
           loadData(client.id);
-          setDuzenleModu(false);
-          setDuzenleOrijinal(null);
           setZamanOpen(false);
+          closeDetay();
         };
         // Taslak (yeni oluşturma, henüz kaydedilmemiş) formu zaten dışarı/× ile kapanmıyordu (bkz. aşağısı) —
         // kayıtlı bir kartı düzenlerken de aynı sebepten (yanlışlıkla dışarı dokunup değişiklikleri kaybetme
-        // riski) aynı kilit uygulanıyor; sadece görüntüleme modunda (kilitli değilken) dışarı/× yine çalışır.
-        const kilitliForm = isDraft || (((isKisisel && kisiselTur !== 'randevu') || isYeniKart) && duzenleModu);
+        // riski) aynı kilit uygulanıyor; artık görüntüleme modu kalmadığı için bu kilit Not/Alışkanlık/Kart'ta
+        // her zaman geçerli (yalnızca × yerine Vazgeç/Kaydet ile kapanır).
+        const kilitliForm = isDraft || (isKisisel && kisiselTur !== 'randevu') || isYeniKart;
         // "Kart" Zamanlama şeridinde Süregelen/Süreli seçmek ya da belirli Günler işaretlemek kartı otomatik
         // alışkanlığa dönüştürür (kullanıcı isteği: "otomatik, zamanlamaya dokununca") — "Hangi güne taşı" ile
         // tek günü değiştirmek bunu tetiklemiyor, sadece süre/gün deseni değiştirmek tetikliyor.
@@ -3426,20 +3437,10 @@ export default function Rite() {
                   {kisiselTur === 'aliskanlik' && !preview && !isTaze && !o.mezun && (
                     <button type="button" onClick={() => setHabitMenuFor(o)} title="Alışkanlık seçenekleri" aria-label="Alışkanlık seçenekleri" style={{ background: 'none', border: 'none', padding: 0, fontSize: 16, cursor: 'pointer', opacity: .55 }}>🎓</button>
                   )}
-                  {/* Not'ta tarih artık burada, başlıkta, tek bir 📅 rozetiyle değişiyor — gövdedeki ayrı
-                      "Zamanlama" şeridi kalktı (kullanıcı isteği: "zamanlama içinde değiştirmek pratik değil,
-                      başka bir yerden tarih seçimiyle daha pratik olmalı"). Görüntüleme modunda düz metin,
-                      düzenleme modunda dokununca native tarih seçici açan gizli bir input. */}
-                  {kisiselTur === 'not' && (
-                    kisiselGorunumModu ? (
-                      <span style={{ fontSize: 12.5, color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 3 }}>📅 {kisaTarih(o.baslangic)}</span>
-                    ) : (
-                      <label style={{ fontSize: 12.5, color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer' }} title="Tarihi değiştir">
-                        📅
-                        <input type="date" value={o.baslangic || ''} onChange={(e) => e.target.value && ritTasi(o.id, e.target.value)} style={{ border: 'none', background: 'transparent', fontSize: 12, padding: 0, width: 84, color: 'var(--muted)' }} />
-                      </label>
-                    )
-                  )}
+                  {/* Not'ta tarih seçimi/rozeti YOK (bu bir yanlış anlamaydı — Not zaten tarihsiz, "silininceye
+                      kadar duran" bir yapışkan not; kullanıcı isteği "tarih seçimi öyle mi konuşmuştuk"
+                      sonrası kaldırıldı). baslangic hâlâ dahili olarak var (Ayraç mantığıyla "hangi günden
+                      itibaren görünsün" için) ama kullanıcıya hiç gösterilmiyor/değiştirilmiyor. */}
                   {/* Not'ta Paylaş da yok (kullanıcı isteği — çoklu video/zengin içerik olmadığı için paylaşımın
                       pek bir anlamı kalmıyor; sadece Randevu'da kalıyor). */}
                   {kisiselTur !== 'not' && !paylasilamaz && !isTaze && <button type="button" onClick={() => { setPaylasOpen(true); setKMsg(''); }} title="Paylaş" style={{ background: 'none', border: 'none', padding: 0, fontSize: 16, cursor: 'pointer', opacity: .55 }}>↪️</button>}
@@ -3784,23 +3785,13 @@ export default function Rite() {
                 )}
               </div>
             )}
-            {/* Kayıtlı kişisel kartlarda (Not/Alışkanlık) ve "Kart"ta da taslak formuyla tutarlı bir buton çifti:
-                görüntüleme modunda Kapat/Düzenle, düzenleme modunda Vazgeç/Kaydet (kullanıcı isteği —
-                "tutarlılık açısından altta Kapat ve Düzenle butonları olsun" / "düzenle dediğimizde ... Vazgeç
-                ve Kaydet"). kisiselDuzenleAc/Vazgeç/Kaydet jenerik olduğu için Kart da aynen kullanıyor. */}
+            {/* Kayıtlı kişisel kartlarda (Not/Alışkanlık) ve "Kart"ta artık tek hâl: doğrudan düzenleme modunda
+                açılıyor, bu yüzden buton çifti hep Vazgeç/Kaydet — ayrı bir Kapat/Düzenle görüntüleme adımı
+                kalmadı (kullanıcı isteği: "artık hiçbir kartta... doğrudan düzenleme modunda açılacak"). */}
             {isRit && ((isKisisel && kisiselTur !== 'randevu') || isYeniKart) && !isTaze && (
               <div style={{ display: 'flex', gap: 8, margin: '2px 0 8px' }}>
-                {duzenleModu ? (
-                  <>
-                    <button className="btn ghost" style={{ flex: 1 }} onClick={kisiselDuzenleVazgec}>Vazgeç</button>
-                    <button className="btn" style={{ flex: 1 }} onClick={kisiselDuzenleKaydet}>Kaydet</button>
-                  </>
-                ) : (
-                  <>
-                    <button className="btn ghost" style={{ flex: 1 }} onClick={closeDetay}>Kapat</button>
-                    <button className="btn" style={{ flex: 1 }} onClick={kisiselDuzenleAc}>Düzenle</button>
-                  </>
-                )}
+                <button className="btn ghost" style={{ flex: 1 }} onClick={kisiselDuzenleVazgec}>Vazgeç</button>
+                <button className="btn" style={{ flex: 1 }} onClick={kisiselDuzenleKaydet}>Kaydet</button>
               </div>
             )}
             {isDraft && (
