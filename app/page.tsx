@@ -84,6 +84,12 @@ function kisaTarih(d?: string | null): string {
   const p = d.split('-');
   return p.length === 3 ? p[2] + '.' + p[1] : d;
 }
+// Bir ritüel satırının "Not" (yapışkan not) tipi olup olmadığı — RitItem'ın kendisinde VE onu saran liste
+// satırında (kart arka planı/köşeleri için) aynı koşul iki yerde tekrarlanmasın diye ortak bir yardımcı.
+function isNotKart(rt: any): boolean {
+  const cfg = rt?.kart_config || {};
+  return rt?.kart_tipi === 'bilgi' && rt?.kaynak === 'Kendi' && !cfg.genel && !cfg.randevu && !rt?.aliskanlik;
+}
 // Adım pencerelerini çöz: ardisik=true ise önceki adımın bitişinden başlar.
 function programSpans(adimlar: any[], sure?: number | null) {
   let cursor = 0; let prev = { o: 0, d: 0, end: 0 };
@@ -2552,26 +2558,25 @@ export default function Rite() {
     const ipucu = tip === 'anket' ? '📋 doldur' : tip === 'coktan' ? '❓ yanıtla' : tip === 'diyet' ? '🍽 öğün' : tip === 'tarif' ? '🍳 tarif' : tip === 'video' ? '🎬 izle' : tip === 'nefes' ? '🫁 nefes' : tip === 'ruhhali' ? '🙂 check-in' : tip === 'workout' ? '🏋️ egzersiz' : bilgiAltTip ? bilgiAltTip : tip === 'sukran' ? '🙏 şükran' : tip === 'topraklama' ? '🖐 topraklan' : tip === 'pomodoro' ? '🍅 odaklan' : tip === 'beden' ? '🧘 taransın' : tip === 'uykuoncesi' ? '🌙 hazırlan' : tip === 'su' ? '💧 iç' : tip === 'maruz' ? '🎯 uygula' : tip === 'niyet' ? '🧭 niyet belirle' : tip === 'randevu' ? '📅 randevu' : '';
     const meridyen = rt.kaynak === 'Meridyen'; // sağlayıcı-kaynaklı kart — kişisel kartlardan çerçeveyle ayrıştır
     const stilP = cfg.stil ? STIL_LOOKUP[cfg.stil] : null;
-    // Not (yapışkan not): Ajanda satırında da aynı sarı zemin, TAM bir dikdörtgen olarak — üstteki ayırıcı
-    // çizgi kaldırılıp etrafına boşluk (margin) ve kenar dolgusu (padding) eklendi ki liste satırı gibi değil,
-    // ayrı, kendi başına duran bir yapışkan not kartı gibi görünsün (kullanıcı isteği: "tamamı sarı ve tam
-    // dikdörtgen olsa daha hoş görünür"). Randevu ve Alışkanlık'a hiç dokunmuyor.
-    const notRow = tip === 'bilgi' && rt.kaynak === 'Kendi' && !cfg?.genel && !cfg?.randevu && !rt.aliskanlik;
+    // Not (yapışkan not): asıl sarı/dikdörtgen kutu artık dıştaki .card'da (bkz. çağrı yeri) — burada .rit'in
+    // kendi arka planına dokunmuyoruz. Bir yapışkan not gerçek hayatta nasıl kullanılırsa öyle: ikon/etiket
+    // yok (şekil+renk zaten "not" olduğunu anlatıyor), "bitiş" yazısı yok, bildirim varsa sağ altta küçük bir
+    // rozet, kaldırma (✕) zaten var — yapıp kaldırmak (kullanıcı isteği) bu ✕ ile oluyor.
+    const notRow = isNotKart(rt);
     return (
       <div>
-        <div className={'rit' + (meridyen && !stilP ? ' rit-mer' : '')} style={{ ...(stilP ? { borderLeft: '3px solid ' + stilP.ac, paddingLeft: 9 } : undefined), ...(notRow ? { background: '#fdf6d3', borderRadius: 3, borderTop: 'none', padding: '12px 10px', margin: '6px 0' } : undefined) }}>
-          {/* Not satırında checkbox yok — dokununca sadece kartı açar (kullanıcı isteği: "listedeki kartta
-              checkbox var, olmayacak diye konuşmuştuk"). Diğer tüm tipler eskisi gibi "yaptım" tiki. */}
-          <div className={notRow ? 'chk' : 'chk' + (done ? ' on' : '')} style={notRow ? { border: 'none', background: 'transparent', cursor: 'pointer' } : undefined} onClick={() => (noDone || notRow ? openRit(rt) : toggleRit(rt.id))} title={(noDone || notRow) ? 'Aç' : 'Yaptım'}>{notRow ? (bilgiIkon || '📄') : done ? '✓' : (noDone ? kartIkon(tip) : (bilgiIkon || ''))}</div>
+        <div className={'rit' + (meridyen && !stilP ? ' rit-mer' : '')} style={{ ...(stilP ? { borderLeft: '3px solid ' + stilP.ac, paddingLeft: 9 } : undefined), ...(notRow ? { position: 'relative', paddingBottom: rt.hatirlatma_saat ? 20 : undefined } : undefined) }}>
+          {!notRow && <div className={'chk' + (done ? ' on' : '')} onClick={() => (noDone ? openRit(rt) : toggleRit(rt.id))} title={noDone ? 'Aç' : 'Yaptım'}>{done ? '✓' : (noDone ? kartIkon(tip) : (bilgiIkon || ''))}</div>}
           <div style={{ flex: 1, cursor: 'pointer' }} onClick={() => openRit(rt)}>
             <div className="t">{rt.ad}
               {ritAreas(rt).map((a) => <span key={a} className="tagp p-alan">{a}</span>)}
               {cfg.dikey && DIKEY_LABEL[cfg.dikey] && <span className="tagp p-dikey">{DIKEY_LABEL[cfg.dikey]}</span>}
             </div>
-            <div className="m">{[cfg.randevu && cfg.saat && '🕑 ' + cfg.saat, rt.hatirlatma_saat && '🔔 ' + rt.hatirlatma_saat, rt.bitis && 'bitiş ' + kisaTarih(rt.bitis), ipucu].filter(Boolean).join(' · ')}</div>
+            {!notRow && <div className="m">{[cfg.randevu && cfg.saat && '🕑 ' + cfg.saat, rt.hatirlatma_saat && '🔔 ' + rt.hatirlatma_saat, rt.bitis && 'bitiş ' + kisaTarih(rt.bitis), ipucu].filter(Boolean).join(' · ')}</div>}
           </div>
           {vurl && <a className="playbtn" href={vurl} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} title="Aç">▶</a>}
           <button className="rmx" onClick={() => ritSil(rt.id)} title="Kaldır">✕</button>
+          {notRow && rt.hatirlatma_saat && <span style={{ position: 'absolute', right: 2, bottom: 2, fontSize: 11, color: 'var(--muted)', opacity: .8 }}>🔔 {rt.hatirlatma_saat}</span>}
         </div>
         {/* Alışkanlık ilerlemesi kartın kendi üzerinde: süreli alışkanlıklarda (bitis var) üstte haftalık
             doluluk çubukları (başlangıçtan itibaren 7'şer günlük dilimler, o dilimdeki aktif günlerin ne kadarı
@@ -2828,7 +2833,11 @@ export default function Rite() {
                         </div>
                       );
                     }
-                    return <div className="card" style={{ padding: '4px 10px' }}><RitItem rt={r.members[0]} /></div>;
+                    // Not (yapışkan not): sarı zemin ve tam dikdörtgen köşeler asıl görünür kutu olan bu dıştaki
+                    // .card'a uygulanıyor (kullanıcı isteği — "tamamen sarı olur, köşeler yuvarlak olmaz");
+                    // .rit'in kendi arka planı/köşe/boşluk ayarları kaldırıldı, artık sadece bu dış kutu boyuyor.
+                    const notCard = isNotKart(r.members[0]);
+                    return <div className="card" style={notCard ? { padding: '12px 14px', background: '#fdf6d3', border: 'none', borderRadius: 3 } : { padding: '4px 10px' }}><RitItem rt={r.members[0]} /></div>;
                   };
 
                   return (
