@@ -517,17 +517,22 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi, sadeceAcik
                   {readOnly ? (
                     videolar[0]?.url && <EmbedVideo url={videolar[0].url} />
                   ) : (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span>🎬</span>
-                      <input
-                        value={vUrl}
-                        onChange={(e) => setVUrl(e.target.value)}
-                        onBlur={() => { const u = vUrl.trim(); const eski = videolar[0]?.url || ''; if (u !== eski) onSave({ ...cfg, videolar: u ? [{ url: u }] : [] }); }}
-                        placeholder="Video linki (ops.) — https://…"
-                        style={{ flex: 1, fontSize: 13 }}
-                      />
-                      {videolar[0]?.url && <span className="chip" style={{ borderStyle: 'dashed' }} onClick={() => { setVUrl(''); onSave({ ...cfg, videolar: [] }); }}>Kaldır</span>}
-                    </div>
+                    <>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span>🎬</span>
+                        <input
+                          value={vUrl}
+                          onChange={(e) => setVUrl(e.target.value)}
+                          onBlur={() => { const u = vUrl.trim(); const eski = videolar[0]?.url || ''; if (u !== eski) onSave({ ...cfg, videolar: u ? [{ url: u }] : [] }); }}
+                          placeholder="Video linki (ops.) — https://…"
+                          style={{ flex: 1, fontSize: 13 }}
+                        />
+                        {videolar[0]?.url && <span className="chip" style={{ borderStyle: 'dashed' }} onClick={() => { setVUrl(''); onSave({ ...cfg, videolar: [] }); }}>Kaldır</span>}
+                      </div>
+                      {/* Link yapıştırılır yapıştırılmaz (Kaydet'e basmadan, onBlur'u beklemeden) doğrudan
+                          embed olarak oynatılabilir hâle gelsin (kullanıcı isteği). */}
+                      {vUrl.trim() && /^https?:\/\//i.test(vUrl.trim()) && <div style={{ margin: '8px 0 0' }}><EmbedVideo url={vUrl.trim()} /></div>}
+                    </>
                   )}
                 </div>
               ) : notTasarimi ? (
@@ -1211,6 +1216,11 @@ export default function Rite() {
   // arkasında — zaten içerik varsa (video/zamanlama/bildirim doluysa) açık başlıyor, tamamen boşsa kapalı
   // başlıyor (bkz. aşağıdaki useEffect'teki hesap).
   const [dahaFazlaAcik, setDahaFazlaAcik] = useState(false);
+  // Alışkanlık Zamanlama şeridi — Günler: varsayılan sade görünümde sadece "Her gün" chip'i var (zaten seçili
+  // geliyor), haftanın günleri gizli; "Her gün"e basınca (kullanıcı isteği: "basarsak altta günler çıksa")
+  // altında açılıp özel gün seçimine izin veriyor. Kart zaten özel günlerle geldiyse (gunler doluysa) baştan
+  // açık başlıyor ki kullanıcı mevcut seçimini görsün — bkz. aşağıdaki useEffect.
+  const [gunlerAcik, setGunlerAcik] = useState(false);
   const lastDetayAnahtarRef = useRef<string | null>(null);
   useEffect(() => {
     if (!detay) { lastDetayAnahtarRef.current = null; return; }
@@ -1231,6 +1241,7 @@ export default function Rite() {
       setZamanOpen(false);
       const cfg2 = o2.kart_config || {};
       setDahaFazlaAcik(!!(cfg2.videolar?.length || cfg2.resimler?.length || cfg2.resim || o2.hatirlatma_saat || (o2.bitis && o2.bitis !== o2.baslangic) || (o2.gunler && o2.gunler.length)));
+      setGunlerAcik(!!(o2.gunler && o2.gunler.length));
     }
   }, [detay, taze]);
   const [grupEditOpen, setGrupEditOpen] = useState(false);
@@ -1903,7 +1914,9 @@ export default function Rite() {
       // Not artık Randevu gibi tek günlük değil — bir yapışkan not gibi, silininceye kadar her gün duruyor
       // (Ayraç'takiyle aynı mantık: bitis=null, gunler boş → her gün). Kullanıcı isteği: "tarihi yok, silene
       // kadar durur" — teknik olarak baslangic hâlâ var (📅 rozetinden taşınabilir) ama bitiş asla set edilmiyor.
-      baslangic: day, bitis: tur === 'randevu' ? day : null,
+      // Alışkanlık ise varsayılan olarak Süreli geliyor, 21 gün (kullanıcı isteği: "default olarak süreli
+      // gelip gün sayısı da yine default 21 gün olsa") — setRitSure'daki "+gun-1" ile birebir aynı hesap.
+      baslangic: day, bitis: tur === 'randevu' ? day : tur === 'aliskanlik' ? (() => { const e = parseD(day); e.setDate(e.getDate() + 20); return iso(e); })() : null,
       hatirlatma_saat: null, kisisel_not: null, gunler: null, faydalar: [],
     });
   }
@@ -3659,14 +3672,9 @@ export default function Rite() {
                     </div>
                     {!kisiselGorunumModu && zamanOpen && (
                       <div style={{ padding: '7px 8px', borderRadius: 8, background: '#fff', border: '1px solid var(--line)', margin: '2px 0 8px' }}>
-                        <div className="kv" style={{ marginTop: 0 }}><div className="k">Hangi güne taşı</div>
-                          <div>
-                            <span className={'chip' + (o.baslangic === today ? ' on' : '')} onClick={() => ritTasi(o.id, today)}>Bugün</span>
-                            <span className={'chip' + (o.baslangic === yarin ? ' on' : '')} onClick={() => ritTasi(o.id, yarin)}>Yarın</span>
-                            <input type="date" value={o.baslangic || ''} onChange={(e) => e.target.value && ritTasi(o.id, e.target.value)} style={{ width: 'auto', marginLeft: 4 }} />
-                          </div>
-                        </div>
-                        <div className="kv"><div className="k">Süre</div>
+                        {/* "Hangi güne taşı" burada kalktı (kullanıcı isteği) — başlıktaki 📅 rozeti aynı ritTasi'yi
+                            çağırıyor, artık tarih taşımak için tek yer o. */}
+                        <div className="kv" style={{ marginTop: 0 }}><div className="k">Süre</div>
                           <div>
                             <span className={'chip' + (!o.bitis ? ' on' : '')} onClick={() => setRitSure(o.id, null)}>Süregelen</span>
                             <span className={'chip' + (o.bitis ? ' on' : '')} onClick={() => setRitSure(o.id, parseInt(sureInput) || 21)}>Süreli</span>
@@ -3679,8 +3687,11 @@ export default function Rite() {
                         </div>
                         <div className="kv"><div className="k">Günler</div>
                           <div>
-                            <span className={'chip' + ((!o.gunler || o.gunler.length === 0) ? ' on' : '')} onClick={() => setRitGunler(o.id, [])}>Her gün</span>
-                            {GUNLER.map(([n, l]) => {
+                            {/* "Her gün" varsayılan seçili gelir; basınca (kullanıcı isteği) altındaki haftanın
+                                günleri açılıp kapanıyor — aynı dokunuş hem "her gün"e sıfırlıyor hem özelleştirme
+                                listesini gösteriyor. */}
+                            <span className={'chip' + ((!o.gunler || o.gunler.length === 0) ? ' on' : '')} onClick={() => { setRitGunler(o.id, []); setGunlerAcik((v) => !v); }}>Her gün</span>
+                            {gunlerAcik && GUNLER.map(([n, l]) => {
                               const sel = !!(o.gunler && o.gunler.includes(n));
                               return <span key={n} className={'chip' + (sel ? ' on' : '')} onClick={() => { const cur: number[] = o.gunler ? [...o.gunler] : []; const nx = cur.includes(n) ? cur.filter((x) => x !== n) : [...cur, n]; setRitGunler(o.id, nx); }}>{l}</span>;
                             })}
