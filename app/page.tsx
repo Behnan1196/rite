@@ -1231,13 +1231,15 @@ export default function Rite() {
     if (lastDetayAnahtarRef.current !== anahtar) {
       lastDetayAnahtarRef.current = anahtar;
       const isDraft2 = !o2.id && !detay.preview;
-      // Not/Alışkanlık/Kart artık her açıldığında doğrudan düzenleme modunda gelir — ayrı bir "Düzenle"ye
-      // basma adımı yok (kullanıcı isteği: "artık hiçbir kartta... Kapat, Düzenle butonları olmayacak, doğrudan
-      // düzenleme modunda açılacak"). Randevu ve diğer (Meridyen/Havuz) tipler eski davranışında kalıyor —
-      // onlar sadece taslakken ya da yeni kaydedilmiş/taze iken bu moddaydı, o mantık değişmedi.
-      const cfg2pre = o2.kart_config || {};
-      // isKisisel (Not/Alışkanlık, Randevu hariç) || isYeniKart (Kart) ile birebir aynı koşul.
-      const zorunluDuzenle = detay.tur === 'ritual' && o2.kart_tipi === 'bilgi' && o2.kaynak === 'Kendi' && (!!cfg2pre.genel || !cfg2pre.randevu);
+      // Not/Alışkanlık/Yapılacak/Randevu/Kart artık her açıldığında doğrudan düzenleme modunda gelir — ayrı
+      // bir "Düzenle"ye basma adımı yok (kullanıcı isteği: "artık hiçbir kartta... Kapat, Düzenle butonları
+      // olmayacak, doğrudan düzenleme modunda açılacak"). Randevu da artık aynı Vazgeç/Kaydet mantığına
+      // getirildi (kullanıcı isteği: "öncelikle randevuyu da Vazgeç,Kaydet mantığına getirelim") — diğer
+      // (Meridyen/Havuz) tipler hâlâ eski davranışında, onlar sadece taslakken ya da yeni kaydedilmiş/taze
+      // iken bu moddaydı, o mantık değişmedi.
+      // isKisisel (Not/Alışkanlık/Yapılacak/Randevu, hepsi) || isYeniKart (Kart) ile birebir aynı koşul —
+      // ikisi de kart_tipi='bilgi' && kaynak='Kendi', tek fark kart_config.genel (bkz. isKisisel/isYeniKart).
+      const zorunluDuzenle = detay.tur === 'ritual' && o2.kart_tipi === 'bilgi' && o2.kaynak === 'Kendi';
       setDuzenleModu(zorunluDuzenle || isDraft2 || (!!o2.id && taze === o2.id));
       setDuzenleOrijinal(null);
       setZamanOpen(false);
@@ -2123,7 +2125,10 @@ export default function Rite() {
     if (!client) return;
     const cfg = { ...(detay?.obj?.kart_config || {}), hatirlatma_tarih: tarih || null };
     const patch: any = { hatirlatma_saat: saat || null, son_bildirim: null, kart_config: cfg };
-    if (!id) { patchDetay(patch); return; } // taslak
+    // Randevu artık düzenleme modunda her zaman kilitli (kilitliForm) — diğer setter'lar gibi burada da
+    // duzenleModu'da sadece yerelde tutulmalı, yoksa Vazgeç bu değişikliği geri alamaz (kullanıcı isteği:
+    // "randevuyu da Vazgeç,Kaydet mantığına getirelim" sonrası fark edilen bir tutarsızlık).
+    if (!id || duzenleModu) { patchDetay(patch); return; } // taslak / düzenleme modu
     await supabase.from('dog_rituals').update(patch).eq('id', id);
     patchDetay(patch);
     loadData(client.id);
@@ -3428,7 +3433,7 @@ export default function Rite() {
         // kayıtlı bir kartı düzenlerken de aynı sebepten (yanlışlıkla dışarı dokunup değişiklikleri kaybetme
         // riski) aynı kilit uygulanıyor; artık görüntüleme modu kalmadığı için bu kilit Not/Alışkanlık/Kart'ta
         // her zaman geçerli (yalnızca × yerine Vazgeç/Kaydet ile kapanır).
-        const kilitliForm = isDraft || (isKisisel && kisiselTur !== 'randevu') || isYeniKart;
+        const kilitliForm = isDraft || isKisisel || isYeniKart;
         // "Kart" Zamanlama şeridinde Süregelen/Süreli seçmek ya da belirli Günler işaretlemek kartı otomatik
         // alışkanlığa dönüştürür (kullanıcı isteği: "otomatik, zamanlamaya dokununca") — "Hangi güne taşı" ile
         // tek günü değiştirmek bunu tetiklemiyor, sadece süre/gün deseni değiştirmek tetikliyor.
@@ -3466,15 +3471,13 @@ export default function Rite() {
                 // Alışkanlık'ta şerit ayrıca biraz daha yüksek ve koyu bir zeminle (var(--line)) öne çıkıyor,
                 // sheet'in üst köşe yuvarlaklığıyla aynı hizada kenardan kenara uzanıyor (kullanıcı isteği:
                 // "biraz daha yüksek bir şerit ve biraz koyu bir arkaplan rengi ile daha hoş olabilir mi").
-                // Randevu'da (kullanıcı isteği: "diğer kartları da aynı şekilde yapalım", kapsam sadece görsel
-                // stil — Kapat/Düzenle akışına dokunulmadı) aynı zemin/yükseklik uygulanıyor, ama grip/✕ hâlâ
-                // (kilitliForm burada false) normal akışta olduğu için kenardan kenara değil, sheet'in kendi
-                // iç boşluğu içinde yuvarlak köşeli bir kutu olarak — negatif margin ile taşıp grip/✕'i ezmesin.
+                // Randevu artık da Vazgeç/Kaydet mantığında (kullanıcı isteği: "öncelikle randevuyu da
+                // Vazgeç,Kaydet mantığına getirelim") — kilitliForm burada da true olduğu için grip/✕ hiç
+                // render edilmiyor, o yüzden Alışkanlık/Yapılacak'la aynı kenardan kenara şeridi kullanabiliyor
+                // (eski "sıkışık, ✕'i ezmesin" kısıtlaması artık geçerli değil).
                 // Not'ta da aynı şerit var ama zemin griye çalan bir sarı (kullanıcı isteği) — sheet'in kendi
-                // parlak sarısından (#fdf6d3) ayrışsın diye biraz daha koyu/mat bir ton. Yapılacak (kilitliForm
-                // burada da true, grip/✕ yok) nötr griyle (var(--line)) Alışkanlık'la aynı kenardan kenara stili
-                // kullanıyor — henüz kendine özgü bir renk kararlaştırmadık.
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingRight: 34, marginTop: -8, ...((kisiselTur === 'aliskanlik' || kisiselTur === 'yapilacak') ? { background: 'var(--line)', margin: '-16px -16px 12px', padding: '14px 34px 14px 16px', borderRadius: '18px 18px 0 0' } : kisiselTur === 'randevu' ? { background: 'var(--line)', margin: '0 0 12px', padding: '12px 34px 12px 12px', borderRadius: 10 } : kisiselTur === 'not' ? { background: '#e3dba9', margin: '-16px -16px 12px', padding: '14px 34px 14px 16px', borderRadius: '18px 18px 0 0' } : undefined) }}>
+                // parlak sarısından (#fdf6d3) ayrışsın diye biraz daha koyu/mat bir ton.
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingRight: 34, marginTop: -8, ...(kisiselTur === 'not' ? { background: '#e3dba9', margin: '-16px -16px 12px', padding: '14px 34px 14px 16px', borderRadius: '18px 18px 0 0' } : { background: 'var(--line)', margin: '-16px -16px 12px', padding: '14px 34px 14px 16px', borderRadius: '18px 18px 0 0' }) }}>
                   {/* Not'ta "yaptım" tiki yok (kullanıcı isteği — tablo: "Tamamlanma: Yok, checkbox bile yok"),
                       bir yapışkan not tamamlanacak bir şey değil, sadece silininceye kadar duran bir bilgi.
                       Alışkanlık'ta da detay formundan kalktı (kullanıcı isteği: "en azından alışkanlık için
@@ -3833,10 +3836,12 @@ export default function Rite() {
                 )}
               </div>
             )}
-            {/* Kayıtlı kişisel kartlarda (Not/Alışkanlık) ve "Kart"ta artık tek hâl: doğrudan düzenleme modunda
-                açılıyor, bu yüzden buton çifti hep Vazgeç/Kaydet — ayrı bir Kapat/Düzenle görüntüleme adımı
-                kalmadı (kullanıcı isteği: "artık hiçbir kartta... doğrudan düzenleme modunda açılacak"). */}
-            {isRit && ((isKisisel && kisiselTur !== 'randevu') || isYeniKart) && !isTaze && (
+            {/* Kayıtlı kişisel kartlarda (Not/Alışkanlık/Yapılacak/Randevu) ve "Kart"ta artık tek hâl: doğrudan
+                düzenleme modunda açılıyor, bu yüzden buton çifti hep Vazgeç/Kaydet — ayrı bir Kapat/Düzenle
+                görüntüleme adımı kalmadı (kullanıcı isteği: "artık hiçbir kartta... doğrudan düzenleme modunda
+                açılacak", ve Randevu için de sonradan: "öncelikle randevuyu da Vazgeç,Kaydet mantığına
+                getirelim"). */}
+            {isRit && (isKisisel || isYeniKart) && !isTaze && (
               <div style={{ display: 'flex', gap: 8, margin: '2px 0 8px' }}>
                 <button className="btn ghost" style={{ flex: 1 }} onClick={kisiselDuzenleVazgec}>Vazgeç</button>
                 <button className="btn" style={{ flex: 1 }} onClick={kisiselDuzenleKaydet}>Kaydet</button>
