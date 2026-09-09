@@ -3658,48 +3658,31 @@ export default function Rite() {
             {isRit && isKisisel && kisiselTur !== 'randevu' && (
               <div style={{ margin: '0 0 8px' }}>
                 {kisiselTur === 'not' ? null : (
-                  // Alışkanlık: Süre/Günler/taşı artık ayrı bir modal AÇMIYOR — video ve bildirimdeki gibi,
-                  // dokununca hemen altında (kullanıcı isteği: "zamanlama için de benzer şekilde düzenleyelim").
-                  // Kişisel olmayan ritüellerde aynı içerik hâlâ kendi modalinde (bkz. aşağısı, isRit && !isKisisel).
-                  <>
-                    <div
-                      onClick={() => { if (!kisiselGorunumModu) setZamanOpen((v) => !v); }}
-                      style={{ padding: '7px 10px', borderRadius: 8, background: 'var(--card2,#f6f4ee)', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, cursor: kisiselGorunumModu ? 'default' : 'pointer' }}
-                    >
-                      <span>🗓️</span>
-                      <span style={{ fontSize: 13, color: 'var(--muted)', flex: 1 }}>{gunOzet}</span>
-                      {!kisiselGorunumModu && <span style={{ fontSize: 11, color: 'var(--muted)', opacity: .6 }}>{zamanOpen ? '▴' : '▾'}</span>}
-                    </div>
-                    {!kisiselGorunumModu && zamanOpen && (
-                      <div style={{ padding: '7px 8px', borderRadius: 8, background: '#fff', border: '1px solid var(--line)', margin: '2px 0 8px' }}>
-                        {/* "Hangi güne taşı" burada kalktı (kullanıcı isteği) — başlıktaki 📅 rozeti aynı ritTasi'yi
-                            çağırıyor, artık tarih taşımak için tek yer o. */}
-                        <div className="kv" style={{ marginTop: 0 }}><div className="k">Süre</div>
-                          <div>
-                            <span className={'chip' + (!o.bitis ? ' on' : '')} onClick={() => setRitSure(o.id, null)}>Süregelen</span>
-                            <span className={'chip' + (o.bitis ? ' on' : '')} onClick={() => setRitSure(o.id, parseInt(sureInput) || 21)}>Süreli</span>
-                            {o.bitis && <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', marginLeft: 8 }}>
-                              <input type="number" min={1} value={sureInput} onChange={(e) => setSureInput(e.target.value)} style={{ width: 60 }} /> gün
-                              <button className="btn sm" onClick={() => setRitSure(o.id, parseInt(sureInput) || 21)}>Uygula</button>
-                            </span>}
-                          </div>
-                          {o.bitis && <div className="note">Başlangıç {kisaTarih(o.baslangic)} · bitiş {kisaTarih(o.bitis)}</div>}
-                        </div>
-                        <div className="kv"><div className="k">Günler</div>
-                          <div>
-                            {/* "Her gün" varsayılan seçili gelir; basınca (kullanıcı isteği) altındaki haftanın
-                                günleri açılıp kapanıyor — aynı dokunuş hem "her gün"e sıfırlıyor hem özelleştirme
-                                listesini gösteriyor. */}
-                            <span className={'chip' + ((!o.gunler || o.gunler.length === 0) ? ' on' : '')} onClick={() => { setRitGunler(o.id, []); setGunlerAcik((v) => !v); }}>Her gün</span>
-                            {gunlerAcik && GUNLER.map(([n, l]) => {
-                              const sel = !!(o.gunler && o.gunler.includes(n));
-                              return <span key={n} className={'chip' + (sel ? ' on' : '')} onClick={() => { const cur: number[] = o.gunler ? [...o.gunler] : []; const nx = cur.includes(n) ? cur.filter((x) => x !== n) : [...cur, n]; setRitGunler(o.id, nx); }}>{l}</span>;
-                            })}
-                          </div>
-                        </div>
+                  // Alışkanlık: Süre/Günler artık açılıp kapanan bir panel değil — dokununca açılan bir şerit
+                  // yerine doğrudan görünüyor (kullanıcı isteği: "şeride basıp açılmasına gerek yok artık").
+                  // "Süregelen" seçeneği de kalktı, Süre hep bir gün sayısı (varsayılan 21) — "Uygula" butonu
+                  // da kalktı, gün sayısı değiştirilince yerel arabelleğe (buffer) yazılıyor, asıl kaydetme
+                  // yine kartın kendi Kaydet'inde (kullanıcı isteği: "kaydetle uygulayacak").
+                  <div style={{ padding: '7px 8px', borderRadius: 8, background: '#fff', border: '1px solid var(--line)', margin: '0 0 8px' }}>
+                    <div className="kv" style={{ marginTop: 0 }}><div className="k">🗓️ Süre</div>
+                      <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                        <input type="number" min={1} value={sureInput} onChange={(e) => setSureInput(e.target.value)} onBlur={() => setRitSure(o.id, parseInt(sureInput) || 21)} style={{ width: 60 }} /> gün
                       </div>
-                    )}
-                  </>
+                      <div className="note">Başlangıç {kisaTarih(o.baslangic)}{o.bitis ? ' · bitiş ' + kisaTarih(o.bitis) : ''}</div>
+                    </div>
+                    <div className="kv"><div className="k">Günler</div>
+                      <div>
+                        {/* "Her gün" varsayılan seçili gelir; basınca (kullanıcı isteği) altındaki haftanın
+                            günleri açılıp kapanıyor — aynı dokunuş hem "her gün"e sıfırlıyor hem özelleştirme
+                            listesini gösteriyor. */}
+                        <span className={'chip' + ((!o.gunler || o.gunler.length === 0) ? ' on' : '')} onClick={() => { setRitGunler(o.id, []); setGunlerAcik((v) => !v); }}>Her gün</span>
+                        {gunlerAcik && GUNLER.map(([n, l]) => {
+                          const sel = !!(o.gunler && o.gunler.includes(n));
+                          return <span key={n} className={'chip' + (sel ? ' on' : '')} onClick={() => { const cur: number[] = o.gunler ? [...o.gunler] : []; const nx = cur.includes(n) ? cur.filter((x) => x !== n) : [...cur, n]; setRitGunler(o.id, nx); }}>{l}</span>;
+                        })}
+                      </div>
+                    </div>
+                  </div>
                 )}
                 {/* Bildirim şeridi: düzenleme modunda artık ayrı bir modal AÇMIYOR, hatta ayrı bir "aç/kapa"
                     adımı bile yok — saat alanı doğrudan şeridin üzerinde (kullanıcı isteği: "fazladan bir modal
