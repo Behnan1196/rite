@@ -2619,7 +2619,10 @@ export default function Rite() {
         <div className={'rit' + (meridyen && !stilP ? ' rit-mer' : '')} style={{ ...(stilP ? { borderLeft: '3px solid ' + stilP.ac, paddingLeft: 9 } : undefined), ...(notRow ? { position: 'relative', paddingBottom: rt.hatirlatma_saat ? 20 : undefined } : undefined) }}>
           {/* gorev (Yapılacak) satırda da kalıcı kapanış (kartYapildiToggle) ile işaretleniyor — Kart'ın
               Yapılacak hâliyle aynı davranış, artık listeden de (detaya girmeden) tamamlanabiliyor. */}
-          {!notRow && <div className={'chk' + (done ? ' on' : '')} onClick={() => (noDone ? openRit(rt) : (cfg.gorev && !rt.aliskanlik ? kartYapildiToggle(rt) : toggleRit(rt.id)))} title={noDone ? 'Aç' : 'Yaptım'}>{done ? '✓' : (noDone ? kartIkon(tip) : (bilgiIkon || ''))}</div>}
+          {/* "yapılmadı" durumunda kutunun içi boş kalmalı — bilgiIkon (☑️ dahil) burada göstermek yanıltıcıydı,
+              özellikle Yapılacak'ta ☑️ zaten işaretlenmiş gibi görünüyordu (kullanıcı isteği). noDone tipleri
+              (checkbox değil, "Aç" düğmesi) kendi ikonunu göstermeye devam ediyor — o ayrı bir durum. */}
+          {!notRow && <div className={'chk' + (done ? ' on' : '')} onClick={() => (noDone ? openRit(rt) : (cfg.gorev && !rt.aliskanlik ? kartYapildiToggle(rt) : toggleRit(rt.id)))} title={noDone ? 'Aç' : 'Yaptım'}>{done ? '✓' : (noDone ? kartIkon(tip) : '')}</div>}
           <div style={{ flex: 1, cursor: 'pointer' }} onClick={() => openRit(rt)}>
             <div className="t">{rt.ad}
               {ritAreas(rt).map((a) => <span key={a} className="tagp p-alan">{a}</span>)}
@@ -3552,6 +3555,13 @@ export default function Rite() {
                       kendisi. Zamanlama içindeki "Hangi güne taşı" satırı da duruyor (aynı ritTasi'yi çağırıyor),
                       bu sadece daha hızlı bir kısayol. */}
                   {kisiselTur === 'aliskanlik' && (
+                    <input type="date" value={o.baslangic || ''} onChange={(e) => e.target.value && ritTasi(o.id, e.target.value)} title="Tarih" style={{ width: 90, border: 'none', background: 'none', padding: 0, fontSize: 10.5, fontWeight: 700, color: 'var(--muted)' }} />
+                  )}
+                  {/* Yapılacak: Randevu'ya benziyor (belirli bir güne konur) ama aynısı değil — tek seferlik/saatli
+                      bir buluşma değil, o günden itibaren yapılana kadar duran bir görev; sık sık taşınması
+                      gerekebildiği için Alışkanlık'takiyle aynı hızlı tarih seçici (kullanıcı isteği). ritTasi
+                      bitis:null'ı (süregelen) olduğu gibi koruyarak sadece başlangıcı kaydırıyor. */}
+                  {kisiselTur === 'yapilacak' && (
                     <input type="date" value={o.baslangic || ''} onChange={(e) => e.target.value && ritTasi(o.id, e.target.value)} title="Tarih" style={{ width: 90, border: 'none', background: 'none', padding: 0, fontSize: 10.5, fontWeight: 700, color: 'var(--muted)' }} />
                   )}
                   {/* Not'ta tarih seçimi/rozeti YOK (bu bir yanlış anlamaydı — Not zaten tarihsiz, "silininceye
