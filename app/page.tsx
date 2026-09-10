@@ -1280,6 +1280,12 @@ export default function Rite() {
   // açık olan bir şeyi (alışkanlık/bildirim) temsil ediyor, dokununca küçük bir seçenek menüsü açılıyor
   // (kapat vs. daha ağır bir işlem gibi mezun et); boş/soluk ikon dokununca direkt açıyor, çünkü o zararsız.
   const [habitMenuFor, setHabitMenuFor] = useState<any>(null);
+  // Liste satırındaki ⋯ menüsü: tek başına duran ✕ (Kaldır) yerine geldi — şimdilik tek seçeneği Sil, ileride
+  // Paylaş ve başkaları da buraya eklenebilir (kullanıcı isteği). RitItem her render'da yeniden tanımlanan iç
+  // içe bir bileşen olduğu için kendi useState'i güvenli değil (React her seferinde farklı bir type görüp
+  // remount eder) — bu yüzden hangi satırın menüsü açık diye dıştaki bu state'i kullanıyoruz (habitMenuFor'la
+  // aynı desen).
+  const [ritMenuFor, setRitMenuFor] = useState<any>(null);
   const [remMenuFor, setRemMenuFor] = useState<any>(null);
   const [urlInput, setUrlInput] = useState('');
   const [adInput, setAdInput] = useState('');
@@ -2568,7 +2574,19 @@ export default function Rite() {
   const bagli = !!client.meridyen_bagli;
   const wday = (d: string) => new Date(d + 'T00:00:00').getDay();
   // Tarihsiz (baslangic yok) ritüel = Inbox kartı; ajandada görünmez.
-  const activeOn = (r: any, d: string) => !!r.baslangic && r.baslangic <= d && (!r.bitis || d <= r.bitis) && (!r.gunler || r.gunler.length === 0 || r.gunler.includes(wday(d)));
+  // Süresiz (bitis yok) bir kart normalde her gün — geçmiş/bugün/gelecek — geçerli sayılır (Not, süregelen
+  // Alışkanlık). Ama gecikmiş bir Yapılacak (kart_config.gorev, alışkanlık değil) süresiz hâle geldiğinde bunu
+  // aynen uygularsak, ajandada bugünden sonraki her güne de "süresiz" olarak sızıyor — henüz gelmemiş günlerin
+  // listesini dolduruyor (kullanıcı isteği: "gecikmeye düşünce ileri doğru süresiz ajandada yer alıyor"). Bu
+  // yüzden gorev kartlarında süresiz hâl sadece bugüne kadar (today) geçerli sayılıyor, ötesine sızmıyor —
+  // yarın olunca zaten "bugün" ilerleyip kart yine görünür olacak, ayrıca bir işlem gerekmiyor.
+  const activeOn = (r: any, d: string) => {
+    if (!r.baslangic || r.baslangic > d) return false;
+    if (r.gunler && r.gunler.length > 0 && !r.gunler.includes(wday(d))) return false;
+    if (r.bitis) return d <= r.bitis;
+    if (r.kart_config?.gorev && !r.aliskanlik) return d <= today;
+    return true;
+  };
   const habits = rituals.filter((r) => !r.mezun && activeOn(r, day));
   const mezunlar = rituals.filter((r) => r.mezun);
   // Çalışan programlar: program kimliğine göre grupla (ilerleme + süre kontrolü için).
@@ -2645,7 +2663,7 @@ export default function Rite() {
     // Not (yapışkan not): asıl sarı/dikdörtgen kutu artık dıştaki .card'da (bkz. çağrı yeri) — burada .rit'in
     // kendi arka planına dokunmuyoruz. Bir yapışkan not gerçek hayatta nasıl kullanılırsa öyle: ikon/etiket
     // yok (şekil+renk zaten "not" olduğunu anlatıyor), "bitiş" yazısı yok, bildirim varsa sağ altta küçük bir
-    // rozet, kaldırma (✕) zaten var — yapıp kaldırmak (kullanıcı isteği) bu ✕ ile oluyor.
+    // rozet, kaldırma zaten var (aşağıdaki ⋯ menüsünden) — yapıp kaldırmak (kullanıcı isteği) buradan oluyor.
     const notRow = isNotKart(rt);
     return (
       <div>
@@ -2667,7 +2685,10 @@ export default function Rite() {
             {!notRow && <div className="m">{[cfg.randevu && cfg.saat && '🕑 ' + cfg.saat, rt.hatirlatma_saat && '🔔 ' + rt.hatirlatma_saat, gecikti > 0 && ('⏰ ' + gecikti + ' gün gecikti'), (!cfg.gorev && rt.bitis) && 'bitiş ' + kisaTarih(rt.bitis), ipucu].filter(Boolean).join(' · ')}</div>}
           </div>
           {vurl && <a className="playbtn" href={vurl} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} title="Aç">▶</a>}
-          <button className="rmx" onClick={() => ritSil(rt.id)} title="Kaldır">✕</button>
+          {/* Tek başına ✕ (Kaldır) yerine ⋯ menüsü geldi (kullanıcı isteği) — şimdilik tek seçeneği Sil, ileride
+              Paylaş ve başka eylemler de buraya eklenebilir. Hangi satırın menüsü açık dıştaki ritMenuFor
+              state'inde tutuluyor (RitItem her render'da yeniden tanımlandığı için kendi state'i güvenmez). */}
+          <button className="rmx" onClick={(e) => { e.stopPropagation(); setRitMenuFor(rt); }} title="Seçenekler" aria-label="Seçenekler">⋮</button>
           {notRow && rt.hatirlatma_saat && <span style={{ position: 'absolute', right: 2, bottom: 2, fontSize: 11, color: 'var(--muted)', opacity: .8 }}>🔔 {rt.hatirlatma_saat}</span>}
         </div>
         {/* Alışkanlık ilerlemesi kartın kendi üzerinde: süreli alışkanlıklarda (bitis var) üstte haftalık
@@ -4137,6 +4158,22 @@ export default function Rite() {
         </div>
         );
       })()}
+
+      {/* Liste satırındaki ⋯ menüsü — habitMenuFor ile aynı bottom-sheet deseni. Şimdilik tek seçenek Sil
+          (ritSil zaten kendi confirm()'ünü soruyor); Paylaş ve başka eylemler ileride buraya eklenecek
+          (kullanıcı isteği). */}
+      {ritMenuFor && (
+        <div className="modal top2" onMouseDown={() => setRitMenuFor(null)}>
+          <div className="sheet small" onMouseDown={(e) => e.stopPropagation()}>
+            <button className="x" onClick={() => setRitMenuFor(null)}>×</button>
+            <h3 style={{ marginBottom: 8 }}>{ritMenuFor.ad}</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <button className="btn ghost sm" onClick={() => { const id = ritMenuFor.id; setRitMenuFor(null); ritSil(id); }}>🗑️ Sil</button>
+              <button className="btn ghost sm" onClick={() => setRitMenuFor(null)}>Vazgeç</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {habitMenuFor && (
         <div className="modal top2" onMouseDown={() => setHabitMenuFor(null)}>
