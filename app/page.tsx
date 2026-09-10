@@ -1436,16 +1436,19 @@ export default function Rite() {
     let ritualRows: any[] = r.data || [];
     const logRows = lg.data || [];
     // Yapılacak: günü (bitis) geçmiş ama hiç "yapıldı" kaydı olmadan kalmış (yani tamamlanmadan kapanmamış) her
-    // görev otomatik olarak bugüne taşınır — "günü geçince kaybolmasın, siz yapana/silene kadar hep bugünün
-    // görevi gibi görünsün" (kullanıcı isteği: "bir sonraki güne taşınması", "otomatik ertesi güne taşınsın").
+    // görevin bitis'i null'a çekilir — süresiz hâle gelip Not/eski Yapılacak gibi siz yapana/silene kadar her
+    // gün görünmeye devam eder (kullanıcı isteği: "bir sonraki güne taşınması", "otomatik ertesi güne taşınsın").
+    // baslangic'e BİLEREK dokunmuyoruz: orijinal vade tarihi böylece kalıcı olarak saklanıyor, RitItem'daki
+    // "N gün gecikti" belirteci de bunu kullanıyor. bitis null olduğu andan itibaren activeOn zaten her gün
+    // eşleştiği için bu satır bir daha çalışmıyor (rt.bitis artık falsy) — günlük tekrar yazma gerekmiyor.
     // Alışkanlık/Randevu/Not bu mekanizmaya hiç girmiyor — sadece kart_config.gorev && !aliskanlik (Yapılacak'ın
     // kendisi). kartYapildiToggle tamamlanınca zaten bir yapıldı kaydı bırakıp bitis'i o güne sabitliyor, bu
     // yüzden gerçekten bitirilmiş bir görev buradan yanlışlıkla ileri kaydırılmıyor.
     const gecikenler = ritualRows.filter((rt: any) => !rt.mezun && !rt.aliskanlik && rt.kart_config?.gorev && rt.bitis && rt.bitis < today && !logRows.some((l: any) => l.ritual_id === rt.id && l.yapildi));
     if (gecikenler.length > 0) {
-      await Promise.all(gecikenler.map((rt: any) => supabase.from('dog_rituals').update({ baslangic: today, bitis: today }).eq('id', rt.id)));
+      await Promise.all(gecikenler.map((rt: any) => supabase.from('dog_rituals').update({ bitis: null }).eq('id', rt.id)));
       const gecikenIds = new Set(gecikenler.map((rt: any) => rt.id));
-      ritualRows = ritualRows.map((rt: any) => gecikenIds.has(rt.id) ? { ...rt, baslangic: today, bitis: today } : rt);
+      ritualRows = ritualRows.map((rt: any) => gecikenIds.has(rt.id) ? { ...rt, bitis: null } : rt);
     }
     setRituals(ritualRows);
     setLogs(logRows);
@@ -2632,6 +2635,11 @@ export default function Rite() {
     const bilgiIkon = tip === 'bilgi' ? (cfg.randevu ? '📅' : rt.aliskanlik ? '🎓' : cfg.gorev ? '☑️' : '📄') : null;
     const bilgiAltTip = bilgiIkon ? bilgiIkon + (cfg.randevu ? ' randevu' : rt.aliskanlik ? ' alışkanlık' : cfg.gorev ? ' yapılacak' : ' not') : null;
     const ipucu = tip === 'anket' ? '📋 doldur' : tip === 'coktan' ? '❓ yanıtla' : tip === 'diyet' ? '🍽 öğün' : tip === 'tarif' ? '🍳 tarif' : tip === 'video' ? '🎬 izle' : tip === 'nefes' ? '🫁 nefes' : tip === 'ruhhali' ? '🙂 check-in' : tip === 'workout' ? '🏋️ egzersiz' : bilgiAltTip ? bilgiAltTip : tip === 'sukran' ? '🙏 şükran' : tip === 'topraklama' ? '🖐 topraklan' : tip === 'pomodoro' ? '🍅 odaklan' : tip === 'beden' ? '🧘 taransın' : tip === 'uykuoncesi' ? '🌙 hazırlan' : tip === 'su' ? '💧 iç' : tip === 'maruz' ? '🎯 uygula' : tip === 'niyet' ? '🧭 niyet belirle' : tip === 'randevu' ? '📅 randevu' : '';
+    // Yapılacak: günü geçmiş (baslangic bugünden önce) ve hâlâ yapılmamışsa kaç gündür beklediğini göster
+    // (kullanıcı isteği: "geciktiğine dair küçük bir belirteç"). loadData'daki otomatik taşıma artık sadece
+    // bitis'i null'a çekiyor, baslangic'e hiç dokunmuyor — bu yüzden ilk vade tarihi burada hâlâ duruyor ve
+    // gecikme gün sayısını ondan hesaplayabiliyoruz.
+    const gecikti = (cfg.gorev && !rt.aliskanlik && !done && rt.baslangic && rt.baslangic < today) ? Math.round((parseD(today).getTime() - parseD(rt.baslangic).getTime()) / 86400000) : 0;
     const meridyen = rt.kaynak === 'Meridyen'; // sağlayıcı-kaynaklı kart — kişisel kartlardan çerçeveyle ayrıştır
     const stilP = cfg.stil ? STIL_LOOKUP[cfg.stil] : null;
     // Not (yapışkan not): asıl sarı/dikdörtgen kutu artık dıştaki .card'da (bkz. çağrı yeri) — burada .rit'in
@@ -2653,7 +2661,10 @@ export default function Rite() {
               {ritAreas(rt).map((a) => <span key={a} className="tagp p-alan">{a}</span>)}
               {cfg.dikey && DIKEY_LABEL[cfg.dikey] && <span className="tagp p-dikey">{DIKEY_LABEL[cfg.dikey]}</span>}
             </div>
-            {!notRow && <div className="m">{[cfg.randevu && cfg.saat && '🕑 ' + cfg.saat, rt.hatirlatma_saat && '🔔 ' + rt.hatirlatma_saat, rt.bitis && 'bitiş ' + kisaTarih(rt.bitis), ipucu].filter(Boolean).join(' · ')}</div>}
+            {/* Yapılacak'ta "bitiş DD.MM" ibaresine gerek yok (kullanıcı isteği) — bitiş zaten sadece başlangıçla
+                aynı gün ya da (gecikince) null, ayrıca anlamlı bir bilgi taşımıyor; onun yerine gecikme varsa
+                o gösteriliyor. */}
+            {!notRow && <div className="m">{[cfg.randevu && cfg.saat && '🕑 ' + cfg.saat, rt.hatirlatma_saat && '🔔 ' + rt.hatirlatma_saat, gecikti > 0 && ('⏰ ' + gecikti + ' gün gecikti'), (!cfg.gorev && rt.bitis) && 'bitiş ' + kisaTarih(rt.bitis), ipucu].filter(Boolean).join(' · ')}</div>}
           </div>
           {vurl && <a className="playbtn" href={vurl} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} title="Aç">▶</a>}
           <button className="rmx" onClick={() => ritSil(rt.id)} title="Kaldır">✕</button>
