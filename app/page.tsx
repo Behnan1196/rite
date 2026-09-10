@@ -1944,9 +1944,12 @@ export default function Rite() {
       // kadar durur" — teknik olarak baslangic hâlâ var (📅 rozetinden taşınabilir) ama bitiş asla set edilmiyor.
       // Alışkanlık ise varsayılan olarak Süreli geliyor, 21 gün (kullanıcı isteği: "default olarak süreli
       // gelip gün sayısı da yine default 21 gün olsa") — setRitSure'daki "+gun-1" ile birebir aynı hesap.
-      // Yapılacak da Not gibi bitissiz — "işaretleyip tamamlayana kadar her gün görünür" (tablo), kapanış
-      // bitis=null'dan bitis=day'e geçişle oluyor (kartYapildiToggle), Süregelen/Süreli kavramı hiç yok.
-      baslangic: day, bitis: tur === 'randevu' ? day : tur === 'aliskanlik' ? (() => { const e = parseD(day); e.setDate(e.getDate() + 20); return iso(e); })() : null,
+      // Yapılacak artık Randevu gibi varsayılan olarak tek günlük geliyor (kullanıcı isteği: "başlangıç tarihi
+      // olan süresiz bir task yerine default olarak 1 gün süreli gelmesi daha mantıklı"). Günü geçtiğinde
+      // yapılmamışsa ne olacağı (otomatik ertesi güne taşınması vb.) ayrı bir konu — henüz karara bağlanmadı,
+      // şimdilik o gün geçince aynı Randevu gibi bir daha görünmüyor. Kapanış hâlâ bitis=day'e geçişle oluyor
+      // (kartYapildiToggle), o kısım değişmedi.
+      baslangic: day, bitis: (tur === 'randevu' || tur === 'yapilacak') ? day : tur === 'aliskanlik' ? (() => { const e = parseD(day); e.setDate(e.getDate() + 20); return iso(e); })() : null,
       hatirlatma_saat: null, kisisel_not: null, gunler: null, faydalar: [],
     });
   }
