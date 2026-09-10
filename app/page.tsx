@@ -1432,9 +1432,23 @@ export default function Rite() {
 
   async function loadData(clientId: string) {
     const r = await supabase.from('dog_rituals').select('id,ad,zaman,kategori,tip,kaynak,mezun,aktif,alan,rutin,rutin_ad,sira,baslangic,bitis,activity_id,hatirlatma_saat,blok_sira,faydalar,url,gunler,kart_tipi,kart_config,aliskanlik,aciklama,sablon_id,sablon_adim,kisisel_not').eq('client_id', clientId).order('zaman');
-    setRituals(r.data || []);
     const lg = await supabase.from('dog_ritual_logs').select('id,ritual_id,tarih,yapildi').eq('client_id', clientId);
-    setLogs(lg.data || []);
+    let ritualRows: any[] = r.data || [];
+    const logRows = lg.data || [];
+    // Yapılacak: günü (bitis) geçmiş ama hiç "yapıldı" kaydı olmadan kalmış (yani tamamlanmadan kapanmamış) her
+    // görev otomatik olarak bugüne taşınır — "günü geçince kaybolmasın, siz yapana/silene kadar hep bugünün
+    // görevi gibi görünsün" (kullanıcı isteği: "bir sonraki güne taşınması", "otomatik ertesi güne taşınsın").
+    // Alışkanlık/Randevu/Not bu mekanizmaya hiç girmiyor — sadece kart_config.gorev && !aliskanlik (Yapılacak'ın
+    // kendisi). kartYapildiToggle tamamlanınca zaten bir yapıldı kaydı bırakıp bitis'i o güne sabitliyor, bu
+    // yüzden gerçekten bitirilmiş bir görev buradan yanlışlıkla ileri kaydırılmıyor.
+    const gecikenler = ritualRows.filter((rt: any) => !rt.mezun && !rt.aliskanlik && rt.kart_config?.gorev && rt.bitis && rt.bitis < today && !logRows.some((l: any) => l.ritual_id === rt.id && l.yapildi));
+    if (gecikenler.length > 0) {
+      await Promise.all(gecikenler.map((rt: any) => supabase.from('dog_rituals').update({ baslangic: today, bitis: today }).eq('id', rt.id)));
+      const gecikenIds = new Set(gecikenler.map((rt: any) => rt.id));
+      ritualRows = ritualRows.map((rt: any) => gecikenIds.has(rt.id) ? { ...rt, baslangic: today, bitis: today } : rt);
+    }
+    setRituals(ritualRows);
+    setLogs(logRows);
     const e = await supabase.from('dog_episodes').select('id,program_ad,birincil_ilgi,status').eq('client_id', clientId).order('created_at', { ascending: false }).limit(1);
     const epRow = (e.data && e.data[0]) || null;
     setEp(epRow);
