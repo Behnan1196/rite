@@ -2164,7 +2164,15 @@ export default function Rite() {
   async function ritSil(id: string) {
     if (!client) return;
     const rt = rituals.find((r) => r.id === id);
-    const hasHistory = logs.some((l) => l.ritual_id === id && l.yapildi) || !!(rt && rt.baslangic && rt.baslangic < today);
+    // "Geçmişi var mı" sorusunu rt.baslangic'e (mantıksal görünürlük tarihi) değil rt.blok_sira'ya (oluşturulma
+    // anının Date.now() damgası — bkz. ritEkle/taslakKaydet/ayracEkle) bakarak cevaplıyoruz. baslangic, geçmiş
+    // bir güne gidip oradan yeni bir kart eklendiğinde de geçmişte olabiliyor (kart o an oluşturulmuş olsa
+    // bile) — o yüzden baslangic<today tek başına "gerçekten önceki günlerden beri var, korunacak bir geçmişi
+    // var" anlamına gelmiyordu. Bu yüzden dün için yeni eklenip hemen silinen bir Yapılacak/Randevu bile "yarından
+    // itibaren kaldır" (yumuşak silme) dalına düşüyor, bitis=bugün oluyor ve kart dün+bugün ikisinde de görünmeye
+    // devam ediyordu (kullanıcı isteği: "düne yapılacak tanımlayıp silersem dün ve bugünde gözükmeye başlıyor").
+    // Gerçekten yapıldı kaydı olan (logs) her zaman korunuyor; blok_sira yoksa (çok eski kayıt) eski davranışa düşülüyor.
+    const hasHistory = logs.some((l) => l.ritual_id === id && l.yapildi) || !!(rt && rt.blok_sira != null ? rt.blok_sira < parseD(today).getTime() : (rt && rt.baslangic && rt.baslangic < today));
     if (hasHistory) {
       if (!confirm('Yarından itibaren kaldırılsın mı? Geçmiş kayıtların korunur.')) return;
       await supabase.from('dog_rituals').update({ bitis: today }).eq('id', id);
