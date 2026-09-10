@@ -1441,16 +1441,19 @@ export default function Rite() {
     const lg = await supabase.from('dog_ritual_logs').select('id,ritual_id,tarih,yapildi').eq('client_id', clientId);
     let ritualRows: any[] = r.data || [];
     const logRows = lg.data || [];
-    // Yapılacak: günü (bitis) geçmiş ama hiç "yapıldı" kaydı olmadan kalmış (yani tamamlanmadan kapanmamış) her
-    // görevin bitis'i null'a çekilir — süresiz hâle gelip Not/eski Yapılacak gibi siz yapana/silene kadar her
-    // gün görünmeye devam eder (kullanıcı isteği: "bir sonraki güne taşınması", "otomatik ertesi güne taşınsın").
-    // baslangic'e BİLEREK dokunmuyoruz: orijinal vade tarihi böylece kalıcı olarak saklanıyor, RitItem'daki
-    // "N gün gecikti" belirteci de bunu kullanıyor. bitis null olduğu andan itibaren activeOn zaten her gün
-    // eşleştiği için bu satır bir daha çalışmıyor (rt.bitis artık falsy) — günlük tekrar yazma gerekmiyor.
-    // Alışkanlık/Randevu/Not bu mekanizmaya hiç girmiyor — sadece kart_config.gorev && !aliskanlik (Yapılacak'ın
-    // kendisi). kartYapildiToggle tamamlanınca zaten bir yapıldı kaydı bırakıp bitis'i o güne sabitliyor, bu
-    // yüzden gerçekten bitirilmiş bir görev buradan yanlışlıkla ileri kaydırılmıyor.
-    const gecikenler = ritualRows.filter((rt: any) => !rt.mezun && !rt.aliskanlik && rt.kart_config?.gorev && rt.bitis && rt.bitis < today && !logRows.some((l: any) => l.ritual_id === rt.id && l.yapildi));
+    // Yapılacak VE Randevu: günü (bitis) geçmiş ama hiç "yapıldı" kaydı olmadan kalmış (yani tamamlanmadan/
+    // katılınmadan kapanmamış) her kartın bitis'i null'a çekilir — süresiz hâle gelip siz işaretleyene/silene ya
+    // da başlıktaki tarih seçiciyle yeni bir güne taşıyana kadar her gün görünmeye devam eder (kullanıcı isteği:
+    // "bir sonraki güne taşınması", "randevu gecikmesini de aynı şekilde göstermek mantıklı olabilir").
+    // baslangic'e BİLEREK dokunmuyoruz: orijinal vade/randevu tarihi böylece kalıcı olarak saklanıyor, RitItem'daki
+    // "N gün gecikti" belirteci de bunu kullanıyor; tarih seçiciyle taşınınca (ritTasi) baslangic ileri gidip
+    // gecikme kendiliğinden düzeliyor. bitis null olduğu andan itibaren activeOn zaten her gün eşleştiği için bu
+    // satır bir daha çalışmıyor (rt.bitis artık falsy) — günlük tekrar yazma gerekmiyor.
+    // Alışkanlık/Not bu mekanizmaya hiç girmiyor — sadece kart_config.gorev ya da kart_config.randevu ve
+    // alışkanlık değil. kartYapildiToggle (Yapılacak) tamamlanınca zaten bir yapıldı kaydı bırakıp bitis'i o
+    // güne sabitliyor; Randevu'nun kendi "yaptım" tiki de (toggleRit) aynı şekilde bir yapıldı kaydı bırakıyor —
+    // bu yüzden gerçekten işaretlenmiş bir kart buradan yanlışlıkla ileri kaydırılmıyor.
+    const gecikenler = ritualRows.filter((rt: any) => !rt.mezun && !rt.aliskanlik && (rt.kart_config?.gorev || rt.kart_config?.randevu) && rt.bitis && rt.bitis < today && !logRows.some((l: any) => l.ritual_id === rt.id && l.yapildi));
     if (gecikenler.length > 0) {
       await Promise.all(gecikenler.map((rt: any) => supabase.from('dog_rituals').update({ bitis: null }).eq('id', rt.id)));
       const gecikenIds = new Set(gecikenler.map((rt: any) => rt.id));
@@ -2575,16 +2578,17 @@ export default function Rite() {
   const wday = (d: string) => new Date(d + 'T00:00:00').getDay();
   // Tarihsiz (baslangic yok) ritüel = Inbox kartı; ajandada görünmez.
   // Süresiz (bitis yok) bir kart normalde her gün — geçmiş/bugün/gelecek — geçerli sayılır (Not, süregelen
-  // Alışkanlık). Ama gecikmiş bir Yapılacak (kart_config.gorev, alışkanlık değil) süresiz hâle geldiğinde bunu
-  // aynen uygularsak, ajandada bugünden sonraki her güne de "süresiz" olarak sızıyor — henüz gelmemiş günlerin
-  // listesini dolduruyor (kullanıcı isteği: "gecikmeye düşünce ileri doğru süresiz ajandada yer alıyor"). Bu
-  // yüzden gorev kartlarında süresiz hâl sadece bugüne kadar (today) geçerli sayılıyor, ötesine sızmıyor —
-  // yarın olunca zaten "bugün" ilerleyip kart yine görünür olacak, ayrıca bir işlem gerekmiyor.
+  // Alışkanlık). Ama gecikmiş bir Yapılacak/Randevu (kart_config.gorev ya da kart_config.randevu, alışkanlık
+  // değil) süresiz hâle geldiğinde bunu aynen uygularsak, ajandada bugünden sonraki her güne de "süresiz" olarak
+  // sızıyor — henüz gelmemiş günlerin listesini dolduruyor (kullanıcı isteği: "gecikmeye düşünce ileri doğru
+  // süresiz ajandada yer alıyor"). Bu yüzden bu iki tipte süresiz hâl sadece bugüne kadar (today) geçerli
+  // sayılıyor, ötesine sızmıyor — yarın olunca zaten "bugün" ilerleyip kart yine görünür olacak, ayrıca bir
+  // işlem gerekmiyor.
   const activeOn = (r: any, d: string) => {
     if (!r.baslangic || r.baslangic > d) return false;
     if (r.gunler && r.gunler.length > 0 && !r.gunler.includes(wday(d))) return false;
     if (r.bitis) return d <= r.bitis;
-    if (r.kart_config?.gorev && !r.aliskanlik) return d <= today;
+    if ((r.kart_config?.gorev || r.kart_config?.randevu) && !r.aliskanlik) return d <= today;
     return true;
   };
   const habits = rituals.filter((r) => !r.mezun && activeOn(r, day));
@@ -2653,11 +2657,12 @@ export default function Rite() {
     const bilgiIkon = tip === 'bilgi' ? (cfg.randevu ? '📅' : rt.aliskanlik ? '🎓' : cfg.gorev ? '☑️' : '📄') : null;
     const bilgiAltTip = bilgiIkon ? bilgiIkon + (cfg.randevu ? ' randevu' : rt.aliskanlik ? ' alışkanlık' : cfg.gorev ? ' yapılacak' : ' not') : null;
     const ipucu = tip === 'anket' ? '📋 doldur' : tip === 'coktan' ? '❓ yanıtla' : tip === 'diyet' ? '🍽 öğün' : tip === 'tarif' ? '🍳 tarif' : tip === 'video' ? '🎬 izle' : tip === 'nefes' ? '🫁 nefes' : tip === 'ruhhali' ? '🙂 check-in' : tip === 'workout' ? '🏋️ egzersiz' : bilgiAltTip ? bilgiAltTip : tip === 'sukran' ? '🙏 şükran' : tip === 'topraklama' ? '🖐 topraklan' : tip === 'pomodoro' ? '🍅 odaklan' : tip === 'beden' ? '🧘 taransın' : tip === 'uykuoncesi' ? '🌙 hazırlan' : tip === 'su' ? '💧 iç' : tip === 'maruz' ? '🎯 uygula' : tip === 'niyet' ? '🧭 niyet belirle' : tip === 'randevu' ? '📅 randevu' : '';
-    // Yapılacak: günü geçmiş (baslangic bugünden önce) ve hâlâ yapılmamışsa kaç gündür beklediğini göster
-    // (kullanıcı isteği: "geciktiğine dair küçük bir belirteç"). loadData'daki otomatik taşıma artık sadece
-    // bitis'i null'a çekiyor, baslangic'e hiç dokunmuyor — bu yüzden ilk vade tarihi burada hâlâ duruyor ve
-    // gecikme gün sayısını ondan hesaplayabiliyoruz.
-    const gecikti = (cfg.gorev && !rt.aliskanlik && !done && rt.baslangic && rt.baslangic < today) ? Math.round((parseD(today).getTime() - parseD(rt.baslangic).getTime()) / 86400000) : 0;
+    // Yapılacak VE Randevu: günü geçmiş (baslangic bugünden önce) ve hâlâ işaretlenmemişse kaç gündür beklediğini
+    // göster (kullanıcı isteği: "geciktiğine dair küçük bir belirteç", "randevu gecikmesini de aynı şekilde
+    // göstermek mantıklı olabilir"). loadData'daki otomatik taşıma artık sadece bitis'i null'a çekiyor,
+    // baslangic'e hiç dokunmuyor — bu yüzden ilk vade/randevu tarihi burada hâlâ duruyor ve gecikme gün sayısını
+    // ondan hesaplayabiliyoruz. Tarih seçiciyle (ritTasi) taşınınca baslangic ileri gittiği için bu da kendiliğinden düzeliyor.
+    const gecikti = ((cfg.gorev || cfg.randevu) && !rt.aliskanlik && !done && rt.baslangic && rt.baslangic < today) ? Math.round((parseD(today).getTime() - parseD(rt.baslangic).getTime()) / 86400000) : 0;
     const meridyen = rt.kaynak === 'Meridyen'; // sağlayıcı-kaynaklı kart — kişisel kartlardan çerçeveyle ayrıştır
     const stilP = cfg.stil ? STIL_LOOKUP[cfg.stil] : null;
     // Not (yapışkan not): asıl sarı/dikdörtgen kutu artık dıştaki .card'da (bkz. çağrı yeri) — burada .rit'in
@@ -2679,10 +2684,10 @@ export default function Rite() {
               {ritAreas(rt).map((a) => <span key={a} className="tagp p-alan">{a}</span>)}
               {cfg.dikey && DIKEY_LABEL[cfg.dikey] && <span className="tagp p-dikey">{DIKEY_LABEL[cfg.dikey]}</span>}
             </div>
-            {/* Yapılacak'ta "bitiş DD.MM" ibaresine gerek yok (kullanıcı isteği) — bitiş zaten sadece başlangıçla
-                aynı gün ya da (gecikince) null, ayrıca anlamlı bir bilgi taşımıyor; onun yerine gecikme varsa
-                o gösteriliyor. */}
-            {!notRow && <div className="m">{[cfg.randevu && cfg.saat && '🕑 ' + cfg.saat, rt.hatirlatma_saat && '🔔 ' + rt.hatirlatma_saat, gecikti > 0 && ('⏰ ' + gecikti + ' gün gecikti'), (!cfg.gorev && rt.bitis) && 'bitiş ' + kisaTarih(rt.bitis), ipucu].filter(Boolean).join(' · ')}</div>}
+            {/* Yapılacak'ta ve Randevu'da "bitiş DD.MM" ibaresine gerek yok (kullanıcı isteği) — ikisinde de bitiş
+                zaten sadece başlangıçla aynı gün ya da (gecikince) null, ayrıca anlamlı bir bilgi taşımıyor;
+                onun yerine gecikme varsa o gösteriliyor. */}
+            {!notRow && <div className="m">{[cfg.randevu && cfg.saat && '🕑 ' + cfg.saat, rt.hatirlatma_saat && '🔔 ' + rt.hatirlatma_saat, gecikti > 0 && ('⏰ ' + gecikti + ' gün gecikti'), (!cfg.gorev && !cfg.randevu && rt.bitis) && 'bitiş ' + kisaTarih(rt.bitis), ipucu].filter(Boolean).join(' · ')}</div>}
           </div>
           {vurl && <a className="playbtn" href={vurl} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} title="Aç">▶</a>}
           {/* Tek başına ✕ (Kaldır) yerine ⋯ menüsü geldi (kullanıcı isteği) — şimdilik tek seçeneği Sil, ileride
