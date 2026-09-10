@@ -1989,7 +1989,12 @@ export default function Rite() {
         client_id: client.id, ad: (o.ad || '').trim() || 'Yeni not', zaman: 'gün', kaynak: 'Kendi', tip: 'aliskanlik',
         kart_tipi: 'bilgi', kart_config: o.kart_config || { icerik: null, videolar: [] },
         aliskanlik: !!o.aliskanlik, aktif: true, mezun: false,
-        baslangic: o.baslangic || day, bitis: o.aliskanlik ? null : (o.bitis ?? day),
+        // bitis: yeniTaslakAc taslağı zaten doğru değerle kuruyor (not/yapılacak: null — silinene kadar
+        // kalıcı; alışkanlık: gün+20 — 21 günlük varsayılan süre; randevu/kart: gün). Burada onu tekrar
+        // türetmeye çalışmak (eski `o.aliskanlik ? null : (o.bitis ?? day)`) hataliydı: `??` null'ı da
+        // "eksik" sayıp gün'e çeviriyordu, bu yüzden not/yapılacak sadece oluşturulduğu gün görünüyordu ve
+        // alışkanlığın 21 günlük varsayılanı sessizce siliniyordu. undefined dışında taslaktaki değeri aynen koru.
+        baslangic: o.baslangic || day, bitis: o.bitis === undefined ? day : o.bitis, gunler: o.gunler ?? null,
         hatirlatma_saat: o.hatirlatma_saat || null, kisisel_not: o.kisisel_not || null,
         blok_sira: Date.now(),
       }).select().single();
