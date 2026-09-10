@@ -2180,15 +2180,18 @@ export default function Rite() {
     patchDetay({ hatirlatma_saat: saat || null, son_bildirim: null });
     loadData(client.id);
   }
-  // Randevu bildirimi: randevunun kendi tarihi/saatinden bağımsız — bildirim ayrı bir tarih+saatte gelebilir
-  // (ör. randevudan bir gün önce). Tarih kart_config.hatirlatma_tarih'te tutulur (cron bunu, varsa,
-  // baslangic/bitis penceresi yerine kullanır — bkz. app/api/cron/reminders/route.ts).
+  // Tek seferlik bildirim (Randevu, Yapılacak, ve Meridyen kaynaklı randevu tipi kartların kendi 🔔 menüsü):
+  // kartın kendi tarihi/saatinden bağımsız olarak bildirim ayrı bir tarih+saatte gelebilir (ör. randevudan bir
+  // gün önce, ya da Yapılacak'ı yapmanız gereken günün sabahı). Tarih kart_config.hatirlatma_tarih'te tutulur
+  // (cron bunu, varsa, günlük tekrarlayan baslangic/bitis penceresi yerine kullanıp SADECE o gün gönderir —
+  // bkz. app/api/cron/reminders/route.ts). Alışkanlık/Not bunu hiç kullanmıyor, onlarda bildirim günlük
+  // tekrarlayan (sadece saat, setRitReminder).
   async function setRandevuBildirim(id: string, saat: string, tarih: string) {
     if (!client) return;
     const cfg = { ...(detay?.obj?.kart_config || {}), hatirlatma_tarih: tarih || null };
     const patch: any = { hatirlatma_saat: saat || null, son_bildirim: null, kart_config: cfg };
-    // Randevu artık düzenleme modunda her zaman kilitli (kilitliForm) — diğer setter'lar gibi burada da
-    // duzenleModu'da sadece yerelde tutulmalı, yoksa Vazgeç bu değişikliği geri alamaz (kullanıcı isteği:
+    // Randevu/Yapılacak artık düzenleme modunda her zaman kilitli (kilitliForm) — diğer setter'lar gibi burada
+    // da duzenleModu'da sadece yerelde tutulmalı, yoksa Vazgeç bu değişikliği geri alamaz (kullanıcı isteği:
     // "randevuyu da Vazgeç,Kaydet mantığına getirelim" sonrası fark edilen bir tutarsızlık).
     if (!id || duzenleModu) { patchDetay(patch); return; } // taslak / düzenleme modu
     await supabase.from('dog_rituals').update(patch).eq('id', id);
@@ -3873,12 +3876,24 @@ export default function Rite() {
                   <div style={{ padding: '7px 10px', borderRadius: 8, background: 'var(--card2,#f6f4ee)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                     <span>🔔</span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
-                      {/* Randevu'nun bildirimi artık diğerleriyle birebir aynı — inline saat + Kaldır (kullanıcı
-                        isteği: "diğerlerinin aynısı yani inline şeklinde eşitleyelim"). Randevuya özel ayrı
-                        bir hatırlatma tarihi (kart_config.hatirlatma_tarih, remMenuFor modali) artık burada
-                        kullanılmıyor — sadeleştirme için bilerek bırakıldı. */}
+                      {/* Alışkanlık/Not: bildirim günlük tekrarlayan — sadece saat, tarih kavramı yok (kullanıcı
+                          isteği: "Alışkanlık için bu hatırlatma şekli doğru", "Not için ... yine alışkanlıkta
+                          olduğu gibi"). Yapılacak/Randevu: bildirim o tarih+saatte BİR KERE gelmeli (kullanıcı
+                          isteği: "bir tarih alanı koymak ve o tarih ve saatte bir kere bildirim göndermesini
+                          sağlamalıyız") — bunun için kart_config.hatirlatma_tarih zaten vardı (cron bunu görünce
+                          günlük pencere yerine sadece o günü kullanıyor, bkz. app/api/cron/reminders/route.ts),
+                          sadece arayüzden kaldırılmıştı; setRandevuBildirim (saat+tarihi birlikte yazan, Meridyen
+                          kartlarının kendi 🔔 menüsünde hâlâ kullanılan fonksiyon) burada yeniden devreye giriyor.
+                          Tarih alanı varsayılan olarak kartın kendi tarihini (o.baslangic) alıyor, isterseniz
+                          değiştirebilirsiniz (ör. randevudan bir gün önce hatırlat). */}
                       {kisiselGorunumModu ? (
                         <span style={{ fontSize: 13, color: 'var(--muted)' }}>{o.hatirlatma_saat}</span>
+                      ) : (kisiselTur === 'yapilacak' || kisiselTur === 'randevu') ? (
+                        <>
+                          <input type="time" value={o.hatirlatma_saat || ''} onChange={(e) => setRandevuBildirim(o.id, e.target.value, o.kart_config?.hatirlatma_tarih || o.baslangic || '')} style={{ width: 'auto', fontSize: 13 }} />
+                          {o.hatirlatma_saat && <input type="date" min={today} value={o.kart_config?.hatirlatma_tarih || o.baslangic || ''} onChange={(e) => setRandevuBildirim(o.id, o.hatirlatma_saat, e.target.value)} title="Bildirim tarihi" style={{ width: 'auto', fontSize: 13 }} />}
+                          {o.hatirlatma_saat && <span className="chip" style={{ borderStyle: 'dashed' }} onClick={() => setRandevuBildirim(o.id, '', '')}>Kaldır</span>}
+                        </>
                       ) : (
                         <>
                           <input type="time" value={o.hatirlatma_saat || ''} onChange={(e) => setRitReminder(o.id, e.target.value)} style={{ width: 'auto', fontSize: 13 }} />
@@ -4364,17 +4379,21 @@ export default function Rite() {
                   isteği "sarı sticker olursa güzel olur". Emoji fontlarında gerçek bir "sarı sticky note" glifi
                   olmadığı için (📝 sadece "not" anlamına geliyor, renk taşımıyor) rengi doğrudan CSS'le veriyoruz. */}
               <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); (screen === 'havuz' ? yeniHavuzTaslakAc : yeniTaslakAc)('not'); }}><span className="ekic" style={{ display: 'inline-block', width: 22, height: 22, borderRadius: 4, background: '#f5d76e', border: '1px solid #d9b84a', boxShadow: '1px 1px 2px rgba(0,0,0,.15)' }} />Not</button>
-              <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); (screen === 'havuz' ? yeniHavuzTaslakAc : yeniTaslakAc)('aliskanlik'); }}><span className="ekic">🎓</span>Alışkanlık</button>
-              {/* Yapılacak — Randevu gibi baslangic/bitis'e dayanıyor, Havuz'un (dog_activities) bu kolonları
-                  yok, o yüzden sadece Ajanda'da (kullanıcı isteği: tablodaki 4. kart tipi, "done kutucuklu"). */}
+              {/* Sıralama Not-Yapılacak-Alışkanlık-Randevu (kullanıcı isteği — önceki sıra Not-Alışkanlık-
+                  Yapılacak-Randevu idi). Yapılacak — Randevu gibi baslangic/bitis'e dayanıyor, Havuz'un
+                  (dog_activities) bu kolonları yok, o yüzden sadece Ajanda'da (kullanıcı isteği: tablodaki 4.
+                  kart tipi, "done kutucuklu"). */}
               {screen !== 'havuz' && <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); yeniTaslakAc('yapilacak'); }}><span className="ekic">☑️</span>Yapılacak</button>}
+              <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); (screen === 'havuz' ? yeniHavuzTaslakAc : yeniTaslakAc)('aliskanlik'); }}><span className="ekic">🎓</span>Alışkanlık</button>
               {screen !== 'havuz' && <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); yeniTaslakAc('randevu'); }}><span className="ekic">📅</span>Randevu</button>}
               {/* "Kart" — deneysel yeni tip, bkz. yeniKartTaslakAc; Not/Alışkanlık/Randevu'ya dokunmuyor. */}
               {screen !== 'havuz' && <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); yeniKartTaslakAc(); }}><span className="ekic">🗂️</span>Kart</button>}
               {screen !== 'havuz' && <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); setAyracAdVal(''); setAyracYeniOpen(true); }}><span className="ekic">➖</span>Ayraç</button>}
               {screen !== 'havuz' && <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); setScreen('ajanda'); setAjView('gun'); startLink(); }}><span className="ekic">🔗</span>Rutin</button>}
             </div>
-            <div className="note" style={{ textAlign: 'center', marginTop: 12 }}>{screen === 'havuz' ? <>"{actGroup}{actAltGroup ? ' › ' + actAltGroup : ''}" grubuna eklenecek — Havuza eklenen kart, Ajanda&apos;ya eklendiğinde gerçek bir tarih alır.</> : 'Not içine bağlantı eklersen otomatik video kartına döner.'}</div>
+            {/* Ajanda tarafındaki "Not içine bağlantı eklersen otomatik video kartına döner." ibaresi kaldırıldı
+                (kullanıcı isteği: "gereksiz kaldı") — Havuz'daki bilgi notu aynen duruyor. */}
+            {screen === 'havuz' && <div className="note" style={{ textAlign: 'center', marginTop: 12 }}>"{actGroup}{actAltGroup ? ' › ' + actAltGroup : ''}" grubuna eklenecek — Havuza eklenen kart, Ajanda&apos;ya eklendiğinde gerçek bir tarih alır.</div>}
           </div>
         </div>
       )}
