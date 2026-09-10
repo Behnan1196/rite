@@ -2093,7 +2093,15 @@ export default function Rite() {
     const oldBas = (rt && rt.baslangic) || today;
     const oldBit = rt && rt.bitis;
     let yeniBit: string | null = null;
-    if (oldBit) {
+    // Yapılacak/Randevu: gecikip süresiz (bitis:null) kalmış olsa bile elle taşınınca yine tek günlük olmalı —
+    // yoksa hem "N gün gecikti" durumu bir anlam taşımaz olurdu hem de yeni tarih bugünden ileriyse activeOn'daki
+    // "süresiz hâl sadece bugüne kadar" sınırı yüzünden kart hiç görünmez kalıyordu (kullanıcı bulgusu: "gecikmiş
+    // bir randevunun tarihini ileri alırsam randevu kayboluyor"). Alışkanlık/Kart'ın süregelen hâli bundan
+    // etkilenmiyor, sadece bu ikisi için delta korumanın yerini doğrudan tek günlük hedefe geçiş alıyor.
+    const tekGunlukKart = !!(rt && !rt.aliskanlik && (rt.kart_config?.gorev || rt.kart_config?.randevu));
+    if (tekGunlukKart) {
+      yeniBit = hedefBas;
+    } else if (oldBit) {
       const delta = Math.round((parseD(oldBit).getTime() - parseD(oldBas).getTime()) / 86400000);
       const e = parseD(hedefBas); e.setDate(e.getDate() + delta);
       yeniBit = iso(e);
@@ -2588,10 +2596,18 @@ export default function Rite() {
     if (!r.baslangic || r.baslangic > d) return false;
     if (r.gunler && r.gunler.length > 0 && !r.gunler.includes(wday(d))) return false;
     if (r.bitis) return d <= r.bitis;
-    if ((r.kart_config?.gorev || r.kart_config?.randevu) && !r.aliskanlik) return d <= today;
+    // ritTasi artık bu iki tipte elle taşırken bitis'i hep dolduruyor (yukarısı), o yüzden normalde bitis=null
+    // VE baslangic gelecekte olan bir gorev/randevu oluşmaz — ama olursa (ör. veri elle değiştirilmişse) yine de
+    // "henüz gelmemiş bir taşıma" olarak ele alıp normal süresiz gibi davranıyoruz, "bugüne kadar" sınırını
+    // sadece baslangic zaten geçmiş/bugünse uyguluyoruz.
+    if ((r.kart_config?.gorev || r.kart_config?.randevu) && !r.aliskanlik && r.baslangic <= today) return d <= today;
     return true;
   };
   const habits = rituals.filter((r) => !r.mezun && activeOn(r, day));
+  // Günün üstündeki ilerleme şeridi (dayprog) için Not ve Ayraç sayılmıyor — ikisinin de "yapıldı" kavramı yok,
+  // habits'in kendisine karışsalar oranı asla tamamlanamayan bir şeye kilitliyorlardı (kullanıcı isteği: "orada
+  // da notu hesaplamaya katmaması gerekir" — aylık takvimdeki calcell'de zaten aynı sebeple hariç tutuluyorlardı).
+  const habitsSayilan = habits.filter((r) => r.kart_tipi !== 'ayrac' && !isNotKart(r));
   const mezunlar = rituals.filter((r) => r.mezun);
   // Çalışan programlar: program kimliğine göre grupla (ilerleme + süre kontrolü için).
   const programGruplari = Object.values(rituals.filter((r) => r.program && !r.mezun).reduce((acc: any, r: any) => {
@@ -2787,13 +2803,13 @@ export default function Rite() {
               </div>
             )}
 
-            {ajView === 'gun' && habits.length > 0 && (() => {
-              const doneCount = habits.filter((r) => ritDone(r.id)).length;
-              const pct = Math.round((doneCount / habits.length) * 100);
+            {ajView === 'gun' && habitsSayilan.length > 0 && (() => {
+              const doneCount = habitsSayilan.filter((r) => ritDone(r.id)).length;
+              const pct = Math.round((doneCount / habitsSayilan.length) * 100);
               return (
                 <div className="dayprog">
                   <div className="bar"><i style={{ width: pct + '%' }} /></div>
-                  <span className="lbl">{doneCount}/{habits.length} tamamlandı</span>
+                  <span className="lbl">{doneCount}/{habitsSayilan.length} tamamlandı</span>
                 </div>
               );
             })()}
@@ -4344,7 +4360,10 @@ export default function Rite() {
                 da yalnız Ajanda kavramları — o yüzden Havuz'da sadece Not/Alışkanlık gösteriliyor, direkt
                 Havuz'a (mevcut açık gruba) taslak olarak eklenir (kullanıcı isteği). */}
             <div className="ekleGrid">
-              <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); (screen === 'havuz' ? yeniHavuzTaslakAc : yeniTaslakAc)('not'); }}><span className="ekic">📝</span>Not</button>
+              {/* Not: emoji yerine kartın kendi rengine (sarı yapışkan not) uyan küçük bir kare — kullanıcı
+                  isteği "sarı sticker olursa güzel olur". Emoji fontlarında gerçek bir "sarı sticky note" glifi
+                  olmadığı için (📝 sadece "not" anlamına geliyor, renk taşımıyor) rengi doğrudan CSS'le veriyoruz. */}
+              <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); (screen === 'havuz' ? yeniHavuzTaslakAc : yeniTaslakAc)('not'); }}><span className="ekic" style={{ display: 'inline-block', width: 22, height: 22, borderRadius: 4, background: '#f5d76e', border: '1px solid #d9b84a', boxShadow: '1px 1px 2px rgba(0,0,0,.15)' }} />Not</button>
               <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); (screen === 'havuz' ? yeniHavuzTaslakAc : yeniTaslakAc)('aliskanlik'); }}><span className="ekic">🎓</span>Alışkanlık</button>
               {/* Yapılacak — Randevu gibi baslangic/bitis'e dayanıyor, Havuz'un (dog_activities) bu kolonları
                   yok, o yüzden sadece Ajanda'da (kullanıcı isteği: tablodaki 4. kart tipi, "done kutucuklu"). */}
