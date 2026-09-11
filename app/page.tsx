@@ -55,6 +55,14 @@ const OLCU_BIRIM: Record<string, string> = { kilo: 'kg', boy: 'cm', bel: 'cm', k
 const OLCU_HIZLI_ANAHTAR = Object.keys(OLCU_ETIKET).filter((k) => !['ruh_hali', 'odak_dk', 'su'].includes(k));
 // Rite Studio'da kart_config.dikey olarak seçilen alan etiketi → okunur ad (bkz app-meridyen/app/atama/page.tsx DIKEY_OPTS).
 const DIKEY_LABEL: Record<string, string> = { beslenme: 'Beslenme', fitness: 'Fitness', fizyo: 'Fizyo', psikoloji: 'Psikoloji', mental: 'Mental', genel: 'Genel' };
+// Kişisel "pil" (v1): kişinin kendi Alışkanlık/Yapılacak/Randevu kartlarını opsiyonel olarak etiketlediği,
+// 65 yaşında birinin bile anlayacağı sade dört yaşam alanı — dikey (Rite Studio/koç tarafı) ile karıştırılmasın,
+// bu tamamen kişisel kullanım için, kart_config.pilAlan alanına yazılıyor. Ajanda'nın gün görünümünde, bu
+// etikete göre son 7 günün ağırlıklı tamamlanma oranı bir "pil" olarak gösteriliyor (kullanıcı isteği: kendi
+// kendine slider'la değerlendirme yerine, zaten işaretlenen kartlardan kendiliğinden türeyen sürtünmesiz bir
+// gösterge — bkz. loadData altındaki pil hesaplama notları). İlk versiyon, alan tipine göre daha da geliştirilecek.
+const PIL_ALAN: Record<string, string> = { hareket: 'Hareket', beslenme: 'Beslenme', mesgale: 'Meşgale', sosyal: 'Sosyal' };
+const PIL_ALAN_SIRA = ['hareket', 'beslenme', 'mesgale', 'sosyal'];
 // kart_config.stil — Meridyen Studio'da seçilen renk/tema preseti (bg = açık zemin, ac = vurgu rengi, tx = yazı rengi). Liste Meridyen'deki STIL_PRESETS ile aynı kalmalı.
 const STIL_LOOKUP: Record<string, { bg: string; ac: string; tx: string }> = {
   yesil: { bg: '#e9f4e6', ac: '#5f8a4e', tx: '#2f4a2a' },
@@ -2702,6 +2710,7 @@ export default function Rite() {
             <div className="t">{rt.ad}
               {ritAreas(rt).map((a) => <span key={a} className="tagp p-alan">{a}</span>)}
               {cfg.dikey && DIKEY_LABEL[cfg.dikey] && <span className="tagp p-dikey">{DIKEY_LABEL[cfg.dikey]}</span>}
+              {cfg.pilAlan && PIL_ALAN[cfg.pilAlan] && <span className="tagp p-dikey">🔋 {PIL_ALAN[cfg.pilAlan]}</span>}
             </div>
             {/* Yapılacak'ta ve Randevu'da "bitiş DD.MM" ibaresine gerek yok (kullanıcı isteği) — ikisinde de bitiş
                 zaten sadece başlangıçla aynı gün ya da (gecikince) null, ayrıca anlamlı bir bilgi taşımıyor;
@@ -2813,6 +2822,39 @@ export default function Rite() {
                 <div className="dayprog">
                   <div className="bar"><i style={{ width: pct + '%' }} /></div>
                   <span className="lbl">{doneCount}/{habitsSayilan.length} tamamlandı</span>
+                </div>
+              );
+            })()}
+
+            {/* Alan pilleri (v1): dayprog "bugün ne kaldı"yı gösterirken, bu şerit "son bir haftada dengeni nasıl
+                tuttun"u gösteriyor — kişinin kendi Alışkanlık/Yapılacak/Randevu kartlarına opsiyonel etiketlediği
+                (bkz. PIL_ALAN, kart_config.pilAlan) dört alan için, son 7 günün ağırlıklı (bugüne en ağırlıklı)
+                tamamlanma oranı. Hiç kart o alana etiketlenmemiş olsa bile dört alan da hep görünür kalıyor —
+                boş bir pil, ajandaya dönüp bir şey eklemek için kendiliğinden bir dürtme olsun diye (kullanıcı
+                isteği). Etiketli kart bulunmayan günler ortalamaya hiç katılmıyor (yapay düşüş olmasın diye). */}
+            {ajView === 'gun' && (() => {
+              const seviyeler = PIL_ALAN_SIRA.map((anahtar) => {
+                let wsum = 0, wtot = 0;
+                days7.forEach((d, i) => {
+                  const adaylar = rituals.filter((r) => !r.mezun && r.kaynak === 'Kendi' && r.kart_tipi === 'bilgi' && !r.kart_config?.genel && r.kart_config?.pilAlan === anahtar && activeOn(r, d));
+                  if (adaylar.length === 0) return;
+                  const yapilan = adaylar.filter((r) => logs.some((l) => l.ritual_id === r.id && l.tarih === d && l.yapildi)).length;
+                  const w = Math.pow(0.75, days7.length - 1 - i); // bugün (son gün) en ağır, geriye doğru üstel azalır
+                  wsum += (yapilan / adaylar.length) * w;
+                  wtot += w;
+                });
+                return { anahtar, etiket: PIL_ALAN[anahtar], pct: wtot > 0 ? Math.round((wsum / wtot) * 100) : 0 };
+              });
+              return (
+                <div style={{ display: 'flex', gap: 8, margin: '0 0 12px' }}>
+                  {seviyeler.map((s) => (
+                    <div key={s.anahtar} style={{ flex: 1, textAlign: 'center' }} title={s.etiket + ': %' + s.pct}>
+                      <div style={{ height: 42, borderRadius: 8, background: '#efe8da', display: 'flex', alignItems: 'flex-end', overflow: 'hidden' }}>
+                        <div style={{ width: '100%', height: s.pct + '%', background: 'var(--green)', transition: 'height .3s' }} />
+                      </div>
+                      <div style={{ fontSize: 10.5, marginTop: 3, color: 'var(--muted)' }}>{s.etiket}</div>
+                    </div>
+                  ))}
                 </div>
               );
             })()}
@@ -3824,6 +3866,20 @@ export default function Rite() {
               if (!preview && isRit) return <BilgiKart cfg={kCfg} onSave={bilgiKaydet} />;
               return <BilgiKartEdit cfg={kCfg} onSave={() => {}} randevu={!!kCfg?.randevu} readOnly />;
             })()}
+            {/* Alan pili etiketi (v1): Not'ta yok (hiç "yapıldı" kavramı taşımıyor), Alışkanlık/Yapılacak/Randevu'da
+                opsiyonel — Ajanda'nın gün görünümündeki alan pillerinin (bkz. PIL_ALAN) hangi kartlardan
+                besleneceğini belirliyor. Boş ("Yok") bırakılırsa o kart hiçbir pile katılmaz. */}
+            {isRit && isKisisel && kisiselTur !== 'not' && (
+              <div className="kv" style={{ margin: '0 0 8px' }}>
+                <div className="k">🔋 Alan</div>
+                <div>
+                  <span className={'chip' + (!kCfg?.pilAlan ? ' on' : '')} onClick={() => bilgiKaydet({ ...kCfg, pilAlan: null })}>Yok</span>
+                  {PIL_ALAN_SIRA.map((a) => (
+                    <span key={a} className={'chip' + (kCfg?.pilAlan === a ? ' on' : '')} onClick={() => bilgiKaydet({ ...kCfg, pilAlan: a })}>{PIL_ALAN[a]}</span>
+                  ))}
+                </div>
+              </div>
+            )}
             {/* Zamanlama + Bildirim şeritleri — Ad/Açıklama/Video'nun altında, tek düzenleme iskeletinin son iki
                 parçası (kullanıcı isteği: "altında zamanlama şeridi, onun altında bildirim şeridi olsun").
                 Randevu'nun kendi tarih/saati hâlâ yukarıdaki ayrı "Randevu ne zaman" bloğunda (henüz ele
