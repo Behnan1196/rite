@@ -1562,10 +1562,12 @@ export default function Rite() {
   // çağrılıyor.
   async function loadHomeAlanlar(clientId: string) {
     const h = await supabase.from('dog_home_alanlar').select('id,anahtar,ad,neden,checklist,ornekler,sira').eq('client_id', clientId).order('sira');
+    if (h.error) { console.error('dog_home_alanlar select hatası:', h.error); alert('Alanlar yüklenemedi: ' + h.error.message); return; }
     let rows = h.data || [];
     if (rows.length === 0) {
       const seed = HOME_ALAN_VARSAYILAN.map((a, i) => ({ client_id: clientId, anahtar: a.anahtar, ad: a.ad, neden: a.neden, checklist: a.checklist, ornekler: a.ornekler, sira: i }));
       const ins = await supabase.from('dog_home_alanlar').insert(seed).select('id,anahtar,ad,neden,checklist,ornekler,sira');
+      if (ins.error) { console.error('dog_home_alanlar tohumlama hatası:', ins.error); alert('Standart alanlar oluşturulamadı: ' + ins.error.message); return; }
       rows = ins.data || [];
     }
     setHomeAlanlar(rows);
