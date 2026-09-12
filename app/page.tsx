@@ -72,7 +72,7 @@ const PIL_ALAN_SIRA = ['hareket', 'beslenme', 'mesgale', 'sosyal'];
 const HOME_SEVIYE = ['Zayıf', 'İdare eder', 'İyi', 'Mükemmel'];
 // Home kartlarındaki dikey "termometre" göstergesinin dilim renkleri — HOME_SEVIYE ile aynı sırada (kırmızıdan
 // yeşile). Kullanıcı isteği: kart metnini okumadan bir bakışta renkten durumu anlayabilmek.
-const HOME_SEVIYE_RENK = ['#b45a4a', '#d98a3d', '#a3ac4a', '#5f8a4e'];
+const HOME_SEVIYE_RENK = ['#b45a4a', '#d98a3d', '#c9a227', '#5f8a4e'];
 // Home'un alanları artık sabit bir JS listesi değil, dog_home_alanlar tablosundan (client_id'ye özel, kullanıcı
 // düzenleyebilir/ekleyebilir) okunuyor — bkz. loadHomeAlanlar, homeAlanEkle/Guncelle/Sil ve migration dosyası
 // (rite_home_alanlar_migration.sql). Bu sabit dizi SADECE bir client'ın ilk açılışında (hiç satırı yoksa) o
@@ -2987,9 +2987,9 @@ export default function Rite() {
                       <h3 style={{ margin: 0 }}>{a.ad}</h3>
                       <div className="note" style={{ marginTop: 4 }}>{guncel ? HOME_SEVIYE[guncel - 1] : 'Henüz değerlendirilmedi'}</div>
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column-reverse', gap: 2, width: 14, height: 42, borderRadius: 5, overflow: 'hidden', flex: '0 0 auto' }} title={guncel ? HOME_SEVIYE[guncel - 1] : 'Henüz değerlendirilmedi'}>
+                    <div style={{ display: 'flex', flexDirection: 'column-reverse', gap: 3, width: 20, height: 52, borderRadius: 6, border: '1px solid var(--line)', padding: 3, boxSizing: 'border-box', flex: '0 0 auto' }} title={guncel ? HOME_SEVIYE[guncel - 1] : 'Henüz değerlendirilmedi'}>
                       {HOME_SEVIYE_RENK.map((renk, i) => (
-                        <div key={i} style={{ flex: 1, background: guncel && i < guncel ? renk : '#e7e0d2' }} />
+                        <div key={i} style={{ flex: 1, borderRadius: 2, background: guncel && i < guncel ? renk : '#efe8da' }} />
                       ))}
                     </div>
                   </div>
