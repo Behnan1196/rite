@@ -2269,6 +2269,25 @@ export default function Rite() {
     }
     loadData(client.id);
   }
+  // Not → Yapılacak/Alışkanlık/Randevu (kullanıcı isteği): Not artık günlere bağlı değil (bkz. habits'in
+  // isNotKart hariç tutması ve aşağıdaki Notlar şeridi), o yüzden onu ajandaya "taşımak" sürükleyip bırakmak
+  // yerine ⋯ menüsünden bir tür seçmek şeklinde — seçilen tür ne olursa olsun hedef gün, o an Ajanda'da
+  // görüntülenen gün (day). Süre/bitiş mantığı yeniTaslakAc ile birebir aynı (Yapılacak/Randevu tek günlük,
+  // Alışkanlık 20 gün varsayılan) ki farklı bir yerden oluşturulmuş gibi davransın.
+  async function notuTasi(id: string, tur: 'yapilacak' | 'aliskanlik' | 'randevu') {
+    if (!client) return;
+    const rt = rituals.find((r) => r.id === id);
+    const cfg = { ...(rt?.kart_config || {}) };
+    const patch: any = {
+      baslangic: day,
+      bitis: (tur === 'yapilacak' || tur === 'randevu') ? day : (() => { const e = parseD(day); e.setDate(e.getDate() + 20); return iso(e); })(),
+      gunler: null,
+      aliskanlik: tur === 'aliskanlik',
+      kart_config: { ...cfg, gorev: tur === 'yapilacak', randevu: tur === 'randevu' },
+    };
+    await supabase.from('dog_rituals').update(patch).eq('id', id);
+    loadData(client.id);
+  }
   function startLink() { setLinkMode(true); setLinkName(''); setLinkIds([]); setMsg(''); }
   function cancelLink() { setLinkMode(false); setLinkName(''); setLinkIds([]); }
   function toggleLink(id: string) { setLinkIds((a) => (a.includes(id) ? a.filter((x) => x !== id) : [...a, id])); }
@@ -2670,11 +2689,16 @@ export default function Rite() {
     if ((r.kart_config?.gorev || r.kart_config?.randevu) && !r.aliskanlik && r.baslangic <= today) return d <= today;
     return true;
   };
-  const habits = rituals.filter((r) => !r.mezun && activeOn(r, day));
-  // Günün üstündeki ilerleme şeridi (dayprog) için Not ve Ayraç sayılmıyor — ikisinin de "yapıldı" kavramı yok,
-  // habits'in kendisine karışsalar oranı asla tamamlanamayan bir şeye kilitliyorlardı (kullanıcı isteği: "orada
-  // da notu hesaplamaya katmaması gerekir" — aylık takvimdeki calcell'de zaten aynı sebeple hariç tutuluyorlardı).
-  const habitsSayilan = habits.filter((r) => r.kart_tipi !== 'ayrac' && !isNotKart(r));
+  // Not artık habits'e (günün listesine) hiç girmiyor (kullanıcı isteği: "notun işlevi o değil" — her gün
+  // görünmesi bitis=null altyapısını Alışkanlık'la paylaşmanın yan etkisiydi). Not'un kendi, günlerden bağımsız
+  // gösterimi aşağıdaki `notlar` listesi ve Ajanda'nın altındaki "Notlar" şeridi (bkz. rowbody JSX'i).
+  const habits = rituals.filter((r) => !r.mezun && !isNotKart(r) && activeOn(r, day));
+  // Günün üstündeki ilerleme şeridi (dayprog) için Ayraç sayılmıyor (Not zaten habits'te yok artık) — "yapıldı"
+  // kavramı taşımadığı için habits'e karışsa oranı asla tamamlanamayan bir şeye kilitlerdi.
+  const habitsSayilan = habits.filter((r) => r.kart_tipi !== 'ayrac');
+  // Notlar: güne bağlı değil, mezun olmamış tüm kişisel Not'lar — Ajanda'nın altında, hangi gün seçili olursa
+  // olsun hep aynı şekilde görünen ayrı bir şerit (kullanıcı isteği).
+  const notlar = rituals.filter((r) => !r.mezun && isNotKart(r));
   const mezunlar = rituals.filter((r) => r.mezun);
   // Çalışan programlar: program kimliğine göre grupla (ilerleme + süre kontrolü için).
   const programGruplari = Object.values(rituals.filter((r) => r.program && !r.mezun).reduce((acc: any, r: any) => {
@@ -3147,6 +3171,21 @@ export default function Rite() {
                 {pushMsg && <div className="msg">{pushMsg}</div>}
               </div>
             ))}
+
+            {/* Notlar şeridi: günlerden bağımsız, hangi gün seçili olursa olsun hep aynı — Not artık habits'te
+                yer almıyor (kullanıcı isteği). ⋯ menüsünden bir tür seçilip "taşınınca" (bkz. notuTasi) o an
+                Ajanda'da görüntülenen güne (day) Yapılacak/Alışkanlık/Randevu olarak düşüyor ve doğal olarak bu
+                listeden kalkıp yukarıdaki normal gün listesine katılıyor. */}
+            {ajView === 'gun' && !linkMode && notlar.length > 0 && (
+              <div style={{ marginTop: 4 }}>
+                <div className="timediv"><span className="tl">Notlar</span><span className="ln" /></div>
+                {notlar.map((rt) => (
+                  <div key={rt.id} className="card" style={{ padding: '12px 14px', background: '#fdf6d3', border: 'none', borderRadius: 3, marginBottom: 8 }}>
+                    <RitItem rt={rt} />
+                  </div>
+                ))}
+              </div>
+            )}
 
             {ajView === 'ay' && (() => {
               const base = parseD(day); const y = base.getFullYear(), mo = base.getMonth();
@@ -4380,6 +4419,15 @@ export default function Rite() {
             <button className="x" onClick={() => setRitMenuFor(null)}>×</button>
             <h3 style={{ marginBottom: 8 }}>{ritMenuFor.ad}</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {/* Not'u ajandaya taşı (kullanıcı isteği: sürüklemek yerine tür seçerek) — hedef gün her zaman o an
+                  Ajanda'da görüntülenen gün (day). Sadece Not'larda görünür, diğer kart tiplerinde anlamsız. */}
+              {isNotKart(ritMenuFor) && (
+                <>
+                  <button className="btn ghost sm" onClick={() => { const id = ritMenuFor.id; setRitMenuFor(null); notuTasi(id, 'yapilacak'); }}>☑️ Yapılacak yap ({kisaTarih(day)})</button>
+                  <button className="btn ghost sm" onClick={() => { const id = ritMenuFor.id; setRitMenuFor(null); notuTasi(id, 'aliskanlik'); }}>🎓 Alışkanlık yap ({kisaTarih(day)}&apos;den)</button>
+                  <button className="btn ghost sm" onClick={() => { const id = ritMenuFor.id; setRitMenuFor(null); notuTasi(id, 'randevu'); }}>📅 Randevu yap ({kisaTarih(day)})</button>
+                </>
+              )}
               <button className="btn ghost sm" onClick={() => { const id = ritMenuFor.id; setRitMenuFor(null); ritSil(id); }}>🗑️ Sil</button>
               <button className="btn ghost sm" onClick={() => setRitMenuFor(null)}>Vazgeç</button>
             </div>
