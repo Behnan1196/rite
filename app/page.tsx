@@ -82,6 +82,26 @@ const HOME_ALAN_ACIKLAMA: Record<string, string> = {
   mesgale: 'Zihnini canlı tutan, keyif aldığın bir uğraşın olması — bir hobi, öğrenme, el işi, bahçe, müzik gibi.',
   sosyal: 'Düzenli olarak sevdiklerinle görüşmek, sohbet etmek, birlikte bir şeyler yapmak — yalnızlık, beslenme kadar önemli.',
 };
+// Detay ekranını zenginleştiren iki ek katman (kullanıcı isteği: "neden önemli olduğu" + "havuzdakilerle paralel
+// aktivite örnekleri") — ikisi de ilk versiyon, elle yazılmış sabit metinler. Örnek aktiviteler henüz kişinin
+// GERÇEK Havuz'undan gelmiyor (Havuz'un bu alanlara göre nasıl bağlanacağı hâlâ ayrı, çözülmemiş bir soru,
+// bkz. momentum notları) — burada sadece "böyle bir şey" fikrini vermek için sabit, temsili örnekler.
+const HOME_ALAN_NEDEN: Record<string, string> = {
+  beslenme: 'Enerjini, kilonu ve genel sağlığını doğrudan etkiler — belki de en çabuk fark edilen alan.',
+  egzersiz: 'Hareketsizlik yaşla birlikte güç ve denge kaybına yol açar; düzenli hareket bunu büyük ölçüde yavaşlatır.',
+  uyku: 'Uyku kalitesi; ruh halini, hafızayı ve bağışıklığı doğrudan etkiler, çoğu zaman göz ardı edilir.',
+  stres: 'Biriken stres uzun vadede hem ruh hem beden sağlığını yıpratır; fark etmeden büyür.',
+  mesgale: 'Zihni canlı ve motive tutar — özellikle boş zamanı çok olan biri için önemli bir denge unsuru.',
+  sosyal: 'Yalnızlık, fiziksel sağlık kadar önemli bir risk taşır; düzenli sosyal temas bunu azaltır.',
+};
+const HOME_ALAN_ORNEK: Record<string, string[]> = {
+  beslenme: ['Günlük su takibi', 'Haftalık market listesi', 'Ana öğün planlayıcı'],
+  egzersiz: ['Sabah yürüyüşü', 'Esneme rutini', 'Merdiven hedefi'],
+  uyku: ['Sabit yatış saati hatırlatıcısı', 'Ekran kapatma alışkanlığı', 'Akşam sakinleşme rutini'],
+  stres: ['Nefes egzersizi', 'Kısa yürüyüş molası', 'Günlük tutma'],
+  mesgale: ['Yeni bir hobiye zaman ayırma', 'Kitap/öğrenme saati', 'Bahçe/el işi'],
+  sosyal: ['Haftalık arama listesi', 'Komşu/arkadaş buluşması', 'Bir etkinliğe katılma'],
+};
 // kart_config.stil — Meridyen Studio'da seçilen renk/tema preseti (bg = açık zemin, ac = vurgu rengi, tx = yazı rengi). Liste Meridyen'deki STIL_PRESETS ile aynı kalmalı.
 const STIL_LOOKUP: Record<string, { bg: string; ac: string; tx: string }> = {
   yesil: { bg: '#e9f4e6', ac: '#5f8a4e', tx: '#2f4a2a' },
@@ -1314,6 +1334,7 @@ export default function Rite() {
   // aynı desen).
   const [ritMenuFor, setRitMenuFor] = useState<any>(null);
   const [homeDetay, setHomeDetay] = useState<string | null>(null);
+  const [homeEkleOpen, setHomeEkleOpen] = useState(false);
   const [remMenuFor, setRemMenuFor] = useState<any>(null);
   const [urlInput, setUrlInput] = useState('');
   const [adInput, setAdInput] = useState('');
@@ -2823,24 +2844,38 @@ export default function Rite() {
             kendini birkaç yaşam alanında değerlendirebileceği yer (kullanıcı isteği). Tamamen öznel: hangi kart
             işaretlenmiş/etiketlenmiş olduğuyla ilgisi yok, kişi kendi hissine göre seçiyor (bkz. HOME_ALAN,
             homeDegerlendir). Alışkanlıklarını oturtmuş/mezun etmiş biri için de arada bir uğrayıp "kilo aldım,
-            beslenmeme dikkat edeyim" diyebileceği hafif bir kontrol noktası olması amaçlanıyor. Havuz/Gelişim'e
-            bağlama (eksik alan → aktivite önerisi, hedef/olmak istediği seviye, özel alan tanımlama) bilerek
-            bu ilk versiyonda yok — kullanıcı isteğiyle sonraki bir adıma bırakıldı. */}
+            beslenmeme dikkat edeyim" diyebileceği hafif bir kontrol noktası olması amaçlanıyor. Kartların
+            üzerinde artık doğrudan seçenek çipleri YOK (kullanıcı isteği: "doğrudan bir anket formu görüntüsünde"
+            olmasın) — kartlar sadece SON DURUMU (ve varsa yön oku) gösteriyor, değerlendirme girişi ya karta
+            dokunup Detay'a girerek ya da alt bardaki ＋ ile açılan toplu "Kendini değerlendir" formundan
+            (bkz. homeEkleOpen) yapılıyor. Havuz'a bağlama (eksik alan → gerçek aktivite önerisi, hedef/olmak
+            istediği seviye, özel alan tanımlama) hâlâ bu ilk versiyonda yok — Detay'daki örnek aktiviteler
+            (HOME_ALAN_ORNEK) şimdilik sabit/temsili metin, kişinin gerçek Havuz'undan gelmiyor. */}
         {screen === 'home' && (
           <div>
-            <div className="note" style={{ marginTop: 0, marginBottom: 12 }}>Şu an kendini bu alanlarda nasıl görüyorsun?</div>
+            <div className="note" style={{ marginTop: 0, marginBottom: 12 }}>Kendini bu alanlarda nasıl görüyorsun? (değerlendirmek için ＋'ya ya da bir karta dokun)</div>
             {HOME_ALAN_SIRA.map((alan) => {
-              const guncel = homeGuncelDeger(alan);
+              const arr = measByKey['home_' + alan] || [];
+              const guncel = arr.length ? Number(arr[arr.length - 1].deger) : null;
+              const onceki = arr.length > 1 ? Number(arr[arr.length - 2].deger) : null;
+              const trend = guncel == null || onceki == null ? null : guncel > onceki ? 'up' : guncel < onceki ? 'down' : 'flat';
               return (
-                <div key={alan} className="card" style={{ marginBottom: 10 }}>
+                <div key={alan} className="card" style={{ marginBottom: 10, cursor: 'pointer' }} onClick={() => setHomeDetay(alan)}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                     <h3 style={{ margin: 0 }}>{HOME_ALAN[alan]}</h3>
-                    <button type="button" className="linkbtn" style={{ fontSize: 12.5 }} onClick={() => setHomeDetay(alan)}>ⓘ Detay</button>
+                    <span style={{ fontSize: 12, color: 'var(--muted)' }}>Detay ›</span>
                   </div>
-                  <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
-                    {HOME_SEVIYE.map((s, i) => (
-                      <span key={s} className={'chip' + (guncel === i + 1 ? ' on' : '')} onClick={() => homeDegerlendir(alan, i + 1)}>{s}</span>
-                    ))}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+                    {guncel ? (
+                      <>
+                        <span className="chip on" style={{ cursor: 'default' }}>{HOME_SEVIYE[guncel - 1]}</span>
+                        {trend === 'up' && <span style={{ color: 'var(--green)', fontWeight: 700 }} title="Son değerlendirmene göre yükseliyor">▲</span>}
+                        {trend === 'down' && <span style={{ color: 'var(--red)', fontWeight: 700 }} title="Son değerlendirmene göre düşüyor">▼</span>}
+                        {trend === 'flat' && <span style={{ color: 'var(--muted)' }} title="Son değerlendirmenle aynı">–</span>}
+                      </>
+                    ) : (
+                      <span className="note" style={{ marginTop: 0 }}>Henüz değerlendirilmedi</span>
+                    )}
                   </div>
                 </div>
               );
@@ -3543,16 +3578,19 @@ export default function Rite() {
         {/* ＋ tuşu artık her sekmede görünüyor (kullanıcı isteği — Ayarlar'da grileşip devre dışı kalmak,
             hiç kaybolmaktan daha tutarlı). Ajanda'da tam menü, Havuz'da daraltılmış menü (bkz. ekleMenüsü);
             Gelişim'de kart eklemek yerine hızlı bir Ölçüm/Değerlendirme girişi açıyor (kullanıcı fikri) —
-            böylece Gelişim'deki ＋ de gerçekten işe yarıyor. Ayarlar'da ve Home'da (henüz "ekleme" kavramı
-            yok, değerlendirme kartların üzerinden yapılıyor) ＋ griye düşüp devre dışı kalıyor. */}
+            böylece Gelişim'deki ＋ de gerçekten işe yarıyor. Home'da da aynı mantıkla, tüm alanları tek seferde
+            değerlendirebileceğin toplu bir form açıyor (bkz. homeEkleOpen) — kullanıcı isteği: kartların kendisi
+            "anket formu" gibi durmasın, girdi ayrı bir yerden (buradan ya da kartın Detay'ından) gelsin. Sadece
+            Ayarlar'da yapılacak bir "ekleme"/"değerlendirme" yok. */}
         <button
-          className={'plus' + (screen === 'bilgi' || screen === 'home' ? ' dim' : '')}
-          disabled={screen === 'bilgi' || screen === 'home'}
+          className={'plus' + (screen === 'bilgi' ? ' dim' : '')}
+          disabled={screen === 'bilgi'}
           onClick={() => {
             if (screen === 'gelisim') { setOlcumSecAnahtar(null); setOlcumOzelAd(''); setOlcumDeger(''); setOlcumBirim(''); setOlcumEkleOpen(true); }
-            else if (screen !== 'bilgi' && screen !== 'home') setEkleMenuOpen(true);
+            else if (screen === 'home') setHomeEkleOpen(true);
+            else if (screen !== 'bilgi') setEkleMenuOpen(true);
           }}
-          aria-label={screen === 'gelisim' ? 'Ölçüm ekle' : 'Ekle'}
+          aria-label={screen === 'gelisim' ? 'Ölçüm ekle' : screen === 'home' ? 'Kendini değerlendir' : 'Ekle'}
         >＋</button>
         {[['gelisim', '📈', 'Gelişim'], ['bilgi', '⚙', 'Ayarlar']].map(([k, ic, l]) => (
           <button key={k} className={screen === k ? 'on' : ''} onClick={() => setScreen(k)}><span className="ic">{ic}</span>{l}</button>
@@ -4342,13 +4380,51 @@ export default function Rite() {
         <div className="modal top2" onMouseDown={() => setHomeDetay(null)}>
           <div className="sheet small" onMouseDown={(e) => e.stopPropagation()}>
             <button className="x" onClick={() => setHomeDetay(null)}>×</button>
-            <h3 style={{ marginBottom: 8 }}>{HOME_ALAN[homeDetay]}</h3>
-            <div className="note" style={{ marginTop: 0 }}>{HOME_ALAN_ACIKLAMA[homeDetay]}</div>
-            <div style={{ display: 'flex', gap: 6, marginTop: 14, flexWrap: 'wrap' }}>
-              {HOME_SEVIYE.map((s, i) => (
-                <span key={s} className={'chip' + (homeGuncelDeger(homeDetay) === i + 1 ? ' on' : '')} onClick={() => homeDegerlendir(homeDetay, i + 1)}>{s}</span>
-              ))}
+            <h3 style={{ marginBottom: 4 }}>{HOME_ALAN[homeDetay]}</h3>
+            <div className="note" style={{ marginTop: 0 }}>{HOME_ALAN_NEDEN[homeDetay]}</div>
+            <div style={{ marginTop: 10 }}>
+              <div className="k" style={{ marginBottom: 3 }}>Nasıl olmalı</div>
+              <div className="note" style={{ marginTop: 0 }}>{HOME_ALAN_ACIKLAMA[homeDetay]}</div>
             </div>
+            {/* Örnek aktiviteler şimdilik sabit/temsili metin — kişinin gerçek Havuz'una henüz bağlı değil
+                (bkz. HOME_ALAN_ORNEK'in üstündeki not), ilk Havuz ilişkisinin bir fikir taslağı. */}
+            <div style={{ marginTop: 10 }}>
+              <div className="k" style={{ marginBottom: 5 }}>Örnek aktiviteler</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {HOME_ALAN_ORNEK[homeDetay].map((x) => <span key={x} className="chip" style={{ cursor: 'default' }}>{x}</span>)}
+              </div>
+            </div>
+            <div style={{ marginTop: 14 }}>
+              <div className="k" style={{ marginBottom: 5 }}>Kendini değerlendir</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {HOME_SEVIYE.map((s, i) => (
+                  <span key={s} className={'chip' + (homeGuncelDeger(homeDetay) === i + 1 ? ' on' : '')} onClick={() => homeDegerlendir(homeDetay, i + 1)}>{s}</span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {homeEkleOpen && (
+        <div className="modal" onMouseDown={() => setHomeEkleOpen(false)}>
+          <div className="sheet" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="sheetgrip" onClick={() => setHomeEkleOpen(false)} />
+            <h2>🏠 Kendini değerlendir</h2>
+            {HOME_ALAN_SIRA.map((alan) => {
+              const guncel = homeGuncelDeger(alan);
+              return (
+                <div key={alan} style={{ marginBottom: 14 }}>
+                  <label className="fldlbl" style={{ marginTop: 0 }}>{HOME_ALAN[alan]}</label>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {HOME_SEVIYE.map((s, i) => (
+                      <span key={s} className={'chip' + (guncel === i + 1 ? ' on' : '')} onClick={() => homeDegerlendir(alan, i + 1)}>{s}</span>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+            <button className="btn" style={{ width: '100%', marginTop: 4 }} onClick={() => setHomeEkleOpen(false)}>Kapat</button>
           </div>
         </div>
       )}
