@@ -2858,35 +2858,34 @@ export default function Rite() {
             homeDegerlendir). Alışkanlıklarını oturtmuş/mezun etmiş biri için de arada bir uğrayıp "kilo aldım,
             beslenmeme dikkat edeyim" diyebileceği hafif bir kontrol noktası olması amaçlanıyor. Kartların
             üzerinde artık doğrudan seçenek çipleri YOK (kullanıcı isteği: "doğrudan bir anket formu görüntüsünde"
-            olmasın) — kartlar sadece SON DURUMU (ve varsa yön oku) gösteriyor, değerlendirme girişi ya karta
-            dokunup Detay'a girerek ya da alt bardaki ＋ ile açılan toplu "Kendini değerlendir" formundan
-            (bkz. homeEkleOpen) yapılıyor. Havuz'a bağlama (eksik alan → gerçek aktivite önerisi, hedef/olmak
-            istediği seviye, özel alan tanımlama) hâlâ bu ilk versiyonda yok — Detay'daki örnek aktiviteler
-            (HOME_ALAN_ORNEK) şimdilik sabit/temsili metin, kişinin gerçek Havuz'undan gelmiyor. */}
+            olmasın) — kartlar SON DURUMU ve geçmiş değerlendirmelerin küçük bir grafiğini (sparkline) gösteriyor,
+            değerlendirme girişi sadece alt bardaki ＋ ile açılan toplu "Kendini değerlendir" formundan (bkz.
+            homeEkleOpen) yapılıyor; Detay salt bilgi amaçlı (kullanıcı isteği: "detay kartındaki değerlendirme
+            kalksın, tek başına ok çok mana taşımıyor" — o yüzden tek bir yön oku yerine burada gerçek bir küçük
+            grafik var). Grafik Gelişim'e değil bilerek Home'un kendisine kondu (kullanıcı isteği) — takvim
+            günlerine göre değil, o alana ait GERÇEK kayıtların (boşluksuz) son birkaçına göre çiziliyor, çünkü
+            değerlendirme her gün değil ara sıra yapılıyor. Havuz'a bağlama (eksik alan → gerçek aktivite önerisi,
+            hedef/olmak istediği seviye, özel alan tanımlama) hâlâ bu ilk versiyonda yok — Detay'daki örnek
+            aktiviteler (HOME_ALAN_ORNEK) şimdilik sabit/temsili metin, kişinin gerçek Havuz'undan gelmiyor. */}
         {screen === 'home' && (
           <div>
-            <div className="note" style={{ marginTop: 0, marginBottom: 12 }}>Kendini bu alanlarda nasıl görüyorsun? (değerlendirmek için ＋'ya ya da bir karta dokun)</div>
+            <div className="note" style={{ marginTop: 0, marginBottom: 12 }}>Kendini bu alanlarda nasıl görüyorsun? (değerlendirmek için ＋'ya dokun)</div>
             {HOME_ALAN_SIRA.map((alan) => {
               const arr = measByKey['home_' + alan] || [];
               const guncel = arr.length ? Number(arr[arr.length - 1].deger) : null;
-              const onceki = arr.length > 1 ? Number(arr[arr.length - 2].deger) : null;
-              const trend = guncel == null || onceki == null ? null : guncel > onceki ? 'up' : guncel < onceki ? 'down' : 'flat';
+              const gecmis = arr.slice(-8); // en fazla son 8 kayıt — takvim günü değil, gerçek değerlendirme sayısı
               return (
                 <div key={alan} className="card" style={{ marginBottom: 10, cursor: 'pointer' }} onClick={() => setHomeDetay(alan)}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                     <h3 style={{ margin: 0 }}>{HOME_ALAN[alan]}</h3>
                     <span style={{ fontSize: 12, color: 'var(--muted)' }}>Detay ›</span>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
-                    {guncel ? (
-                      <>
-                        <span className="chip on" style={{ cursor: 'default' }}>{HOME_SEVIYE[guncel - 1]}</span>
-                        {trend === 'up' && <span style={{ color: 'var(--green)', fontWeight: 700 }} title="Son değerlendirmene göre yükseliyor">▲</span>}
-                        {trend === 'down' && <span style={{ color: 'var(--red)', fontWeight: 700 }} title="Son değerlendirmene göre düşüyor">▼</span>}
-                        {trend === 'flat' && <span style={{ color: 'var(--muted)' }} title="Son değerlendirmenle aynı">–</span>}
-                      </>
-                    ) : (
-                      <span className="note" style={{ marginTop: 0 }}>Henüz değerlendirilmedi</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
+                    {guncel ? <span className="chip on" style={{ cursor: 'default' }}>{HOME_SEVIYE[guncel - 1]}</span> : <span className="note" style={{ marginTop: 0 }}>Henüz değerlendirilmedi</span>}
+                    {gecmis.length > 1 && (
+                      <div className="spark" style={{ flex: 1, height: 28 }} title="Geçmiş değerlendirmelerin (en fazla son 8) seyri">
+                        {gecmis.map((m: any, i: number) => <i key={i} style={{ height: Math.max(6, (Number(m.deger) / HOME_SEVIYE.length) * 100) + '%' }} />)}
+                      </div>
                     )}
                   </div>
                 </div>
@@ -4404,14 +4403,6 @@ export default function Rite() {
               <div className="k" style={{ marginBottom: 5 }}>Örnek aktiviteler</div>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 {HOME_ALAN_ORNEK[homeDetay].map((x) => <span key={x} className="chip" style={{ cursor: 'default' }}>{x}</span>)}
-              </div>
-            </div>
-            <div style={{ marginTop: 14 }}>
-              <div className="k" style={{ marginBottom: 5 }}>Kendini değerlendir</div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {HOME_SEVIYE.map((s, i) => (
-                  <span key={s} className={'chip' + (homeGuncelDeger(homeDetay) === i + 1 ? ' on' : '')} onClick={() => homeDegerlendir(homeDetay, i + 1)}>{s}</span>
-                ))}
               </div>
             </div>
           </div>
