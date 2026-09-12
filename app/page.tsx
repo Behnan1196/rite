@@ -1335,6 +1335,7 @@ export default function Rite() {
   const [ritMenuFor, setRitMenuFor] = useState<any>(null);
   const [homeDetay, setHomeDetay] = useState<string | null>(null);
   const [homeEkleOpen, setHomeEkleOpen] = useState(false);
+  const [homeEkleTarih, setHomeEkleTarih] = useState('');
   const [remMenuFor, setRemMenuFor] = useState<any>(null);
   const [urlInput, setUrlInput] = useState('');
   const [adInput, setAdInput] = useState('');
@@ -2462,12 +2463,16 @@ export default function Rite() {
     setMeas(m.data || []);
   }
   // Home ekranı (v1) öz-değerlendirmesi: olcumEkleGenel ile aynı gün-bazlı upsert deseni, ama anahtar sabit bir
-  // ön ekle ('home_'+alan) ayrışıyor ki Gelişim'deki diğer ölçümlerle (kilo, ruh_hali...) karışmasın.
-  async function homeDegerlendir(alan: string, deger: number) {
+  // ön ekle ('home_'+alan) ayrışıyor ki Gelişim'deki diğer ölçümlerle (kilo, ruh_hali...) karışmasın. tarih
+  // opsiyonel — toplu değerlendirme formundan (homeEkleOpen) geçmiş bir tarih seçilebiliyor (kullanıcı isteği:
+  // "birkaç gün geçmesini beklemek zorunda kalmayayım", grafiği/trendi hemen görebilmek için); Detay ekranındaki
+  // hızlı seçim hâlâ "şimdi" anlamına gelsin diye bu parametreyi vermiyor, varsayılan olarak bugünü kullanıyor.
+  async function homeDegerlendir(alan: string, deger: number, tarih?: string) {
     if (!client) return;
     const anahtar = 'home_' + alan;
-    await supabase.from('dog_measurements').delete().eq('client_id', client.id).eq('anahtar', anahtar).eq('tarih', today);
-    await supabase.from('dog_measurements').insert({ client_id: client.id, anahtar, deger, tarih: today });
+    const gun = tarih || today;
+    await supabase.from('dog_measurements').delete().eq('client_id', client.id).eq('anahtar', anahtar).eq('tarih', gun);
+    await supabase.from('dog_measurements').insert({ client_id: client.id, anahtar, deger, tarih: gun });
     const m = await supabase.from('dog_measurements').select('tarih,anahtar,deger,birim').eq('client_id', client.id).order('tarih', { ascending: true }).limit(80);
     setMeas(m.data || []);
   }
@@ -2692,6 +2697,13 @@ export default function Rite() {
   const homeGuncelDeger = (alan: string): number | null => {
     const arr = measByKey['home_' + alan];
     return arr && arr.length ? Number(arr[arr.length - 1].deger) : null;
+  };
+  // Toplu değerlendirme formunda (homeEkleOpen) tarih değiştirilebildiği için, o alanın seçili tarihteki değeri
+  // ayrıca lazım — "en son" değil, "o gün için ne girilmiş" (varsa) gösterilsin ki backfill yaparken hangi
+  // çiplerin zaten dolu olduğu net olsun.
+  const homeDegerAtTarih = (alan: string, tarih: string): number | null => {
+    const found = (measByKey['home_' + alan] || []).find((m) => m.tarih === tarih);
+    return found ? Number(found.deger) : null;
   };
   // Kartlara atanan opsiyonel "alan" (dikey) etiketinden ölçüm anahtarı → dikey haritası çıkar (OLCU_ALAN'ın statik tahminine göre öncelikli).
   const anahtarDikey: Record<string, string> = {};
@@ -3587,7 +3599,7 @@ export default function Rite() {
           disabled={screen === 'bilgi'}
           onClick={() => {
             if (screen === 'gelisim') { setOlcumSecAnahtar(null); setOlcumOzelAd(''); setOlcumDeger(''); setOlcumBirim(''); setOlcumEkleOpen(true); }
-            else if (screen === 'home') setHomeEkleOpen(true);
+            else if (screen === 'home') { setHomeEkleTarih(today); setHomeEkleOpen(true); }
             else if (screen !== 'bilgi') setEkleMenuOpen(true);
           }}
           aria-label={screen === 'gelisim' ? 'Ölçüm ekle' : screen === 'home' ? 'Kendini değerlendir' : 'Ekle'}
@@ -4411,14 +4423,19 @@ export default function Rite() {
           <div className="sheet" onMouseDown={(e) => e.stopPropagation()}>
             <div className="sheetgrip" onClick={() => setHomeEkleOpen(false)} />
             <h2>🏠 Kendini değerlendir</h2>
+            {/* Tarih seçimi (kullanıcı isteği): grafiği/trendi görmek için günlerin geçmesini beklemeden, geçmiş
+                tarihli değerlendirme de girilebiliyor — Ajanda'nın gün konseptiyle bilerek ilişkilendirilmedi
+                (kullanıcı isteği: "çok da anlamlı gelmedi"), bağımsız bir tarih alanı. */}
+            <label className="fldlbl" style={{ marginTop: 0 }}>Tarih</label>
+            <input type="date" max={today} value={homeEkleTarih || today} onChange={(e) => setHomeEkleTarih(e.target.value)} style={{ marginBottom: 14 }} />
             {HOME_ALAN_SIRA.map((alan) => {
-              const guncel = homeGuncelDeger(alan);
+              const guncel = homeDegerAtTarih(alan, homeEkleTarih || today);
               return (
                 <div key={alan} style={{ marginBottom: 14 }}>
                   <label className="fldlbl" style={{ marginTop: 0 }}>{HOME_ALAN[alan]}</label>
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     {HOME_SEVIYE.map((s, i) => (
-                      <span key={s} className={'chip' + (guncel === i + 1 ? ' on' : '')} onClick={() => homeDegerlendir(alan, i + 1)}>{s}</span>
+                      <span key={s} className={'chip' + (guncel === i + 1 ? ' on' : '')} onClick={() => homeDegerlendir(alan, i + 1, homeEkleTarih || today)}>{s}</span>
                     ))}
                   </div>
                 </div>
