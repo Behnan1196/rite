@@ -70,6 +70,9 @@ const PIL_ALAN_SIRA = ['hareket', 'beslenme', 'mesgale', 'sosyal'];
 // değil, kişi değiştirene kadar kalan bir durum; o yüzden gösterirken "bugünün kaydı" değil o anahtarın en
 // son (herhangi bir tarihteki) değeri okunuyor.
 const HOME_SEVIYE = ['Zayıf', 'İdare eder', 'İyi', 'Mükemmel'];
+// Home kartlarındaki dikey "termometre" göstergesinin dilim renkleri — HOME_SEVIYE ile aynı sırada (kırmızıdan
+// yeşile). Kullanıcı isteği: kart metnini okumadan bir bakışta renkten durumu anlayabilmek.
+const HOME_SEVIYE_RENK = ['#b45a4a', '#d98a3d', '#a3ac4a', '#5f8a4e'];
 // Home'un alanları artık sabit bir JS listesi değil, dog_home_alanlar tablosundan (client_id'ye özel, kullanıcı
 // düzenleyebilir/ekleyebilir) okunuyor — bkz. loadHomeAlanlar, homeAlanEkle/Guncelle/Sil ve migration dosyası
 // (rite_home_alanlar_migration.sql). Bu sabit dizi SADECE bir client'ın ilk açılışında (hiç satırı yoksa) o
@@ -1350,7 +1353,6 @@ export default function Rite() {
   const [ritMenuFor, setRitMenuFor] = useState<any>(null);
   const [homeDetay, setHomeDetay] = useState<string | null>(null);
   const [homeEkleOpen, setHomeEkleOpen] = useState(false);
-  const [homeEkleTarih, setHomeEkleTarih] = useState('');
   // Home'un alanları artık client'a özel, düzenlenebilir bir liste (dog_home_alanlar) — bkz. loadHomeAlanlar.
   // Yönetim ekranı (Alanları yönet): mevcut bir alanı düzenlerken formu doldurup homeAlanDuzenleId'ye o satırın
   // id'sini yazıyoruz; yeni alan eklerken id null kalıyor ama form yine aynı state'leri kullanıyor.
@@ -2565,10 +2567,10 @@ export default function Rite() {
     setMeas(m.data || []);
   }
   // Home ekranı (v1) öz-değerlendirmesi: olcumEkleGenel ile aynı gün-bazlı upsert deseni, ama anahtar sabit bir
-  // ön ekle ('home_'+alan) ayrışıyor ki Gelişim'deki diğer ölçümlerle (kilo, ruh_hali...) karışmasın. tarih
-  // opsiyonel — toplu değerlendirme formundan (homeEkleOpen) geçmiş bir tarih seçilebiliyor (kullanıcı isteği:
-  // "birkaç gün geçmesini beklemek zorunda kalmayayım", grafiği/trendi hemen görebilmek için); Detay ekranındaki
-  // hızlı seçim hâlâ "şimdi" anlamına gelsin diye bu parametreyi vermiyor, varsayılan olarak bugünü kullanıyor.
+  // ön ekle ('home_'+alan) ayrışıyor ki Gelişim'deki diğer ölçümlerle (kilo, ruh_hali...) karışmasın. Geçmiş
+  // tarihli değerlendirme UI'dan kaldırıldı (kullanıcı isteği: "geçmiş geçmiştir, son yaptığı değerlendirme
+  // üzerinden gitmeliyiz") — ama tarih parametresi ileride başka bir nedenle gerekebilir diye altyapıda
+  // opsiyonel olarak bırakıldı, verilmezse bugünü kullanıyor.
   async function homeDegerlendir(alan: string, deger: number, tarih?: string) {
     if (!client) return;
     const anahtar = 'home_' + alan;
@@ -2805,13 +2807,6 @@ export default function Rite() {
     const arr = measByKey['home_' + alan];
     return arr && arr.length ? Number(arr[arr.length - 1].deger) : null;
   };
-  // Toplu değerlendirme formunda (homeEkleOpen) tarih değiştirilebildiği için, o alanın seçili tarihteki değeri
-  // ayrıca lazım — "en son" değil, "o gün için ne girilmiş" (varsa) gösterilsin ki backfill yaparken hangi
-  // çiplerin zaten dolu olduğu net olsun.
-  const homeDegerAtTarih = (alan: string, tarih: string): number | null => {
-    const found = (measByKey['home_' + alan] || []).find((m) => m.tarih === tarih);
-    return found ? Number(found.deger) : null;
-  };
   // Kartlara atanan opsiyonel "alan" (dikey) etiketinden ölçüm anahtarı → dikey haritası çıkar (OLCU_ALAN'ın statik tahminine göre öncelikli).
   const anahtarDikey: Record<string, string> = {};
   rituals.forEach((r) => {
@@ -2965,13 +2960,13 @@ export default function Rite() {
             homeDegerlendir). Alışkanlıklarını oturtmuş/mezun etmiş biri için de arada bir uğrayıp "kilo aldım,
             beslenmeme dikkat edeyim" diyebileceği hafif bir kontrol noktası olması amaçlanıyor. Kartların
             üzerinde artık doğrudan seçenek çipleri YOK (kullanıcı isteği: "doğrudan bir anket formu görüntüsünde"
-            olmasın) — kartlar SON DURUMU ve geçmiş değerlendirmelerin küçük bir grafiğini (sparkline) gösteriyor,
-            değerlendirme girişi sadece alt bardaki ＋ ile açılan toplu "Kendini değerlendir" formundan (bkz.
-            homeEkleOpen) yapılıyor; Detay salt bilgi amaçlı (kullanıcı isteği: "detay kartındaki değerlendirme
-            kalksın, tek başına ok çok mana taşımıyor" — o yüzden tek bir yön oku yerine burada gerçek bir küçük
-            grafik var). Grafik Gelişim'e değil bilerek Home'un kendisine kondu (kullanıcı isteği) — takvim
-            günlerine göre değil, o alana ait GERÇEK kayıtların (boşluksuz) son birkaçına göre çiziliyor, çünkü
-            değerlendirme her gün değil ara sıra yapılıyor. Alanların kendisi artık sabit değil — dog_home_alanlar'dan
+            olmasın) — kartlar SADECE SON değerlendirmeyi gösteriyor (kullanıcı isteği: "geçmiş tarihli
+            değerlendirmeler görmemize gerek bile yok, son yaptığı değerlendirme üzerinden gitmeliyiz" — bu yüzden
+            eski sparkline/geçmiş grafiği kaldırıldı), değerlendirme girişi sadece alt bardaki ＋ ile açılan toplu
+            "Kendini değerlendir" formundan (bkz. homeEkleOpen) yapılıyor. Durumu HOME_SEVIYE_RENK renk skalasında
+            dikey bir "termometre" gösteriyor — dört dilim (Zayıf→Mükemmel), geçerli seviyeye kadar kendi rengiyle
+            dolu, üstü soluk — kullanıcı isteği: "mükemmel, iyi gibi ibareleri okumadan bir bakışta renk
+            dilimlerinden durumunu görebilmeli". Alanların kendisi artık sabit değil — dog_home_alanlar'dan
             (client'a özel, düzenlenebilir) geliyor, standart altısıyla tohumlanmış durumda; kullanıcı kendi alanını
             da ekleyebiliyor (kullanıcı isteği: "kullanıcı alan ekleyebilsin... bu bilgilerin düzenlenebilmesi de
             gerekecek") — bkz. altdaki "Alanları yönet" ve homeYonetOpen. Havuz'a bağlama (eksik alan → gerçek
@@ -2984,22 +2979,19 @@ export default function Rite() {
               <span className="minlink" onClick={() => { homeYonetFormAc(); setHomeYonetOpen(true); }}>⚙️ Alanları yönet</span>
             </div>
             {[...homeAlanlar].sort((a, b) => a.sira - b.sira).map((a) => {
-              const arr = measByKey['home_' + a.anahtar] || [];
-              const guncel = arr.length ? Number(arr[arr.length - 1].deger) : null;
-              const gecmis = arr.slice(-8); // en fazla son 8 kayıt — takvim günü değil, gerçek değerlendirme sayısı
+              const guncel = homeGuncelDeger(a.anahtar);
               return (
                 <div key={a.id} className="card" style={{ marginBottom: 10, cursor: 'pointer' }} onClick={() => setHomeDetay(a.anahtar)}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                    <h3 style={{ margin: 0 }}>{a.ad}</h3>
-                    <span style={{ fontSize: 12, color: 'var(--muted)' }}>Detay ›</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
-                    {guncel ? <span className="chip on" style={{ cursor: 'default' }}>{HOME_SEVIYE[guncel - 1]}</span> : <span className="note" style={{ marginTop: 0 }}>Henüz değerlendirilmedi</span>}
-                    {gecmis.length > 1 && (
-                      <div className="spark" style={{ flex: 1, height: 28 }} title="Geçmiş değerlendirmelerin (en fazla son 8) seyri">
-                        {gecmis.map((m: any, i: number) => <i key={i} style={{ height: Math.max(6, (Number(m.deger) / HOME_SEVIYE.length) * 100) + '%' }} />)}
-                      </div>
-                    )}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                    <div>
+                      <h3 style={{ margin: 0 }}>{a.ad}</h3>
+                      <div className="note" style={{ marginTop: 4 }}>{guncel ? HOME_SEVIYE[guncel - 1] : 'Henüz değerlendirilmedi'}</div>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column-reverse', gap: 2, width: 14, height: 42, borderRadius: 5, overflow: 'hidden', flex: '0 0 auto' }} title={guncel ? HOME_SEVIYE[guncel - 1] : 'Henüz değerlendirilmedi'}>
+                      {HOME_SEVIYE_RENK.map((renk, i) => (
+                        <div key={i} style={{ flex: 1, background: guncel && i < guncel ? renk : '#e7e0d2' }} />
+                      ))}
+                    </div>
                   </div>
                 </div>
               );
@@ -4568,19 +4560,18 @@ export default function Rite() {
           <div className="sheet" onMouseDown={(e) => e.stopPropagation()}>
             <div className="sheetgrip" onClick={() => setHomeEkleOpen(false)} />
             <h2>🏠 Kendini değerlendir</h2>
-            {/* Tarih seçimi (kullanıcı isteği): grafiği/trendi görmek için günlerin geçmesini beklemeden, geçmiş
-                tarihli değerlendirme de girilebiliyor — Ajanda'nın gün konseptiyle bilerek ilişkilendirilmedi
-                (kullanıcı isteği: "çok da anlamlı gelmedi"), bağımsız bir tarih alanı. */}
-            <label className="fldlbl" style={{ marginTop: 0 }}>Tarih</label>
-            <input type="date" max={today} value={homeEkleTarih || today} onChange={(e) => setHomeEkleTarih(e.target.value)} style={{ marginBottom: 14 }} />
+            {/* Tarih seçimi kaldırıldı (kullanıcı isteği: "geçmiş tarihli değerlendirmeler görmemize gerek bile
+                yok, son yaptığı değerlendirme üzerinden gitmeliyiz") — her seçim doğrudan bugüne (today) yazılıyor.
+                homeDegerlendir'in tarih parametresi altyapıda kalıyor (ileride başka bir nedenle gerekebilir),
+                sadece burada artık kullanılmıyor. */}
             {[...homeAlanlar].sort((a, b) => a.sira - b.sira).map((a) => {
-              const guncel = homeDegerAtTarih(a.anahtar, homeEkleTarih || today);
+              const guncel = homeGuncelDeger(a.anahtar);
               return (
                 <div key={a.id} style={{ marginBottom: 14 }}>
                   <label className="fldlbl" style={{ marginTop: 0 }}>{a.ad}</label>
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     {HOME_SEVIYE.map((s, i) => (
-                      <span key={s} className={'chip' + (guncel === i + 1 ? ' on' : '')} onClick={() => homeDegerlendir(a.anahtar, i + 1, homeEkleTarih || today)}>{s}</span>
+                      <span key={s} className={'chip' + (guncel === i + 1 ? ' on' : '')} onClick={() => homeDegerlendir(a.anahtar, i + 1)}>{s}</span>
                     ))}
                   </div>
                 </div>
