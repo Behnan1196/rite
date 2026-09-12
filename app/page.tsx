@@ -63,6 +63,25 @@ const DIKEY_LABEL: Record<string, string> = { beslenme: 'Beslenme', fitness: 'Fi
 // gösterge — bkz. loadData altındaki pil hesaplama notları). İlk versiyon, alan tipine göre daha da geliştirilecek.
 const PIL_ALAN: Record<string, string> = { hareket: 'Hareket', beslenme: 'Beslenme', mesgale: 'Meşgale', sosyal: 'Sosyal' };
 const PIL_ALAN_SIRA = ['hareket', 'beslenme', 'mesgale', 'sosyal'];
+// Home sekmesi (v1): uygulamayı ilk açtığında görülen, tamamen öznel öz-değerlendirme ekranı — PIL_ALAN'dan
+// (kart etiketleme / otomatik pil) BİLEREK ayrı tutuluyor, ikisi farklı amaçlara hizmet ediyor (kullanıcı
+// isteği: "bunlar tamamen kendi şahsi değerlendirmesi, aktivite kartlarına bağlı değil"). Değerler
+// dog_measurements'a anahtar='home_'+alan olarak yazılıyor (ruh_hali ile aynı desen) — günlük bir "check-in"
+// değil, kişi değiştirene kadar kalan bir durum; o yüzden gösterirken "bugünün kaydı" değil o anahtarın en
+// son (herhangi bir tarihteki) değeri okunuyor.
+const HOME_ALAN: Record<string, string> = { beslenme: 'Beslenme', egzersiz: 'Egzersiz', uyku: 'Uyku', stres: 'Stres Yönetimi', mesgale: 'Meşgale', sosyal: 'Sosyal İlişkiler' };
+const HOME_ALAN_SIRA = ['beslenme', 'egzersiz', 'uyku', 'stres', 'mesgale', 'sosyal'];
+const HOME_SEVIYE = ['Zayıf', 'İdare eder', 'İyi', 'Mükemmel'];
+// Detay ekranındaki kısa, sade (65 yaşında biri için anlaşılır) yönlendirme metinleri — genel/bilinen sağlıklı
+// yaşam bilgisi düzeyinde, ilk versiyon; ileride kullanıcının kendi bilgi tabanından beslenebilir.
+const HOME_ALAN_ACIKLAMA: Record<string, string> = {
+  beslenme: 'Düzenli öğünler, yeterli sebze-meyve, bol su. Aşırı işlenmiş ve şekerli gıdalardan uzak durmak iyi bir başlangıç.',
+  egzersiz: 'Haftada en az 3-4 gün, günde 30 dakika kadar tempolu yürüyüş ya da hareket. Merdiven çıkmak, bahçeyle uğraşmak da sayılır.',
+  uyku: 'Her gün aşağı yukarı aynı saatte yatıp kalkmak, gecede en az 7-8 saat uyumak, yatmadan önce ekrandan uzak durmak.',
+  stres: 'Günün bir kısmını sakinleşmeye ayırmak — nefes egzersizi, kısa bir yürüyüş, keyif aldığın bir uğraş. Biriktirmeden paylaşmak da yardımcı olur.',
+  mesgale: 'Zihnini canlı tutan, keyif aldığın bir uğraşın olması — bir hobi, öğrenme, el işi, bahçe, müzik gibi.',
+  sosyal: 'Düzenli olarak sevdiklerinle görüşmek, sohbet etmek, birlikte bir şeyler yapmak — yalnızlık, beslenme kadar önemli.',
+};
 // kart_config.stil — Meridyen Studio'da seçilen renk/tema preseti (bg = açık zemin, ac = vurgu rengi, tx = yazı rengi). Liste Meridyen'deki STIL_PRESETS ile aynı kalmalı.
 const STIL_LOOKUP: Record<string, { bg: string; ac: string; tx: string }> = {
   yesil: { bg: '#e9f4e6', ac: '#5f8a4e', tx: '#2f4a2a' },
@@ -1154,7 +1173,7 @@ function urlB64ToUint8(base64String: string) {
 
 export default function Rite() {
   const [client, setClient] = useState<Client | null>(null);
-  const [screen, setScreen] = useState('ajanda');
+  const [screen, setScreen] = useState('home');
   const [inboxOpen, setInboxOpen] = useState(false);
   const [ibGrupSec, setIbGrupSec] = useState<string | null>(null); // havuza eklerken grup seçimi açık olan inbox öğesi
   const [ibGrupVal, setIbGrupVal] = useState('Genel');
@@ -1294,6 +1313,7 @@ export default function Rite() {
   // remount eder) — bu yüzden hangi satırın menüsü açık diye dıştaki bu state'i kullanıyoruz (habitMenuFor'la
   // aynı desen).
   const [ritMenuFor, setRitMenuFor] = useState<any>(null);
+  const [homeDetay, setHomeDetay] = useState<string | null>(null);
   const [remMenuFor, setRemMenuFor] = useState<any>(null);
   const [urlInput, setUrlInput] = useState('');
   const [adInput, setAdInput] = useState('');
@@ -2420,6 +2440,16 @@ export default function Rite() {
     const m = await supabase.from('dog_measurements').select('tarih,anahtar,deger,birim').eq('client_id', client.id).order('tarih', { ascending: true }).limit(80);
     setMeas(m.data || []);
   }
+  // Home ekranı (v1) öz-değerlendirmesi: olcumEkleGenel ile aynı gün-bazlı upsert deseni, ama anahtar sabit bir
+  // ön ekle ('home_'+alan) ayrışıyor ki Gelişim'deki diğer ölçümlerle (kilo, ruh_hali...) karışmasın.
+  async function homeDegerlendir(alan: string, deger: number) {
+    if (!client) return;
+    const anahtar = 'home_' + alan;
+    await supabase.from('dog_measurements').delete().eq('client_id', client.id).eq('anahtar', anahtar).eq('tarih', today);
+    await supabase.from('dog_measurements').insert({ client_id: client.id, anahtar, deger, tarih: today });
+    const m = await supabase.from('dog_measurements').select('tarih,anahtar,deger,birim').eq('client_id', client.id).order('tarih', { ascending: true }).limit(80);
+    setMeas(m.data || []);
+  }
   // Gün içinde birikimli ölçüm (su, odak dk): mevcut bugünkü değere delta ekler, upsert eder. Pomodoro/Su kartları kullanır.
   async function biriktirKaydet(ritId: string, anahtar: string, delta: number, birim: string | null) {
     if (!client) return;
@@ -2636,6 +2666,12 @@ export default function Rite() {
   };
   const measByKey: Record<string, any[]> = {};
   meas.forEach((m) => { (measByKey[m.anahtar] = measByKey[m.anahtar] || []).push(m); });
+  // Home ekranındaki bir alanın en son (herhangi bir tarihteki) öz-değerlendirmesi — günlük bir alan değil,
+  // kişi değiştirene kadar geçerli bir "durum" (bkz. homeDegerlendir'in üstündeki not).
+  const homeGuncelDeger = (alan: string): number | null => {
+    const arr = measByKey['home_' + alan];
+    return arr && arr.length ? Number(arr[arr.length - 1].deger) : null;
+  };
   // Kartlara atanan opsiyonel "alan" (dikey) etiketinden ölçüm anahtarı → dikey haritası çıkar (OLCU_ALAN'ın statik tahminine göre öncelikli).
   const anahtarDikey: Record<string, string> = {};
   rituals.forEach((r) => {
@@ -2782,6 +2818,36 @@ export default function Rite() {
       </div>
 
       <div className="main">
+        {/* ---------- HOME (v1) ---------- */}
+        {/* Uygulamayı ilk açtığında görülen ekran — Ajanda/Havuz gibi "teknik" ekranlara hiç girmeden de kişinin
+            kendini birkaç yaşam alanında değerlendirebileceği yer (kullanıcı isteği). Tamamen öznel: hangi kart
+            işaretlenmiş/etiketlenmiş olduğuyla ilgisi yok, kişi kendi hissine göre seçiyor (bkz. HOME_ALAN,
+            homeDegerlendir). Alışkanlıklarını oturtmuş/mezun etmiş biri için de arada bir uğrayıp "kilo aldım,
+            beslenmeme dikkat edeyim" diyebileceği hafif bir kontrol noktası olması amaçlanıyor. Havuz/Gelişim'e
+            bağlama (eksik alan → aktivite önerisi, hedef/olmak istediği seviye, özel alan tanımlama) bilerek
+            bu ilk versiyonda yok — kullanıcı isteğiyle sonraki bir adıma bırakıldı. */}
+        {screen === 'home' && (
+          <div>
+            <div className="note" style={{ marginTop: 0, marginBottom: 12 }}>Şu an kendini bu alanlarda nasıl görüyorsun?</div>
+            {HOME_ALAN_SIRA.map((alan) => {
+              const guncel = homeGuncelDeger(alan);
+              return (
+                <div key={alan} className="card" style={{ marginBottom: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <h3 style={{ margin: 0 }}>{HOME_ALAN[alan]}</h3>
+                    <button type="button" className="linkbtn" style={{ fontSize: 12.5 }} onClick={() => setHomeDetay(alan)}>ⓘ Detay</button>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
+                    {HOME_SEVIYE.map((s, i) => (
+                      <span key={s} className={'chip' + (guncel === i + 1 ? ' on' : '')} onClick={() => homeDegerlendir(alan, i + 1)}>{s}</span>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         {/* ---------- AJANDA ---------- */}
         {screen === 'ajanda' && (
           <div>
@@ -3467,19 +3533,24 @@ export default function Rite() {
       </div>
 
       <div className="nav">
-        {[['ajanda', '🗓', 'Ajanda'], ['havuz', '⊕', 'Havuz']].map(([k, ic, l]) => (
+        {/* Home: Ajanda/Havuz gibi teknik ekranlara hiç girmeyebilecek yeni kullanıcılar için ilk açılan ekran
+            (kullanıcı isteği) — sekmede bilerek sadece ikon var, metin etiketi yok (isim şimdilik "Home",
+            görünürde hiç yazmıyor). Diğer sekmelerin aksine tek kelimelik bir etiketi olmadığı için dizi
+            girdisindeki üçüncü eleman (etiket) boş string. */}
+        {[['home', '🏠', ''], ['ajanda', '🗓', 'Ajanda'], ['havuz', '⊕', 'Havuz']].map(([k, ic, l]) => (
           <button key={k} className={['ajanda', 'mezunlar'].includes(screen) && k === 'ajanda' ? 'on' : screen === k ? 'on' : ''} onClick={() => setScreen(k)}><span className="ic">{ic}</span>{l}</button>
         ))}
         {/* ＋ tuşu artık her sekmede görünüyor (kullanıcı isteği — Ayarlar'da grileşip devre dışı kalmak,
             hiç kaybolmaktan daha tutarlı). Ajanda'da tam menü, Havuz'da daraltılmış menü (bkz. ekleMenüsü);
             Gelişim'de kart eklemek yerine hızlı bir Ölçüm/Değerlendirme girişi açıyor (kullanıcı fikri) —
-            böylece Gelişim'deki ＋ de gerçekten işe yarıyor. Sadece Ayarlar'da yapılacak bir "ekleme" yok. */}
+            böylece Gelişim'deki ＋ de gerçekten işe yarıyor. Ayarlar'da ve Home'da (henüz "ekleme" kavramı
+            yok, değerlendirme kartların üzerinden yapılıyor) ＋ griye düşüp devre dışı kalıyor. */}
         <button
-          className={'plus' + (screen === 'bilgi' ? ' dim' : '')}
-          disabled={screen === 'bilgi'}
+          className={'plus' + (screen === 'bilgi' || screen === 'home' ? ' dim' : '')}
+          disabled={screen === 'bilgi' || screen === 'home'}
           onClick={() => {
             if (screen === 'gelisim') { setOlcumSecAnahtar(null); setOlcumOzelAd(''); setOlcumDeger(''); setOlcumBirim(''); setOlcumEkleOpen(true); }
-            else if (screen !== 'bilgi') setEkleMenuOpen(true);
+            else if (screen !== 'bilgi' && screen !== 'home') setEkleMenuOpen(true);
           }}
           aria-label={screen === 'gelisim' ? 'Ölçüm ekle' : 'Ekle'}
         >＋</button>
@@ -4262,6 +4333,21 @@ export default function Rite() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <button className="btn ghost sm" onClick={() => { const id = ritMenuFor.id; setRitMenuFor(null); ritSil(id); }}>🗑️ Sil</button>
               <button className="btn ghost sm" onClick={() => setRitMenuFor(null)}>Vazgeç</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {homeDetay && (
+        <div className="modal top2" onMouseDown={() => setHomeDetay(null)}>
+          <div className="sheet small" onMouseDown={(e) => e.stopPropagation()}>
+            <button className="x" onClick={() => setHomeDetay(null)}>×</button>
+            <h3 style={{ marginBottom: 8 }}>{HOME_ALAN[homeDetay]}</h3>
+            <div className="note" style={{ marginTop: 0 }}>{HOME_ALAN_ACIKLAMA[homeDetay]}</div>
+            <div style={{ display: 'flex', gap: 6, marginTop: 14, flexWrap: 'wrap' }}>
+              {HOME_SEVIYE.map((s, i) => (
+                <span key={s} className={'chip' + (homeGuncelDeger(homeDetay) === i + 1 ? ' on' : '')} onClick={() => homeDegerlendir(homeDetay, i + 1)}>{s}</span>
+              ))}
             </div>
           </div>
         </div>
