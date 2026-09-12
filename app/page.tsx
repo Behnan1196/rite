@@ -3718,7 +3718,7 @@ export default function Rite() {
           disabled={screen === 'bilgi'}
           onClick={() => {
             if (screen === 'gelisim') { setOlcumSecAnahtar(null); setOlcumOzelAd(''); setOlcumDeger(''); setOlcumBirim(''); setOlcumEkleOpen(true); }
-            else if (screen === 'home') { setHomeEkleTarih(today); setHomeEkleOpen(true); }
+            else if (screen === 'home') { setHomeEkleOpen(true); }
             else if (screen !== 'bilgi') setEkleMenuOpen(true);
           }}
           aria-label={screen === 'gelisim' ? 'Ölçüm ekle' : screen === 'home' ? 'Kendini değerlendir' : 'Ekle'}
