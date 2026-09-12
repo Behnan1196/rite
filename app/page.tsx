@@ -69,39 +69,54 @@ const PIL_ALAN_SIRA = ['hareket', 'beslenme', 'mesgale', 'sosyal'];
 // dog_measurements'a anahtar='home_'+alan olarak yazılıyor (ruh_hali ile aynı desen) — günlük bir "check-in"
 // değil, kişi değiştirene kadar kalan bir durum; o yüzden gösterirken "bugünün kaydı" değil o anahtarın en
 // son (herhangi bir tarihteki) değeri okunuyor.
-const HOME_ALAN: Record<string, string> = { beslenme: 'Beslenme', egzersiz: 'Egzersiz', uyku: 'Uyku', stres: 'Stres Yönetimi', mesgale: 'Meşgale', sosyal: 'Sosyal İlişkiler' };
-const HOME_ALAN_SIRA = ['beslenme', 'egzersiz', 'uyku', 'stres', 'mesgale', 'sosyal'];
 const HOME_SEVIYE = ['Zayıf', 'İdare eder', 'İyi', 'Mükemmel'];
-// Detay ekranındaki kısa, sade (65 yaşında biri için anlaşılır) yönlendirme metinleri — genel/bilinen sağlıklı
-// yaşam bilgisi düzeyinde, ilk versiyon; ileride kullanıcının kendi bilgi tabanından beslenebilir.
-const HOME_ALAN_ACIKLAMA: Record<string, string> = {
-  beslenme: 'Düzenli öğünler, yeterli sebze-meyve, bol su. Aşırı işlenmiş ve şekerli gıdalardan uzak durmak iyi bir başlangıç.',
-  egzersiz: 'Haftada en az 3-4 gün, günde 30 dakika kadar tempolu yürüyüş ya da hareket. Merdiven çıkmak, bahçeyle uğraşmak da sayılır.',
-  uyku: 'Her gün aşağı yukarı aynı saatte yatıp kalkmak, gecede en az 7-8 saat uyumak, yatmadan önce ekrandan uzak durmak.',
-  stres: 'Günün bir kısmını sakinleşmeye ayırmak — nefes egzersizi, kısa bir yürüyüş, keyif aldığın bir uğraş. Biriktirmeden paylaşmak da yardımcı olur.',
-  mesgale: 'Zihnini canlı tutan, keyif aldığın bir uğraşın olması — bir hobi, öğrenme, el işi, bahçe, müzik gibi.',
-  sosyal: 'Düzenli olarak sevdiklerinle görüşmek, sohbet etmek, birlikte bir şeyler yapmak — yalnızlık, beslenme kadar önemli.',
-};
-// Detay ekranını zenginleştiren iki ek katman (kullanıcı isteği: "neden önemli olduğu" + "havuzdakilerle paralel
-// aktivite örnekleri") — ikisi de ilk versiyon, elle yazılmış sabit metinler. Örnek aktiviteler henüz kişinin
-// GERÇEK Havuz'undan gelmiyor (Havuz'un bu alanlara göre nasıl bağlanacağı hâlâ ayrı, çözülmemiş bir soru,
-// bkz. momentum notları) — burada sadece "böyle bir şey" fikrini vermek için sabit, temsili örnekler.
-const HOME_ALAN_NEDEN: Record<string, string> = {
-  beslenme: 'Enerjini, kilonu ve genel sağlığını doğrudan etkiler — belki de en çabuk fark edilen alan.',
-  egzersiz: 'Hareketsizlik yaşla birlikte güç ve denge kaybına yol açar; düzenli hareket bunu büyük ölçüde yavaşlatır.',
-  uyku: 'Uyku kalitesi; ruh halini, hafızayı ve bağışıklığı doğrudan etkiler, çoğu zaman göz ardı edilir.',
-  stres: 'Biriken stres uzun vadede hem ruh hem beden sağlığını yıpratır; fark etmeden büyür.',
-  mesgale: 'Zihni canlı ve motive tutar — özellikle boş zamanı çok olan biri için önemli bir denge unsuru.',
-  sosyal: 'Yalnızlık, fiziksel sağlık kadar önemli bir risk taşır; düzenli sosyal temas bunu azaltır.',
-};
-const HOME_ALAN_ORNEK: Record<string, string[]> = {
-  beslenme: ['Günlük su takibi', 'Haftalık market listesi', 'Ana öğün planlayıcı'],
-  egzersiz: ['Sabah yürüyüşü', 'Esneme rutini', 'Merdiven hedefi'],
-  uyku: ['Sabit yatış saati hatırlatıcısı', 'Ekran kapatma alışkanlığı', 'Akşam sakinleşme rutini'],
-  stres: ['Nefes egzersizi', 'Kısa yürüyüş molası', 'Günlük tutma'],
-  mesgale: ['Yeni bir hobiye zaman ayırma', 'Kitap/öğrenme saati', 'Bahçe/el işi'],
-  sosyal: ['Haftalık arama listesi', 'Komşu/arkadaş buluşması', 'Bir etkinliğe katılma'],
-};
+// Home'un alanları artık sabit bir JS listesi değil, dog_home_alanlar tablosundan (client_id'ye özel, kullanıcı
+// düzenleyebilir/ekleyebilir) okunuyor — bkz. loadHomeAlanlar, homeAlanEkle/Guncelle/Sil ve migration dosyası
+// (rite_home_alanlar_migration.sql). Bu sabit dizi SADECE bir client'ın ilk açılışında (hiç satırı yoksa) o
+// tabloya YAZILACAK altı standart alanın başlangıç içeriği — kullanıcı isteği: "standart alanlar ilk başta
+// olsun", ve her birinin kontrol listesi genel/bilinen sağlık kılavuzlarına (WHO hareket önerisi, CDC uyku
+// hijyeni, ABD Beslenme Kılavuzu, APA stres yönetimi, ABD Surgeon General'ın sosyal bağ tavsiyesi) dayanıyor —
+// kullanıcı isteği: "sende bir araştırmayla bunları hazırlayabilirsin". anahtar'lar bilerek eski PIL/HOME
+// sabitleriyle aynı bırakıldı (beslenme/egzersiz/uyku/stres/mesgale/sosyal) ki daha önce test için girilmiş
+// dog_measurements kayıtları koptan kopmasın.
+const HOME_ALAN_VARSAYILAN: { anahtar: string; ad: string; neden: string; checklist: string[]; ornekler: string[] }[] = [
+  {
+    anahtar: 'beslenme', ad: 'Beslenme',
+    neden: 'Enerjini, kilonu ve genel sağlığını doğrudan etkiler — belki de en çabuk fark edilen alan.',
+    checklist: ['Her öğünde tabağının yarısı sebze/meyve olsun', 'Günde en az 6-8 bardak su iç', 'Rafine şeker ve aşırı işlenmiş gıdayı sınırla', 'Tam tahıllı/lifli gıdaları tercih et', 'Öğünleri düzenli saatlerde, atlamadan yap', 'Tuzu ölçülü kullan'],
+    ornekler: ['Günlük su takibi', 'Haftalık market listesi', 'Ana öğün planlayıcı'],
+  },
+  {
+    anahtar: 'egzersiz', ad: 'Egzersiz',
+    neden: 'Hareketsizlik yaşla birlikte güç ve denge kaybına yol açar; düzenli hareket bunu büyük ölçüde yavaşlatır.',
+    checklist: ['Haftada en az 150 dakika tempolu yürüyüş/hareket (günde ~20-30 dk)', 'Haftada 2 gün kas güçlendirici hareket (hafif ağırlık, bahçe işi)', 'Uzun süre oturmayı ara ara böl, kalkıp yürü', 'Merdiven gibi günlük fırsatları değerlendir', 'Denge/esneklik çalışması ekle'],
+    ornekler: ['Sabah yürüyüşü', 'Esneme rutini', 'Merdiven hedefi'],
+  },
+  {
+    anahtar: 'uyku', ad: 'Uyku',
+    neden: 'Uyku kalitesi; ruh halini, hafızayı ve bağışıklığı doğrudan etkiler, çoğu zaman göz ardı edilir.',
+    checklist: ['Her gün aşağı yukarı aynı saatte yat-kalk (hafta sonu dahil)', 'Gecede en az 7 saat uyu', 'Yatmadan 1 saat önce ekrandan uzak dur', 'Öğleden sonra kafeini, akşam alkolü sınırla', 'Yatak odasını karanlık, sessiz ve serin tut', 'Gündüz uzun/geç şekerlemelerden kaçın'],
+    ornekler: ['Sabit yatış saati hatırlatıcısı', 'Ekran kapatma alışkanlığı', 'Akşam sakinleşme rutini'],
+  },
+  {
+    anahtar: 'stres', ad: 'Stres Yönetimi',
+    neden: 'Biriken stres uzun vadede hem ruh hem beden sağlığını yıpratır; fark etmeden büyür.',
+    checklist: ['Günde birkaç dakika nefes/gevşeme egzersizi yap', 'Düzenli hareket et — stresi azaltan en güçlü araçlardan biri', 'Yeterli uyu, stres toleransını doğrudan etkiler', 'Duygularını biriktirmeden güvendiğin biriyle paylaş', 'Kontrol edemediğin şeyleri bırakmayı, önceliklendirmeyi dene', 'Gerekirse bir uzmandan destek almaktan çekinme'],
+    ornekler: ['Nefes egzersizi', 'Kısa yürüyüş molası', 'Günlük tutma'],
+  },
+  {
+    anahtar: 'mesgale', ad: 'Meşgale',
+    neden: 'Zihni canlı ve motive tutar — özellikle boş zamanı çok olan biri için önemli bir denge unsuru.',
+    checklist: ['Haftada düzenli, keyif aldığın bir uğraşa zaman ayır', 'Yeni bir şey öğrenmeyi dene', 'Elle/bedenle bir şey üreten bir uğraş seç (bahçe, el işi, müzik)', 'Uğraşını paylaşabileceğin bir ortam ara (kurs, kulüp)'],
+    ornekler: ['Yeni bir hobiye zaman ayırma', 'Kitap/öğrenme saati', 'Bahçe/el işi'],
+  },
+  {
+    anahtar: 'sosyal', ad: 'Sosyal İlişkiler',
+    neden: 'Yalnızlık, fiziksel sağlık kadar önemli bir risk taşır; düzenli sosyal temas bunu azaltır.',
+    checklist: ['Haftada birkaç kez sevdiklerinle gerçek (yüz yüze/sesli) temas kur', 'Yeni tanışıklıklara açık ol — komşu, ortak ilgi grupları', 'Bir topluluğa/gruba düzenli katıl (dernek, kulüp, spor grubu)', 'İlişkilerine sadece kriz anında değil, düzenli zaman ayır', 'Kendini yalnız hissettiğinde bunu biriyle paylaş'],
+    ornekler: ['Haftalık arama listesi', 'Komşu/arkadaş buluşması', 'Bir etkinliğe katılma'],
+  },
+];
 // kart_config.stil — Meridyen Studio'da seçilen renk/tema preseti (bg = açık zemin, ac = vurgu rengi, tx = yazı rengi). Liste Meridyen'deki STIL_PRESETS ile aynı kalmalı.
 const STIL_LOOKUP: Record<string, { bg: string; ac: string; tx: string }> = {
   yesil: { bg: '#e9f4e6', ac: '#5f8a4e', tx: '#2f4a2a' },
@@ -1336,6 +1351,16 @@ export default function Rite() {
   const [homeDetay, setHomeDetay] = useState<string | null>(null);
   const [homeEkleOpen, setHomeEkleOpen] = useState(false);
   const [homeEkleTarih, setHomeEkleTarih] = useState('');
+  // Home'un alanları artık client'a özel, düzenlenebilir bir liste (dog_home_alanlar) — bkz. loadHomeAlanlar.
+  // Yönetim ekranı (Alanları yönet): mevcut bir alanı düzenlerken formu doldurup homeAlanDuzenleId'ye o satırın
+  // id'sini yazıyoruz; yeni alan eklerken id null kalıyor ama form yine aynı state'leri kullanıyor.
+  const [homeAlanlar, setHomeAlanlar] = useState<any[]>([]);
+  const [homeYonetOpen, setHomeYonetOpen] = useState(false);
+  const [homeAlanDuzenleId, setHomeAlanDuzenleId] = useState<string | null>(null);
+  const [homeAlanAd, setHomeAlanAd] = useState('');
+  const [homeAlanNeden, setHomeAlanNeden] = useState('');
+  const [homeAlanChecklist, setHomeAlanChecklist] = useState('');
+  const [homeAlanOrnekler, setHomeAlanOrnekler] = useState('');
   const [remMenuFor, setRemMenuFor] = useState<any>(null);
   const [urlInput, setUrlInput] = useState('');
   const [adInput, setAdInput] = useState('');
@@ -1523,12 +1548,27 @@ export default function Rite() {
     const m = await supabase.from('dog_measurements').select('tarih,anahtar,deger,birim').eq('client_id', clientId).order('tarih', { ascending: true }).limit(80);
     setMeas(m.data || []);
     loadGruplar(clientId);
+    loadHomeAlanlar(clientId);
   }
   // Havuz'daki kalıcı Grup/Alt grup listesi (bkz. dog_gruplar) — Gruplar yönet ekranındaki her ekle/yeniden
   // adlandır/sil/sırala işleminden sonra da tekrar çağrılıyor.
   async function loadGruplar(clientId: string) {
     const g = await supabase.from('dog_gruplar').select('id,ad,ust_id,sira').eq('client_id', clientId).order('sira');
     setGrupListesi(g.data || []);
+  }
+  // Home'un alanları (bkz. dog_home_alanlar) — client'ın ilk açılışında (hiç satırı yoksa) HOME_ALAN_VARSAYILAN'daki
+  // altı standart alanla tohumlanıyor (kullanıcı isteği: "standart alanlar ilk başta olsun"), sonrasında tamamen
+  // client'a özel ve düzenlenebilir. Alanları yönet ekranındaki her ekle/düzenle/sil işleminden sonra da tekrar
+  // çağrılıyor.
+  async function loadHomeAlanlar(clientId: string) {
+    const h = await supabase.from('dog_home_alanlar').select('id,anahtar,ad,neden,checklist,ornekler,sira').eq('client_id', clientId).order('sira');
+    let rows = h.data || [];
+    if (rows.length === 0) {
+      const seed = HOME_ALAN_VARSAYILAN.map((a, i) => ({ client_id: clientId, anahtar: a.anahtar, ad: a.ad, neden: a.neden, checklist: a.checklist, ornekler: a.ornekler, sira: i }));
+      const ins = await supabase.from('dog_home_alanlar').insert(seed).select('id,anahtar,ad,neden,checklist,ornekler,sira');
+      rows = ins.data || [];
+    }
+    setHomeAlanlar(rows);
   }
 
   // ---------- e-posta ile kendi hesabını aç / giriş yap ----------
@@ -1873,6 +1913,47 @@ export default function Rite() {
     await supabase.from('dog_gruplar').update({ sira: diger.sira }).eq('id', g.id);
     await supabase.from('dog_gruplar').update({ sira: g.sira }).eq('id', diger.id);
     loadGruplar(client.id);
+  }
+  // ---------- Home: düzenlenebilir alan listesi (dog_home_alanlar) ----------
+  // anahtar sadece yeni (kullanıcı tanımlı) alanlarda kullanılıyor — standart altısı zaten sabit anahtarlarla
+  // tohumlandı (bkz. loadHomeAlanlar). Aynı client içinde anahtar çakışırsa sonuna -2, -3… eklenir.
+  function slugify(s: string): string {
+    const harfler: Record<string, string> = { ç: 'c', ğ: 'g', ı: 'i', ö: 'o', ş: 's', ü: 'u', İ: 'i', Ç: 'c', Ğ: 'g', Ö: 'o', Ş: 's', Ü: 'u' };
+    return s.trim().toLowerCase().replace(/[çğıöşüİÇĞÖŞÜ]/g, (c) => harfler[c] || c).replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'alan';
+  }
+  function coklu(s: string): string[] { return s.split('\n').map((x) => x.trim()).filter(Boolean); }
+  async function homeAlanEkle(ad: string, neden: string, checklist: string[], ornekler: string[]) {
+    if (!client || !ad.trim()) return;
+    let temel = slugify(ad);
+    let anahtar = temel;
+    let n = 2;
+    while (homeAlanlar.some((a) => a.anahtar === anahtar)) { anahtar = temel + '_' + n; n++; }
+    const sira = homeAlanlar.length ? Math.max(...homeAlanlar.map((a) => a.sira)) + 1 : 0;
+    const ins = await supabase.from('dog_home_alanlar').insert({ client_id: client.id, anahtar, ad: ad.trim(), neden: neden.trim(), checklist, ornekler, sira }).select().single();
+    if (ins.error) { alert('Eklenemedi: ' + ins.error.message); return; }
+    await loadHomeAlanlar(client.id);
+  }
+  async function homeAlanGuncelle(id: string, ad: string, neden: string, checklist: string[], ornekler: string[]) {
+    if (!client || !ad.trim()) return;
+    await supabase.from('dog_home_alanlar').update({ ad: ad.trim(), neden: neden.trim(), checklist, ornekler }).eq('id', id);
+    loadHomeAlanlar(client.id);
+  }
+  async function homeAlanSil(a: any) {
+    if (!client) return;
+    if (!confirm('"' + a.ad + '" alanı silinsin mi? (Bu alana daha önce girilmiş değerlendirmeler kalır ama artık gösterilmez.)')) return;
+    await supabase.from('dog_home_alanlar').delete().eq('id', a.id);
+    loadHomeAlanlar(client.id);
+  }
+  function homeYonetFormAc(a?: any) {
+    if (a) { setHomeAlanDuzenleId(a.id); setHomeAlanAd(a.ad); setHomeAlanNeden(a.neden || ''); setHomeAlanChecklist((a.checklist || []).join('\n')); setHomeAlanOrnekler((a.ornekler || []).join('\n')); }
+    else { setHomeAlanDuzenleId(null); setHomeAlanAd(''); setHomeAlanNeden(''); setHomeAlanChecklist(''); setHomeAlanOrnekler(''); }
+  }
+  async function homeYonetKaydet() {
+    const checklist = coklu(homeAlanChecklist);
+    const ornekler = coklu(homeAlanOrnekler);
+    if (homeAlanDuzenleId) await homeAlanGuncelle(homeAlanDuzenleId, homeAlanAd, homeAlanNeden, checklist, ornekler);
+    else await homeAlanEkle(homeAlanAd, homeAlanNeden, checklist, ornekler);
+    homeYonetFormAc();
   }
   function sureGun(rt: any): number { if (!rt.bitis) return 0; const b = parseD(rt.baslangic || today); const e = parseD(rt.bitis); return Math.round((e.getTime() - b.getTime()) / 86400000) + 1; }
   // Ajanda'da (tur='ritual') sadece detay.obj yamalanır — act ayrı bir kavram (bağlı Program şablonu) olabilir,
@@ -2878,7 +2959,7 @@ export default function Rite() {
         {/* ---------- HOME (v1) ---------- */}
         {/* Uygulamayı ilk açtığında görülen ekran — Ajanda/Havuz gibi "teknik" ekranlara hiç girmeden de kişinin
             kendini birkaç yaşam alanında değerlendirebileceği yer (kullanıcı isteği). Tamamen öznel: hangi kart
-            işaretlenmiş/etiketlenmiş olduğuyla ilgisi yok, kişi kendi hissine göre seçiyor (bkz. HOME_ALAN,
+            işaretlenmiş/etiketlenmiş olduğuyla ilgisi yok, kişi kendi hissine göre seçiyor (bkz. homeAlanlar,
             homeDegerlendir). Alışkanlıklarını oturtmuş/mezun etmiş biri için de arada bir uğrayıp "kilo aldım,
             beslenmeme dikkat edeyim" diyebileceği hafif bir kontrol noktası olması amaçlanıyor. Kartların
             üzerinde artık doğrudan seçenek çipleri YOK (kullanıcı isteği: "doğrudan bir anket formu görüntüsünde"
@@ -2888,20 +2969,26 @@ export default function Rite() {
             kalksın, tek başına ok çok mana taşımıyor" — o yüzden tek bir yön oku yerine burada gerçek bir küçük
             grafik var). Grafik Gelişim'e değil bilerek Home'un kendisine kondu (kullanıcı isteği) — takvim
             günlerine göre değil, o alana ait GERÇEK kayıtların (boşluksuz) son birkaçına göre çiziliyor, çünkü
-            değerlendirme her gün değil ara sıra yapılıyor. Havuz'a bağlama (eksik alan → gerçek aktivite önerisi,
-            hedef/olmak istediği seviye, özel alan tanımlama) hâlâ bu ilk versiyonda yok — Detay'daki örnek
-            aktiviteler (HOME_ALAN_ORNEK) şimdilik sabit/temsili metin, kişinin gerçek Havuz'undan gelmiyor. */}
+            değerlendirme her gün değil ara sıra yapılıyor. Alanların kendisi artık sabit değil — dog_home_alanlar'dan
+            (client'a özel, düzenlenebilir) geliyor, standart altısıyla tohumlanmış durumda; kullanıcı kendi alanını
+            da ekleyebiliyor (kullanıcı isteği: "kullanıcı alan ekleyebilsin... bu bilgilerin düzenlenebilmesi de
+            gerekecek") — bkz. altdaki "Alanları yönet" ve homeYonetOpen. Havuz'a bağlama (eksik alan → gerçek
+            aktivite önerisi, hedef/olmak istediği seviye) hâlâ bu versiyonda yok — Detay'daki örnek aktiviteler
+            şimdilik sabit/temsili metin, kişinin gerçek Havuz'undan gelmiyor. */}
         {screen === 'home' && (
           <div>
-            <div className="note" style={{ marginTop: 0, marginBottom: 12 }}>Kendini bu alanlarda nasıl görüyorsun? (değerlendirmek için ＋'ya dokun)</div>
-            {HOME_ALAN_SIRA.map((alan) => {
-              const arr = measByKey['home_' + alan] || [];
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}>
+              <div className="note" style={{ margin: 0 }}>Kendini bu alanlarda nasıl görüyorsun? (değerlendirmek için ＋'ya dokun)</div>
+              <span className="minlink" onClick={() => { homeYonetFormAc(); setHomeYonetOpen(true); }}>⚙️ Alanları yönet</span>
+            </div>
+            {[...homeAlanlar].sort((a, b) => a.sira - b.sira).map((a) => {
+              const arr = measByKey['home_' + a.anahtar] || [];
               const guncel = arr.length ? Number(arr[arr.length - 1].deger) : null;
               const gecmis = arr.slice(-8); // en fazla son 8 kayıt — takvim günü değil, gerçek değerlendirme sayısı
               return (
-                <div key={alan} className="card" style={{ marginBottom: 10, cursor: 'pointer' }} onClick={() => setHomeDetay(alan)}>
+                <div key={a.id} className="card" style={{ marginBottom: 10, cursor: 'pointer' }} onClick={() => setHomeDetay(a.anahtar)}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                    <h3 style={{ margin: 0 }}>{HOME_ALAN[alan]}</h3>
+                    <h3 style={{ margin: 0 }}>{a.ad}</h3>
                     <span style={{ fontSize: 12, color: 'var(--muted)' }}>Detay ›</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
@@ -4435,27 +4522,44 @@ export default function Rite() {
         </div>
       )}
 
-      {homeDetay && (
-        <div className="modal top2" onMouseDown={() => setHomeDetay(null)}>
-          <div className="sheet small" onMouseDown={(e) => e.stopPropagation()}>
-            <button className="x" onClick={() => setHomeDetay(null)}>×</button>
-            <h3 style={{ marginBottom: 4 }}>{HOME_ALAN[homeDetay]}</h3>
-            <div className="note" style={{ marginTop: 0 }}>{HOME_ALAN_NEDEN[homeDetay]}</div>
-            <div style={{ marginTop: 10 }}>
-              <div className="k" style={{ marginBottom: 3 }}>Nasıl olmalı</div>
-              <div className="note" style={{ marginTop: 0 }}>{HOME_ALAN_ACIKLAMA[homeDetay]}</div>
-            </div>
-            {/* Örnek aktiviteler şimdilik sabit/temsili metin — kişinin gerçek Havuz'una henüz bağlı değil
-                (bkz. HOME_ALAN_ORNEK'in üstündeki not), ilk Havuz ilişkisinin bir fikir taslağı. */}
-            <div style={{ marginTop: 10 }}>
-              <div className="k" style={{ marginBottom: 5 }}>Örnek aktiviteler</div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {HOME_ALAN_ORNEK[homeDetay].map((x) => <span key={x} className="chip" style={{ cursor: 'default' }}>{x}</span>)}
-              </div>
+      {homeDetay && (() => {
+        const a = homeAlanlar.find((x) => x.anahtar === homeDetay);
+        if (!a) return null;
+        return (
+          <div className="modal top2" onMouseDown={() => setHomeDetay(null)}>
+            <div className="sheet small" onMouseDown={(e) => e.stopPropagation()}>
+              <button className="x" onClick={() => setHomeDetay(null)}>×</button>
+              <h3 style={{ marginBottom: 4 }}>{a.ad}</h3>
+              <div className="note" style={{ marginTop: 0 }}>{a.neden}</div>
+              {/* Checklist (kullanıcı isteği): "Mükemmel" demek, bu listenin neredeyse tamamını uyguluyor olmak
+                  demek — kalibrasyon amaçlı, kişinin kendi ölçütü. Prose yerine gerçek bir kontrol listesi. */}
+              {(a.checklist || []).length > 0 && (
+                <div style={{ marginTop: 10 }}>
+                  <div className="k" style={{ marginBottom: 5 }}>Kontrol listesi — "Mükemmel" demek bunların hemen tamamını yapıyor olmak demektir</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {a.checklist.map((x: string, i: number) => (
+                      <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                        <span style={{ color: 'var(--green)' }}>✓</span>
+                        <span className="note" style={{ marginTop: 0 }}>{x}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {/* Örnek aktiviteler şimdilik sabit/temsili metin — kişinin gerçek Havuz'una henüz bağlı değil. */}
+              {(a.ornekler || []).length > 0 && (
+                <div style={{ marginTop: 10 }}>
+                  <div className="k" style={{ marginBottom: 5 }}>Örnek aktiviteler</div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {a.ornekler.map((x: string) => <span key={x} className="chip" style={{ cursor: 'default' }}>{x}</span>)}
+                  </div>
+                </div>
+              )}
+              <span className="minlink" style={{ display: 'inline-block', marginTop: 12 }} onClick={() => { const id = a.id; setHomeDetay(null); homeYonetFormAc(a); setHomeYonetOpen(true); }}>✏️ Bu alanı düzenle</span>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {homeEkleOpen && (
         <div className="modal" onMouseDown={() => setHomeEkleOpen(false)}>
@@ -4467,20 +4571,55 @@ export default function Rite() {
                 (kullanıcı isteği: "çok da anlamlı gelmedi"), bağımsız bir tarih alanı. */}
             <label className="fldlbl" style={{ marginTop: 0 }}>Tarih</label>
             <input type="date" max={today} value={homeEkleTarih || today} onChange={(e) => setHomeEkleTarih(e.target.value)} style={{ marginBottom: 14 }} />
-            {HOME_ALAN_SIRA.map((alan) => {
-              const guncel = homeDegerAtTarih(alan, homeEkleTarih || today);
+            {[...homeAlanlar].sort((a, b) => a.sira - b.sira).map((a) => {
+              const guncel = homeDegerAtTarih(a.anahtar, homeEkleTarih || today);
               return (
-                <div key={alan} style={{ marginBottom: 14 }}>
-                  <label className="fldlbl" style={{ marginTop: 0 }}>{HOME_ALAN[alan]}</label>
+                <div key={a.id} style={{ marginBottom: 14 }}>
+                  <label className="fldlbl" style={{ marginTop: 0 }}>{a.ad}</label>
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     {HOME_SEVIYE.map((s, i) => (
-                      <span key={s} className={'chip' + (guncel === i + 1 ? ' on' : '')} onClick={() => homeDegerlendir(alan, i + 1, homeEkleTarih || today)}>{s}</span>
+                      <span key={s} className={'chip' + (guncel === i + 1 ? ' on' : '')} onClick={() => homeDegerlendir(a.anahtar, i + 1, homeEkleTarih || today)}>{s}</span>
                     ))}
                   </div>
                 </div>
               );
             })}
             <button className="btn" style={{ width: '100%', marginTop: 4 }} onClick={() => setHomeEkleOpen(false)}>Kapat</button>
+          </div>
+        </div>
+      )}
+
+      {homeYonetOpen && (
+        <div className="modal" onMouseDown={() => { setHomeYonetOpen(false); homeYonetFormAc(); }}>
+          <div className="sheet" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="sheetgrip" onClick={() => { setHomeYonetOpen(false); homeYonetFormAc(); }} />
+            <h2>⚙️ Alanları yönet</h2>
+            <div className="note" style={{ marginTop: 0, marginBottom: 12 }}>Standart altı alan (Beslenme, Egzersiz, Uyku, Stres Yönetimi, Meşgale, Sosyal İlişkiler) hazır geliyor — istersen düzenle, sil ya da kendi alanını ekle.</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+              {[...homeAlanlar].sort((a, b) => a.sira - b.sira).map((a) => (
+                <div key={a.id} className="card" style={{ padding: '10px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <span>{a.ad}</span>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <span className="minlink" onClick={() => homeYonetFormAc(a)}>✏️ Düzenle</span>
+                    <span className="minlink" onClick={() => homeAlanSil(a)}>🗑️ Sil</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="timediv"><span className="tl">{homeAlanDuzenleId ? 'Alanı düzenle' : 'Yeni alan ekle'}</span><span className="ln" /></div>
+            <label className="fldlbl">Ad</label>
+            <input value={homeAlanAd} onChange={(e) => setHomeAlanAd(e.target.value)} placeholder="ör. Maneviyat" style={{ marginBottom: 10 }} />
+            <label className="fldlbl">Neden önemli</label>
+            <textarea value={homeAlanNeden} onChange={(e) => setHomeAlanNeden(e.target.value)} rows={2} style={{ width: '100%', marginBottom: 10 }} />
+            <label className="fldlbl">Kontrol listesi (her satır bir madde)</label>
+            <textarea value={homeAlanChecklist} onChange={(e) => setHomeAlanChecklist(e.target.value)} rows={5} style={{ width: '100%', marginBottom: 10 }} />
+            <label className="fldlbl">Örnek aktiviteler (her satır bir madde)</label>
+            <textarea value={homeAlanOrnekler} onChange={(e) => setHomeAlanOrnekler(e.target.value)} rows={3} style={{ width: '100%', marginBottom: 14 }} />
+            <div className="rowbtns">
+              {homeAlanDuzenleId && <button className="btn ghost" onClick={() => homeYonetFormAc()}>Vazgeç</button>}
+              <button className="btn" style={{ flex: 1 }} onClick={homeYonetKaydet} disabled={!homeAlanAd.trim()}>{homeAlanDuzenleId ? 'Kaydet' : '＋ Ekle'}</button>
+            </div>
+            <button className="btn ghost sm" style={{ width: '100%', marginTop: 12 }} onClick={() => { setHomeYonetOpen(false); homeYonetFormAc(); }}>Kapat</button>
           </div>
         </div>
       )}
