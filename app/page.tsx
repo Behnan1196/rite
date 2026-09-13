@@ -72,7 +72,7 @@ const PIL_ALAN_SIRA = ['hareket', 'beslenme', 'mesgale', 'sosyal'];
 const HOME_SEVIYE = ['Zayıf', 'İdare eder', 'İyi', 'Mükemmel'];
 // Home kartlarındaki dikey "termometre" göstergesinin dilim renkleri — HOME_SEVIYE ile aynı sırada (kırmızıdan
 // yeşile). Kullanıcı isteği: kart metnini okumadan bir bakışta renkten durumu anlayabilmek.
-const HOME_SEVIYE_RENK = ['#b45a4a', '#d98a3d', '#c9a227', '#5f8a4e'];
+const HOME_SEVIYE_RENK = ['#8b3223', '#d98a3d', '#8a8f3e', '#8fbf72'];
 // Home'un alanları artık sabit bir JS listesi değil, dog_home_alanlar tablosundan (client_id'ye özel, kullanıcı
 // düzenleyebilir/ekleyebilir) okunuyor — bkz. loadHomeAlanlar, homeAlanEkle/Guncelle/Sil ve migration dosyası
 // (rite_home_alanlar_migration.sql). Bu sabit dizi SADECE bir client'ın ilk açılışında (hiç satırı yoksa) o
@@ -2978,24 +2978,28 @@ export default function Rite() {
               <div className="note" style={{ margin: 0 }}>Kendini bu alanlarda nasıl görüyorsun? (değerlendirmek için ＋'ya dokun)</div>
               <span className="minlink" onClick={() => { homeYonetFormAc(); setHomeYonetOpen(true); }}>⚙️ Alanları yönet</span>
             </div>
-            {[...homeAlanlar].sort((a, b) => a.sira - b.sira).map((a) => {
-              const guncel = homeGuncelDeger(a.anahtar);
-              return (
-                <div key={a.id} className="card" style={{ marginBottom: 10, cursor: 'pointer' }} onClick={() => setHomeDetay(a.anahtar)}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-                    <div>
-                      <h3 style={{ margin: 0 }}>{a.ad}</h3>
-                      <div className="note" style={{ marginTop: 4 }}>{guncel ? HOME_SEVIYE[guncel - 1] : 'Henüz değerlendirilmedi'}</div>
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column-reverse', gap: 3, width: 20, height: 52, borderRadius: 6, border: '1px solid var(--line)', padding: 3, boxSizing: 'border-box', flex: '0 0 auto' }} title={guncel ? HOME_SEVIYE[guncel - 1] : 'Henüz değerlendirilmedi'}>
-                      {HOME_SEVIYE_RENK.map((renk, i) => (
-                        <div key={i} style={{ flex: 1, borderRadius: 2, background: guncel && i < guncel ? renk : '#efe8da' }} />
-                      ))}
+            {/* 2 sütunlu ızgara (kullanıcı isteği: "her satırda 2 kart olsun"). Gösterge artık 4 ayrı dilim değil,
+                dolan TEK bir pil (kullanıcı isteği) — dolu kısmın tamamı seviyeye göre tek bir renk: %25 koyu
+                kırmızı, %50 turuncu, %75 zeytin yeşili, %100 açık yeşil (bkz. HOME_SEVIYE_RENK, örnek renkler
+                kullanıcıdan). */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              {[...homeAlanlar].sort((a, b) => a.sira - b.sira).map((a) => {
+                const guncel = homeGuncelDeger(a.anahtar);
+                return (
+                  <div key={a.id} className="card" style={{ margin: 0, cursor: 'pointer' }} onClick={() => setHomeDetay(a.anahtar)}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <div style={{ minWidth: 0 }}>
+                        <h3 style={{ margin: 0 }}>{a.ad}</h3>
+                        <div className="note" style={{ marginTop: 4 }}>{guncel ? HOME_SEVIYE[guncel - 1] : 'Henüz değerlendirilmedi'}</div>
+                      </div>
+                      <div style={{ width: 18, height: 50, borderRadius: 6, border: '1px solid var(--line)', background: '#efe8da', display: 'flex', alignItems: 'flex-end', overflow: 'hidden', flex: '0 0 auto' }} title={guncel ? HOME_SEVIYE[guncel - 1] : 'Henüz değerlendirilmedi'}>
+                        {guncel && <div style={{ width: '100%', height: (guncel / HOME_SEVIYE.length) * 100 + '%', background: HOME_SEVIYE_RENK[guncel - 1], transition: 'height .3s' }} />}
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         )}
 
