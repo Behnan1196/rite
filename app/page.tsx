@@ -1608,6 +1608,7 @@ export default function Rite() {
   // ornekler/sabit) artık aynı tablodan geliyor, o yüzden select bunları da kapsıyor.
   async function loadGruplar(clientId: string) {
     const g = await supabase.from('dog_gruplar').select('id,ad,ust_id,sira,anahtar,neden,checklist,ornekler,sabit').eq('client_id', clientId).order('sira');
+    if (g.error) { console.error('dog_gruplar select hatası:', g.error); alert('Gruplar yüklenemedi: ' + g.error.message); return []; }
     const rows = g.data || [];
     setGrupListesi(rows);
     return rows;
@@ -1621,10 +1622,12 @@ export default function Rite() {
     let root = rows.find((g) => !g.ust_id && (g.sabit || g.ad === 'Meridyen'));
     if (!root) {
       const ins = await supabase.from('dog_gruplar').insert({ client_id: clientId, ad: 'Meridyen', ust_id: null, sira: -1, sabit: true }).select().single();
-      if (ins.error) { console.error('Meridyen grubu oluşturulamadı:', ins.error); return; }
+      if (ins.error) { console.error('Meridyen grubu oluşturulamadı:', ins.error); alert('Meridyen grubu oluşturulamadı: ' + ins.error.message); return; }
       root = ins.data;
     } else if (!root.sabit) {
-      await supabase.from('dog_gruplar').update({ sabit: true }).eq('id', root.id);
+      const upd = await supabase.from('dog_gruplar').update({ sabit: true }).eq('id', root.id);
+      if (upd.error) { console.error('Meridyen sabit işaretlenemedi:', upd.error); alert('Meridyen grubu kilitlenemedi: ' + upd.error.message); return; }
+      root = { ...root, sabit: true };
     }
     const altlar = rows.filter((g) => g.ust_id === root.id);
     if (altlar.length === 0) {
