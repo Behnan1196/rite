@@ -73,10 +73,12 @@ const HOME_SEVIYE = ['Zayıf', 'İdare eder', 'İyi', 'Mükemmel'];
 // Home kartlarındaki dikey "termometre" göstergesinin dilim renkleri — HOME_SEVIYE ile aynı sırada (kırmızıdan
 // yeşile). Kullanıcı isteği: kart metnini okumadan bir bakışta renkten durumu anlayabilmek.
 const HOME_SEVIYE_RENK = ['#8b3223', '#d98a3d', '#8a8f3e', '#8fbf72'];
-// Home'un alanları artık sabit bir JS listesi değil, dog_home_alanlar tablosundan (client_id'ye özel, kullanıcı
-// düzenleyebilir/ekleyebilir) okunuyor — bkz. loadHomeAlanlar, homeAlanEkle/Guncelle/Sil ve migration dosyası
-// (rite_home_alanlar_migration.sql). Bu sabit dizi SADECE bir client'ın ilk açılışında (hiç satırı yoksa) o
-// tabloya YAZILACAK standart alanların başlangıç içeriği. v2 (2026-09): Behnan'ın kendi "Esenlik çalışması"
+// Home'un alanları artık sabit bir JS listesi değil, Havuz/Kütüphane'nin kalıcı grup tablosundan (dog_gruplar,
+// kullanıcının değiştiremeyeceği kilitli "Meridyen" kökünün alt grupları) okunuyor — bkz. ensureMeridyenGrubu,
+// homeAlanEkle/Guncelle/Sil ve migration dosyası (rite_gruplar_alan_migration.sql). Düzenleme artık Havuz'daki
+// "Grupları yönet" ekranından yapılıyor (kullanıcı isteği: "düzenleme doğrudan Kütüphane'de olsa daha mantıklı").
+// Bu sabit dizi SADECE bir client'ın Meridyen kökünün hiç alt grubu yokken (ilk açılış, ya da eski
+// dog_home_alanlar'da da satır yoksa) tohumlanacak standart alanların başlangıç içeriği. v2 (2026-09): Behnan'ın kendi "Esenlik çalışması"
 // (yüklediği PDF) 4 üst sütun (Bedensel & Metabolik / Zihinsel & Duygusal / Çevresel & Sosyal / Aktif Üretim)
 // altında 13 alt-alan tanımlıyor — kullanıcı isteği: "pdf de bulunan 13 alan ile başlayabiliriz". Checklist
 // maddeleri PDF'teki alt-madde listelerinden birebir alındı (Behnan'ın kendi araştırması, üçüncü taraf kaynak
@@ -1398,16 +1400,20 @@ export default function Rite() {
   const [ritMenuFor, setRitMenuFor] = useState<any>(null);
   const [homeDetay, setHomeDetay] = useState<string | null>(null);
   const [homeEkleOpen, setHomeEkleOpen] = useState(false);
-  // Home'un alanları artık client'a özel, düzenlenebilir bir liste (dog_home_alanlar) — bkz. loadHomeAlanlar.
-  // Yönetim ekranı (Alanları yönet): mevcut bir alanı düzenlerken formu doldurup homeAlanDuzenleId'ye o satırın
-  // id'sini yazıyoruz; yeni alan eklerken id null kalıyor ama form yine aynı state'leri kullanıyor.
-  const [homeAlanlar, setHomeAlanlar] = useState<any[]>([]);
-  const [homeYonetOpen, setHomeYonetOpen] = useState(false);
+  // Home'un alanları artık ayrı bir tablo değil, Havuz/Kütüphane'nin kalıcı Grup listesinin (dog_gruplar) bir
+  // parçası: kullanıcının değiştiremeyeceği kilitli "Meridyen" kökünün alt grupları (bkz. grupListesi,
+  // meridyenRoot, homeAlanlar altta ve ensureMeridyenGrubu). Düzenleme artık Kütüphane'nin "Grupları yönet"
+  // ekranından yapılıyor (bkz. alanFormFor) — bu state'ler o formun ortak alanları.
+  // Yönetim: mevcut bir alanı düzenlerken formu doldurup homeAlanDuzenleId'ye o satırın id'sini yazıyoruz; yeni
+  // alan eklerken id null kalıyor ama form yine aynı state'leri kullanıyor.
   const [homeAlanDuzenleId, setHomeAlanDuzenleId] = useState<string | null>(null);
   const [homeAlanAd, setHomeAlanAd] = useState('');
   const [homeAlanNeden, setHomeAlanNeden] = useState('');
   const [homeAlanChecklist, setHomeAlanChecklist] = useState('');
   const [homeAlanOrnekler, setHomeAlanOrnekler] = useState('');
+  // Grupları yönet ekranında Meridyen kökünün altında hangi alanın (zengin ad/neden/checklist/örnekler) formu
+  // açık: null = kapalı, 'yeni' = yeni alan ekleme, yoksa düzenlenen alt grubun id'si.
+  const [alanFormFor, setAlanFormFor] = useState<string | null>(null);
   const [remMenuFor, setRemMenuFor] = useState<any>(null);
   const [urlInput, setUrlInput] = useState('');
   const [adInput, setAdInput] = useState('');
@@ -1594,30 +1600,41 @@ export default function Rite() {
     } else { setAnchors([]); setCNot(''); }
     const m = await supabase.from('dog_measurements').select('tarih,anahtar,deger,birim').eq('client_id', clientId).order('tarih', { ascending: true }).limit(80);
     setMeas(m.data || []);
-    loadGruplar(clientId);
-    loadHomeAlanlar(clientId);
+    const rows = await loadGruplar(clientId);
+    ensureMeridyenGrubu(clientId, rows);
   }
   // Havuz'daki kalıcı Grup/Alt grup listesi (bkz. dog_gruplar) — Gruplar yönet ekranındaki her ekle/yeniden
-  // adlandır/sil/sırala işleminden sonra da tekrar çağrılıyor.
+  // adlandır/sil/sırala işleminden sonra da tekrar çağrılıyor. Home'un alanları da (anahtar/neden/checklist/
+  // ornekler/sabit) artık aynı tablodan geliyor, o yüzden select bunları da kapsıyor.
   async function loadGruplar(clientId: string) {
-    const g = await supabase.from('dog_gruplar').select('id,ad,ust_id,sira').eq('client_id', clientId).order('sira');
-    setGrupListesi(g.data || []);
+    const g = await supabase.from('dog_gruplar').select('id,ad,ust_id,sira,anahtar,neden,checklist,ornekler,sabit').eq('client_id', clientId).order('sira');
+    const rows = g.data || [];
+    setGrupListesi(rows);
+    return rows;
   }
-  // Home'un alanları (bkz. dog_home_alanlar) — client'ın ilk açılışında (hiç satırı yoksa) HOME_ALAN_VARSAYILAN'daki
-  // altı standart alanla tohumlanıyor (kullanıcı isteği: "standart alanlar ilk başta olsun"), sonrasında tamamen
-  // client'a özel ve düzenlenebilir. Alanları yönet ekranındaki her ekle/düzenle/sil işleminden sonra da tekrar
-  // çağrılıyor.
-  async function loadHomeAlanlar(clientId: string) {
-    const h = await supabase.from('dog_home_alanlar').select('id,anahtar,ad,neden,checklist,ornekler,sira').eq('client_id', clientId).order('sira');
-    if (h.error) { console.error('dog_home_alanlar select hatası:', h.error); alert('Alanlar yüklenemedi: ' + h.error.message); return; }
-    let rows = h.data || [];
-    if (rows.length === 0) {
-      const seed = HOME_ALAN_VARSAYILAN.map((a, i) => ({ client_id: clientId, anahtar: a.anahtar, ad: a.ad, neden: a.neden, checklist: a.checklist, ornekler: a.ornekler, sira: i }));
-      const ins = await supabase.from('dog_home_alanlar').insert(seed).select('id,anahtar,ad,neden,checklist,ornekler,sira');
-      if (ins.error) { console.error('dog_home_alanlar tohumlama hatası:', ins.error); alert('Standart alanlar oluşturulamadı: ' + ins.error.message); return; }
-      rows = ins.data || [];
+  // Home'un alanlarının yaşadığı, kullanıcının yeniden adlandıramayacağı/silemeyeceği kilitli kök grup: "Meridyen".
+  // Kullanıcı Havuz'da bunu zaten elle oluşturmuştu (kullanıcı isteği: "zaten Meridyen diye bir grup yaratmıştım,
+  // ve oraya kullanıcının dokunmamasını istiyordum") — bulunca üstüne sabit:true basıyoruz, hiç yoksa oluşturuyoruz.
+  // İçi boşsa önce eski dog_home_alanlar'da (varsa, kullanıcının daha önce düzenlemiş olabileceği) client'a özel
+  // alanları buraya taşıyoruz, o da boşsa HOME_ALAN_VARSAYILAN'ı tohumluyoruz. Client açılışında bir kere çağrılıyor.
+  async function ensureMeridyenGrubu(clientId: string, rows: any[]) {
+    let root = rows.find((g) => !g.ust_id && (g.sabit || g.ad === 'Meridyen'));
+    if (!root) {
+      const ins = await supabase.from('dog_gruplar').insert({ client_id: clientId, ad: 'Meridyen', ust_id: null, sira: -1, sabit: true }).select().single();
+      if (ins.error) { console.error('Meridyen grubu oluşturulamadı:', ins.error); return; }
+      root = ins.data;
+    } else if (!root.sabit) {
+      await supabase.from('dog_gruplar').update({ sabit: true }).eq('id', root.id);
     }
-    setHomeAlanlar(rows);
+    const altlar = rows.filter((g) => g.ust_id === root.id);
+    if (altlar.length === 0) {
+      const eski = await supabase.from('dog_home_alanlar').select('anahtar,ad,neden,checklist,ornekler,sira').eq('client_id', clientId).order('sira');
+      const kaynak = eski.data && eski.data.length > 0 ? eski.data : HOME_ALAN_VARSAYILAN;
+      const seed = kaynak.map((a: any, i: number) => ({ client_id: clientId, ust_id: root.id, ad: a.ad, anahtar: a.anahtar, neden: a.neden || '', checklist: a.checklist || [], ornekler: a.ornekler || [], sira: i, sabit: false }));
+      const ins2 = await supabase.from('dog_gruplar').insert(seed);
+      if (ins2.error) { console.error('Alanlar taşınamadı:', ins2.error); alert('Alanlar oluşturulamadı: ' + ins2.error.message); return; }
+    }
+    await loadGruplar(clientId);
   }
 
   // ---------- e-posta ile kendi hesabını aç / giriş yap ----------
@@ -1963,35 +1980,39 @@ export default function Rite() {
     await supabase.from('dog_gruplar').update({ sira: g.sira }).eq('id', diger.id);
     loadGruplar(client.id);
   }
-  // ---------- Home: düzenlenebilir alan listesi (dog_home_alanlar) ----------
-  // anahtar sadece yeni (kullanıcı tanımlı) alanlarda kullanılıyor — standart altısı zaten sabit anahtarlarla
-  // tohumlandı (bkz. loadHomeAlanlar). Aynı client içinde anahtar çakışırsa sonuna -2, -3… eklenir.
+  // ---------- Home: düzenlenebilir alan listesi (artık dog_gruplar'ın "Meridyen" kökü altındaki alt gruplar) ----------
+  // meridyenRoot: kilitli kök grup satırı (bkz. ensureMeridyenGrubu — client açılışında garanti ediliyor).
+  // homeAlanlar: o kökün alt grupları, sira'ya göre sıralı — Home ekranı ve Detay artık doğrudan bunu okuyor.
+  const meridyenRoot = grupListesi.find((g) => !g.ust_id && (g.sabit || g.ad === 'Meridyen'));
+  const homeAlanlar = meridyenRoot ? grupListesi.filter((g) => g.ust_id === meridyenRoot.id).sort((a, b) => a.sira - b.sira) : [];
+  // anahtar sadece yeni (kullanıcı tanımlı) alanlarda kullanılıyor — standart 13'ü zaten sabit anahtarlarla
+  // tohumlandı (bkz. ensureMeridyenGrubu). Aynı client içinde anahtar çakışırsa sonuna -2, -3… eklenir.
   function slugify(s: string): string {
     const harfler: Record<string, string> = { ç: 'c', ğ: 'g', ı: 'i', ö: 'o', ş: 's', ü: 'u', İ: 'i', Ç: 'c', Ğ: 'g', Ö: 'o', Ş: 's', Ü: 'u' };
     return s.trim().toLowerCase().replace(/[çğıöşüİÇĞÖŞÜ]/g, (c) => harfler[c] || c).replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'alan';
   }
   function coklu(s: string): string[] { return s.split('\n').map((x) => x.trim()).filter(Boolean); }
   async function homeAlanEkle(ad: string, neden: string, checklist: string[], ornekler: string[]) {
-    if (!client || !ad.trim()) return;
+    if (!client || !ad.trim() || !meridyenRoot) return;
     let temel = slugify(ad);
     let anahtar = temel;
     let n = 2;
     while (homeAlanlar.some((a) => a.anahtar === anahtar)) { anahtar = temel + '_' + n; n++; }
     const sira = homeAlanlar.length ? Math.max(...homeAlanlar.map((a) => a.sira)) + 1 : 0;
-    const ins = await supabase.from('dog_home_alanlar').insert({ client_id: client.id, anahtar, ad: ad.trim(), neden: neden.trim(), checklist, ornekler, sira }).select().single();
+    const ins = await supabase.from('dog_gruplar').insert({ client_id: client.id, ust_id: meridyenRoot.id, anahtar, ad: ad.trim(), neden: neden.trim(), checklist, ornekler, sira, sabit: false }).select().single();
     if (ins.error) { alert('Eklenemedi: ' + ins.error.message); return; }
-    await loadHomeAlanlar(client.id);
+    await loadGruplar(client.id);
   }
   async function homeAlanGuncelle(id: string, ad: string, neden: string, checklist: string[], ornekler: string[]) {
     if (!client || !ad.trim()) return;
-    await supabase.from('dog_home_alanlar').update({ ad: ad.trim(), neden: neden.trim(), checklist, ornekler }).eq('id', id);
-    loadHomeAlanlar(client.id);
+    await supabase.from('dog_gruplar').update({ ad: ad.trim(), neden: neden.trim(), checklist, ornekler }).eq('id', id);
+    loadGruplar(client.id);
   }
   async function homeAlanSil(a: any) {
     if (!client) return;
     if (!confirm('"' + a.ad + '" alanı silinsin mi? (Bu alana daha önce girilmiş değerlendirmeler kalır ama artık gösterilmez.)')) return;
-    await supabase.from('dog_home_alanlar').delete().eq('id', a.id);
-    loadHomeAlanlar(client.id);
+    await supabase.from('dog_gruplar').delete().eq('id', a.id);
+    loadGruplar(client.id);
   }
   function homeYonetFormAc(a?: any) {
     if (a) { setHomeAlanDuzenleId(a.id); setHomeAlanAd(a.ad); setHomeAlanNeden(a.neden || ''); setHomeAlanChecklist((a.checklist || []).join('\n')); setHomeAlanOrnekler((a.ornekler || []).join('\n')); }
@@ -2005,13 +2026,14 @@ export default function Rite() {
     homeYonetFormAc();
   }
   // Alan taksonomisi değiştiğinde (ör. HOME_ALAN_VARSAYILAN güncellenince) mevcut bir client'ın eski alanlarını
-  // yeni standart listeyle değiştirmesi için — tüm mevcut alanları (kullanıcının kendi eklediği özel alanlar
-  // dahil) siler, loadHomeAlanlar zaten "hiç satır yoksa tohumla" mantığıyla HOME_ALAN_VARSAYILAN'ı yeniden yazar.
+  // yeni standart listeyle değiştirmesi için — Meridyen kökünün altındaki tüm alt grupları (kullanıcının kendi
+  // eklediği özel alanlar dahil) siler, ensureMeridyenGrubu bir sonraki yüklemede "hiç alt grup yoksa tohumla"
+  // mantığıyla HOME_ALAN_VARSAYILAN'ı yeniden yazar.
   async function homeAlanlarSifirla() {
-    if (!client) return;
+    if (!client || !meridyenRoot) return;
     if (!confirm('Tüm alanların silinip standart listeyle değiştirilsin mi? Kendi eklediğin özel alanlar da dahil silinir (geçmiş değerlendirmeler etkilenmez, sadece artık hiçbir alana bağlı görünmezler).')) return;
-    await supabase.from('dog_home_alanlar').delete().eq('client_id', client.id);
-    await loadHomeAlanlar(client.id);
+    await supabase.from('dog_gruplar').delete().eq('ust_id', meridyenRoot.id);
+    await ensureMeridyenGrubu(client.id, await loadGruplar(client.id));
   }
   function sureGun(rt: any): number { if (!rt.bitis) return 0; const b = parseD(rt.baslangic || today); const e = parseD(rt.bitis); return Math.round((e.getTime() - b.getTime()) / 86400000) + 1; }
   // Ajanda'da (tur='ritual') sadece detay.obj yamalanır — act ayrı bir kavram (bağlı Program şablonu) olabilir,
@@ -3020,17 +3042,18 @@ export default function Rite() {
             "Kendini değerlendir" formundan (bkz. homeEkleOpen) yapılıyor. Durumu HOME_SEVIYE_RENK renk skalasında
             dikey bir "termometre" gösteriyor — dört dilim (Zayıf→Mükemmel), geçerli seviyeye kadar kendi rengiyle
             dolu, üstü soluk — kullanıcı isteği: "mükemmel, iyi gibi ibareleri okumadan bir bakışta renk
-            dilimlerinden durumunu görebilmeli". Alanların kendisi artık sabit değil — dog_home_alanlar'dan
-            (client'a özel, düzenlenebilir) geliyor, standart altısıyla tohumlanmış durumda; kullanıcı kendi alanını
-            da ekleyebiliyor (kullanıcı isteği: "kullanıcı alan ekleyebilsin... bu bilgilerin düzenlenebilmesi de
-            gerekecek") — bkz. altdaki "Alanları yönet" ve homeYonetOpen. Havuz'a bağlama (eksik alan → gerçek
+            dilimlerinden durumunu görebilmeli". Alanların kendisi artık sabit değil — Havuz/Kütüphane'nin kalıcı
+            grup tablosundan (dog_gruplar, kilitli "Meridyen" kökünün alt grupları) geliyor, standart 13'üyle
+            tohumlanmış durumda; kullanıcı kendi alanını da ekleyebiliyor, ama düzenleme artık doğrudan Havuz'daki
+            "Grupları yönet" ekranından yapılıyor (kullanıcı isteği: "düzenleme doğrudan Kütüphane'de olsa daha
+            mantıklı") — bkz. ensureMeridyenGrubu, alanFormFor. Havuz'a bağlama (eksik alan → gerçek
             aktivite önerisi, hedef/olmak istediği seviye) hâlâ bu versiyonda yok — Detay'daki örnek aktiviteler
             şimdilik sabit/temsili metin, kişinin gerçek Havuz'undan gelmiyor. */}
         {screen === 'home' && (
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}>
               <div className="note" style={{ margin: 0 }}>Kendini bu alanlarda nasıl görüyorsun? (değerlendirmek için ＋'ya dokun)</div>
-              <span className="minlink" onClick={() => { homeYonetFormAc(); setHomeYonetOpen(true); }}>⚙️ Alanları yönet</span>
+              <span className="minlink" onClick={() => { homeYonetFormAc(); setAlanFormFor(null); setScreen('havuz'); setGruplarYonetOpen(true); }}>⚙️ Alanları yönet</span>
             </div>
             {/* 2 sütunlu ızgara (kullanıcı isteği: "her satırda 2 kart olsun"). Gösterge artık 4 ayrı dilim değil,
                 dolan TEK bir pil (kullanıcı isteği) — dolu kısmın tamamı seviyeye göre tek bir renk: %25 koyu
@@ -4607,7 +4630,7 @@ export default function Rite() {
                   </div>
                 </div>
               )}
-              <span className="minlink" style={{ display: 'inline-block', marginTop: 12 }} onClick={() => { const id = a.id; setHomeDetay(null); homeYonetFormAc(a); setHomeYonetOpen(true); }}>✏️ Bu alanı düzenle</span>
+              <span className="minlink" style={{ display: 'inline-block', marginTop: 12 }} onClick={() => { setHomeDetay(null); homeYonetFormAc(a); setAlanFormFor(a.id); setScreen('havuz'); setGruplarYonetOpen(true); }}>✏️ Bu alanı düzenle</span>
             </div>
           </div>
         );
@@ -4636,41 +4659,6 @@ export default function Rite() {
               );
             })}
             <button className="btn" style={{ width: '100%', marginTop: 4 }} onClick={() => setHomeEkleOpen(false)}>Kapat</button>
-          </div>
-        </div>
-      )}
-
-      {homeYonetOpen && (
-        <div className="modal" onMouseDown={() => { setHomeYonetOpen(false); homeYonetFormAc(); }}>
-          <div className="sheet" onMouseDown={(e) => e.stopPropagation()}>
-            <div className="sheetgrip" onClick={() => { setHomeYonetOpen(false); homeYonetFormAc(); }} />
-            <h2>⚙️ Alanları yönet</h2>
-            <div className="note" style={{ marginTop: 0, marginBottom: 12 }}>Standart 13 alan hazır geliyor — istersen düzenle, sil ya da kendi alanını ekle. <span className="minlink" onClick={homeAlanlarSifirla}>↺ Standart alanlara sıfırla</span></div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
-              {[...homeAlanlar].sort((a, b) => a.sira - b.sira).map((a) => (
-                <div key={a.id} className="card" style={{ padding: '10px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                  <span>{a.ad}</span>
-                  <div style={{ display: 'flex', gap: 10 }}>
-                    <span className="minlink" onClick={() => homeYonetFormAc(a)}>✏️ Düzenle</span>
-                    <span className="minlink" onClick={() => homeAlanSil(a)}>🗑️ Sil</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="timediv"><span className="tl">{homeAlanDuzenleId ? 'Alanı düzenle' : 'Yeni alan ekle'}</span><span className="ln" /></div>
-            <label className="fldlbl">Ad</label>
-            <input value={homeAlanAd} onChange={(e) => setHomeAlanAd(e.target.value)} placeholder="ör. Maneviyat" style={{ marginBottom: 10 }} />
-            <label className="fldlbl">Neden önemli</label>
-            <textarea value={homeAlanNeden} onChange={(e) => setHomeAlanNeden(e.target.value)} rows={2} style={{ width: '100%', marginBottom: 10 }} />
-            <label className="fldlbl">Kontrol listesi (her satır bir madde)</label>
-            <textarea value={homeAlanChecklist} onChange={(e) => setHomeAlanChecklist(e.target.value)} rows={5} style={{ width: '100%', marginBottom: 10 }} />
-            <label className="fldlbl">Örnek aktiviteler (her satır bir madde)</label>
-            <textarea value={homeAlanOrnekler} onChange={(e) => setHomeAlanOrnekler(e.target.value)} rows={3} style={{ width: '100%', marginBottom: 14 }} />
-            <div className="rowbtns">
-              {homeAlanDuzenleId && <button className="btn ghost" onClick={() => homeYonetFormAc()}>Vazgeç</button>}
-              <button className="btn" style={{ flex: 1 }} onClick={homeYonetKaydet} disabled={!homeAlanAd.trim()}>{homeAlanDuzenleId ? 'Kaydet' : '＋ Ekle'}</button>
-            </div>
-            <button className="btn ghost sm" style={{ width: '100%', marginTop: 12 }} onClick={() => { setHomeYonetOpen(false); homeYonetFormAc(); }}>Kapat</button>
           </div>
         </div>
       )}
@@ -4904,9 +4892,9 @@ export default function Rite() {
           besleniyor — serbestçe yazılan, kalıcı olmayan bir isimden çok, "Duruş" / "Bel çukurluğu" gibi
           gerçek bir araştırma başlığı listesi. */}
       {gruplarYonetOpen && (
-        <div className="modal" onMouseDown={() => { setGruplarYonetOpen(false); setGrupDuzenleId(null); setAltGrupEkleFor(null); }}>
+        <div className="modal" onMouseDown={() => { setGruplarYonetOpen(false); setGrupDuzenleId(null); setAltGrupEkleFor(null); setAlanFormFor(null); homeYonetFormAc(); }}>
           <div className="sheet" onMouseDown={(e) => e.stopPropagation()}>
-            <button className="x" onClick={() => { setGruplarYonetOpen(false); setGrupDuzenleId(null); setAltGrupEkleFor(null); }}>×</button>
+            <button className="x" onClick={() => { setGruplarYonetOpen(false); setGrupDuzenleId(null); setAltGrupEkleFor(null); setAlanFormFor(null); homeYonetFormAc(); }}>×</button>
             <h2>🗂 Grupları yönet</h2>
             <div className="note" style={{ marginTop: 0 }}>Her Grup bir araştırma başlığı, Alt gruplar onun altındaki daha ince konular.</div>
             {grupUst.length === 0 && <div className="note">Henüz Grup yok — aşağıdan ekle.</div>}
@@ -4919,7 +4907,11 @@ export default function Rite() {
                       <button className="minlink" style={{ padding: 0 }} onClick={() => grupSiraDegistir(g, -1)} disabled={i === 0}>▲</button>
                       <button className="minlink" style={{ padding: 0 }} onClick={() => grupSiraDegistir(g, 1)} disabled={i === grupUst.length - 1}>▼</button>
                     </div>
-                    {grupDuzenleId === g.id ? (
+                    {g.sabit ? (
+                      <>
+                        <b style={{ flex: 1 }}>{g.ad} <span className="note" style={{ fontWeight: 400 }}>🔒 sabit</span></b>
+                      </>
+                    ) : grupDuzenleId === g.id ? (
                       <>
                         <input value={grupDuzenleAd} onChange={(e) => setGrupDuzenleAd(e.target.value)} style={{ flex: 1 }} autoFocus />
                         <button className="btn sm" onClick={() => { grupYenidenAdlandir(g.id, grupDuzenleAd); setGrupDuzenleId(null); }}>Kaydet</button>
@@ -4934,13 +4926,24 @@ export default function Rite() {
                     )}
                   </div>
                   <div style={{ margin: '4px 0 0 24px' }}>
+                    {/* "Meridyen" kökünün alt grupları (= Home'un alanları) sadece ad değil, neden/checklist/
+                        örnekler de taşıyor — o yüzden düz yeniden-adlandırma yerine zengin form (bkz. alanFormFor,
+                        homeYonetFormAc/homeYonetKaydet — Home'daki "Alanları yönet" ile aynı state ve fonksiyonlar,
+                        sadece burada gösteriliyor: kullanıcı isteği "düzenleme doğrudan Kütüphane'de olsa daha
+                        mantıklı"). Sıradan Grup/Alt gruplar eskisi gibi düz ad ile kalıyor. */}
                     {altlar.map((ag, j) => (
                       <div key={ag.id} style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '3px 0' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                           <button className="minlink" style={{ padding: 0, fontSize: 10 }} onClick={() => grupSiraDegistir(ag, -1)} disabled={j === 0}>▲</button>
                           <button className="minlink" style={{ padding: 0, fontSize: 10 }} onClick={() => grupSiraDegistir(ag, 1)} disabled={j === altlar.length - 1}>▼</button>
                         </div>
-                        {grupDuzenleId === ag.id ? (
+                        {g.sabit ? (
+                          <>
+                            <span className="note" style={{ margin: 0, flex: 1 }}>{ag.ad}</span>
+                            <button className="minlink" onClick={() => { homeYonetFormAc(ag); setAlanFormFor(ag.id); }}>✎</button>
+                            <button className="minlink" style={{ color: 'var(--red)' }} onClick={() => homeAlanSil(ag)}>🗑</button>
+                          </>
+                        ) : grupDuzenleId === ag.id ? (
                           <>
                             <input value={grupDuzenleAd} onChange={(e) => setGrupDuzenleAd(e.target.value)} style={{ flex: 1 }} autoFocus />
                             <button className="btn sm" onClick={() => { grupYenidenAdlandir(ag.id, grupDuzenleAd); setGrupDuzenleId(null); }}>Kaydet</button>
@@ -4955,7 +4958,27 @@ export default function Rite() {
                         )}
                       </div>
                     ))}
-                    {altGrupEkleFor === g.id ? (
+                    {g.sabit ? (
+                      (alanFormFor === 'yeni' || altlar.some((x) => x.id === alanFormFor)) ? (
+                        <div className="card" style={{ margin: '8px 0 0', padding: 10 }}>
+                          <div className="note" style={{ marginTop: 0, marginBottom: 8 }}>{alanFormFor === 'yeni' ? 'Yeni alan ekle' : 'Alanı düzenle'}</div>
+                          <label className="fldlbl">Ad</label>
+                          <input value={homeAlanAd} onChange={(e) => setHomeAlanAd(e.target.value)} placeholder="ör. Maneviyat" style={{ marginBottom: 8, width: '100%' }} />
+                          <label className="fldlbl">Neden önemli</label>
+                          <textarea value={homeAlanNeden} onChange={(e) => setHomeAlanNeden(e.target.value)} rows={2} style={{ width: '100%', marginBottom: 8 }} />
+                          <label className="fldlbl">Kontrol listesi (her satır bir madde)</label>
+                          <textarea value={homeAlanChecklist} onChange={(e) => setHomeAlanChecklist(e.target.value)} rows={4} style={{ width: '100%', marginBottom: 8 }} />
+                          <label className="fldlbl">Örnek aktiviteler (her satır bir madde)</label>
+                          <textarea value={homeAlanOrnekler} onChange={(e) => setHomeAlanOrnekler(e.target.value)} rows={3} style={{ width: '100%', marginBottom: 10 }} />
+                          <div className="rowbtns">
+                            <button className="btn ghost sm" onClick={() => { homeYonetFormAc(); setAlanFormFor(null); }}>Vazgeç</button>
+                            <button className="btn sm" style={{ flex: 1 }} onClick={async () => { await homeYonetKaydet(); setAlanFormFor(null); }} disabled={!homeAlanAd.trim()}>{alanFormFor === 'yeni' ? '＋ Ekle' : 'Kaydet'}</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button className="minlink" style={{ margin: '4px 0 0' }} onClick={() => { homeYonetFormAc(); setAlanFormFor('yeni'); }}>+ Yeni alan ekle</button>
+                      )
+                    ) : altGrupEkleFor === g.id ? (
                       <div style={{ display: 'flex', gap: 6, margin: '4px 0' }}>
                         <input value={altGrupYeniAd} onChange={(e) => setAltGrupYeniAd(e.target.value)} placeholder="Alt grup adı" style={{ flex: 1 }} autoFocus />
                         <button className="btn sm" onClick={() => { grupEkle(altGrupYeniAd, g.id); setAltGrupYeniAd(''); setAltGrupEkleFor(null); }}>Ekle</button>
@@ -4964,6 +4987,7 @@ export default function Rite() {
                     ) : (
                       <button className="minlink" style={{ margin: '4px 0 0' }} onClick={() => { setAltGrupEkleFor(g.id); setAltGrupYeniAd(''); }}>+ Alt grup</button>
                     )}
+                    {g.sabit && <div className="minlink" style={{ margin: '8px 0 0' }} onClick={homeAlanlarSifirla}>↺ Standart alanlara sıfırla</div>}
                   </div>
                 </div>
               );
