@@ -1437,6 +1437,10 @@ export default function Rite() {
   const [kGrup, setKGrup] = useState('Genel');
   const [kVin, setKVin] = useState({ baslik: '', url: '' });
   const [kMsg, setKMsg] = useState('');
+  // Kişisel aktiviteyi Home'un Meridyen alanlarıyla (anahtar bazlı) etiketlemek için — eski fayda→alan
+  // taksonomisine dokunmadan ayrı, çoklu-seçim bir alan (2026-09, Behnan kararı: "direkt Home etiketi" —
+  // dog_activities.home_alanlar). Home Detay'daki "Aktivitelerin" listesi buna göre filtreleniyor.
+  const [kHomeAlanlar, setKHomeAlanlar] = useState<string[]>([]);
   const [paylasBusy, setPaylasBusy] = useState(false);
   const [kShareTo, setKShareTo] = useState('');
   const [kisiler, setKisiler] = useState<any[]>([]);
@@ -1815,10 +1819,17 @@ export default function Rite() {
     }
     loadData(client.id);
   }
-  function studioReset() { setKAd(''); setKAcik(''); setKGrup('Genel'); setKVin({ baslik: '', url: '' }); setKZamanlar(['gün']); setKEditId(null); setKMsg(''); }
+  function studioReset() { setKAd(''); setKAcik(''); setKGrup('Genel'); setKVin({ baslik: '', url: '' }); setKZamanlar(['gün']); setKEditId(null); setKMsg(''); setKHomeAlanlar([]); }
   function openStudioEdit(a: any) {
     studioReset();
-    setKAd(a.ad || ''); setKAcik(a.aciklama || ''); setKGrup(a.grup && a.grup !== 'Kişisel' ? a.grup : 'Genel'); setKVin({ baslik: '', url: (a.videolar && a.videolar[0]?.url) || '' }); setKZamanlar(a.zamanlar && a.zamanlar.length ? [a.zamanlar[0]] : [a.zaman || 'gün']); setKEditId(a.id);
+    setKAd(a.ad || ''); setKAcik(a.aciklama || ''); setKGrup(a.grup && a.grup !== 'Kişisel' ? a.grup : 'Genel'); setKVin({ baslik: '', url: (a.videolar && a.videolar[0]?.url) || '' }); setKZamanlar(a.zamanlar && a.zamanlar.length ? [a.zamanlar[0]] : [a.zaman || 'gün']); setKEditId(a.id); setKHomeAlanlar(a.home_alanlar || []);
+    setStudioOpen(true);
+  }
+  // Home'un bir alan Detay'ından "+ Aktivite ekle" ile açılırken: boş bir taslak, sadece o alanın anahtarıyla
+  // ve (varsa) adıyla önceden dolduruluyor — kaydedince studioKaydet zaten normal insert akışına giriyor.
+  function openStudioForHomeAlan(alan: any) {
+    studioReset();
+    setKGrup(alan.ad || 'Genel'); setKHomeAlanlar([alan.anahtar]);
     setStudioOpen(true);
   }
   // Adım zamanlama özeti: "↳ ardından · M gün" / "başla +Ng · M gün"
@@ -1833,7 +1844,7 @@ export default function Rite() {
     if (!client) return;
     if (!kAd.trim()) return setKMsg('Ad gir');
     const url = kVin.url.trim();
-    const row: any = { client_id: client.id, tur: 'aktivite', ad: kAd.trim(), grup: kGrup.trim() || 'Genel', faydalar: [], aciklama: kAcik || null, videolar: url ? [{ baslik: kAd.trim(), url }] : [], zaman: kZamanlar[0] || 'gün', zamanlar: kZamanlar, kaynak_etiket: 'Kendi', aktif: true };
+    const row: any = { client_id: client.id, tur: 'aktivite', ad: kAd.trim(), grup: kGrup.trim() || 'Genel', faydalar: [], aciklama: kAcik || null, videolar: url ? [{ baslik: kAd.trim(), url }] : [], zaman: kZamanlar[0] || 'gün', zamanlar: kZamanlar, kaynak_etiket: 'Kendi', aktif: true, home_alanlar: kHomeAlanlar };
     const r = kEditId ? await supabase.from('dog_activities').update(row).eq('id', kEditId) : await supabase.from('dog_activities').insert(row);
     if (r.error) return setKMsg('Hata: ' + r.error.message);
     const savedGrup = row.grup;
@@ -4558,7 +4569,8 @@ export default function Rite() {
                   </div>
                 </div>
               )}
-              {/* Örnek aktiviteler şimdilik sabit/temsili metin — kişinin gerçek Havuz'una henüz bağlı değil. */}
+              {/* Örnek aktiviteler: Kütüphane'nin "Grupları yönet" formunda kürator/kullanıcının kendi yazdığı
+                  sabit/temsili metin — gerçek bir aktiviteye bağlı değil, sadece fikir vermek için. */}
               {(a.ornekler || []).length > 0 && (
                 <div style={{ marginTop: 10 }}>
                   <div className="k" style={{ marginBottom: 5 }}>Örnek aktiviteler</div>
@@ -4567,6 +4579,25 @@ export default function Rite() {
                   </div>
                 </div>
               )}
+              {/* Aktivitelerin (2026-09, Behnan kararı — "aktiviteleri canlı yapmak"): bu alanla Studio'dan
+                  etiketlenmiş GERÇEK kişisel Havuz aktiviteleri (bkz. kHomeAlanlar/home_alanlar). Tıklayınca
+                  aktivitenin kendi Detay'ı (openDetay) Home'un üstünde açılıyor. */}
+              <div style={{ marginTop: 10 }}>
+                <div className="k" style={{ marginBottom: 5 }}>Aktivitelerin</div>
+                {(() => {
+                  const iliskili = personalActs.filter((p: any) => (p.home_alanlar || []).includes(a.anahtar));
+                  return iliskili.length > 0 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 6 }}>
+                      {iliskili.map((p: any) => (
+                        <div key={p.id} className="chip" style={{ cursor: 'pointer', textAlign: 'left', display: 'block' }} onClick={() => { setHomeDetay(null); openDetay(p, 'aktivite'); }}>{p.ad}</div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="note" style={{ margin: '0 0 6px' }}>Bu alanla ilişkili bir aktiviten henüz yok.</div>
+                  );
+                })()}
+                <span className="minlink" onClick={() => { setHomeDetay(null); openStudioForHomeAlan(a); }}>+ Aktivite ekle</span>
+              </div>
               {/* Değerlendirme (2026-09, Behnan kararı — geri döndü): toplu "Kendini değerlendir" formu (eski
                   homeEkleOpen, ＋'dan açılıyordu) kaldırıldı, değerlendirme yine kartın kendi Detay'ının sonunda
                   ("senin önceden yaptığın gibi kartların detayının sonunda daha mantıklıydı"). ＋ artık Home'da
@@ -4688,6 +4719,16 @@ export default function Rite() {
             <input value={kVin.url} onChange={(e) => setKVin((s) => ({ ...s, url: e.target.value }))} placeholder="https://youtube.com/…" />
             <label className="fldlbl">Zaman dilimi</label>
             <div>{TODS.map(([z, l]) => <span key={z} className={'chip' + (kZamanlar[0] === z ? ' on' : '')} onClick={() => setKZamanlar([z])}>{l}</span>)}</div>
+            {/* Home'un Meridyen alanlarıyla etiketleme (ops., çoklu) — Home'un alan Detay'ındaki "Aktivitelerin"
+                listesi bu etiketlere göre filtreleniyor (bkz. kHomeAlanlar, home_alanlar). */}
+            {homeAlanlar.length > 0 && (
+              <>
+                <label className="fldlbl">Home alanları (ops. — hangi alan(lar)la ilgili?)</label>
+                <div>{homeAlanlar.map((ha) => (
+                  <span key={ha.anahtar} className={'chip' + (kHomeAlanlar.includes(ha.anahtar) ? ' on' : '')} onClick={() => setKHomeAlanlar((s) => s.includes(ha.anahtar) ? s.filter((x) => x !== ha.anahtar) : [...s, ha.anahtar])}>{ha.ad}</span>
+                ))}</div>
+              </>
+            )}
             <div className="rowbtns" style={{ marginTop: 14 }}>
               <button className="btn" onClick={studioKaydet}>Kaydet</button>
               <button className="btn ghost sm" onClick={() => { studioReset(); setStudioOpen(false); }}>Vazgeç</button>
