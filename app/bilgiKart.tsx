@@ -67,7 +67,7 @@ function Acc({ title, summary, defaultOpen, children }: { title: string; summary
 // YouTube için enablejsapi=1 + playsinline=1 her zaman eklenir: cümle segmentlerini "postMessage" komutuyla (src'yi
 // yeniden yükletmeden) oynatabilmek için gerekli — src'yi değiştirip autoplay=1 ile yeniden yükletmek mobil
 // tarayıcıların otomatik oynatma kısıtlarına takılıyordu (masaüstünde çalışıp telefonda çalışmamasının sebebi buydu).
-function embedInfo(url?: string | null, bas?: number | null, bit?: number | null): { tur: 'yt' | 'ig'; src: string } | null {
+function embedInfo(url?: string | null, bas?: number | null, bit?: number | null): { tur: 'yt'; src: string; id: string } | { tur: 'ig'; src: string } | null {
   if (!url) return null;
   let m = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|shorts\/|embed\/|live\/))([\w-]{6,})/);
   if (m) {
@@ -75,17 +75,86 @@ function embedInfo(url?: string | null, bas?: number | null, bit?: number | null
     if (bas && bas > 0) q.push('start=' + Math.floor(bas));
     if (bit && bit > 0) q.push('end=' + Math.floor(bit));
     if (typeof window !== 'undefined') q.push('origin=' + encodeURIComponent(window.location.origin));
-    return { tur: 'yt', src: 'https://www.youtube.com/embed/' + m[1] + '?' + q.join('&') };
+    return { tur: 'yt', id: m[1], src: 'https://www.youtube.com/embed/' + m[1] + '?' + q.join('&') };
   }
   m = url.match(/instagram\.com\/(reel|reels|p|tv)\/([\w-]+)/);
   if (m) { const t = m[1] === 'reels' ? 'reel' : m[1]; return { tur: 'ig', src: 'https://www.instagram.com/' + t + '/' + m[2] + '/embed' }; }
   return null;
 }
+// ---- Chromecast'e "Yansıt" ----
+// Gömülü YouTube /embed/ player'ı HİÇBİR platformda (web/iOS/Android, PWA ya da native sarmalanmış app fark etmez)
+// kendi yerleşik bir Cast ikonu göstermiyor — bu, Rite'ın devre dışı bıraktığı bir şey değil, Google'ın embed
+// player'ının kendi kısıtı. Bu düğme onu telafi ediyor: Google Cast Web Sender SDK'sını yükleyip YouTube'un kendi
+// Cast alıcı uygulamasına (resmi/genel API dokümantasyonunda YOK ama youtube.com'un kendi Cast düğmesinin de
+// kullandığı, yıllardır değişmeyen uygulama kimliği + mesaj protokolü) videoyu tam ayarladığımız saniyeden
+// başlatarak gönderiyor — "cümle/adım atla" özelliğiyle aynı mantık, sadece hedef artık TV.
+// Sınırlar: (1) sadece Chromecast/Google TV — aynı Wi-Fi ağında bir cihaz + Chrome/Android gerekir; Safari/iOS'ta
+// Google Cast API'si hiç yok, düğme kendiliğinden hiç görünmez (ready=false kalır). (2) AirPlay bu yolla mümkün
+// değil — YouTube içeriği için AirPlay ancak YouTube'un kendi uygulamasına geçilerek elde edilir. (3) Bu protokol
+// resmî olarak desteklenmiyor; Google ileride değiştirirse düğme sessizce işlevsiz kalabilir (try/catch ile
+// sarılı, hata durumunda konsola yazar, kullanıcıya çökme/patlama olarak yansımaz).
+let castSdkPromise: Promise<boolean> | null = null;
+function loadCastSdk(): Promise<boolean> {
+  if (typeof window === 'undefined') return Promise.resolve(false);
+  const w = window as any;
+  if (castSdkPromise) return castSdkPromise;
+  castSdkPromise = new Promise((resolve) => {
+    if (w.chrome?.cast?.isAvailable) { resolve(true); return; }
+    w.__onGCastApiAvailable = (isAvailable: boolean) => {
+      if (!isAvailable) { resolve(false); return; }
+      try {
+        w.cast.framework.CastContext.getInstance().setOptions({
+          receiverApplicationId: '233637DE', // YouTube'un kendi Cast alıcı uygulaması (bkz. üstteki not)
+          autoJoinPolicy: w.chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED,
+        });
+        resolve(true);
+      } catch (e) { console.warn('Cast SDK başlatılamadı:', e); resolve(false); }
+    };
+    const s = document.createElement('script');
+    s.src = 'https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1';
+    s.async = true;
+    s.onerror = () => resolve(false);
+    document.head.appendChild(s);
+  });
+  return castSdkPromise;
+}
+function YansitButton({ videoId, bas }: { videoId: string; bas?: number | null }) {
+  const [ready, setReady] = useState(false);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    loadCastSdk().then((ok) => { if (alive) setReady(ok); });
+    return () => { alive = false; };
+  }, []);
+  async function yansit() {
+    const w = window as any;
+    setBusy(true);
+    try {
+      const ctx = w.cast.framework.CastContext.getInstance();
+      let session = ctx.getCurrentSession();
+      if (!session) { await ctx.requestSession(); session = ctx.getCurrentSession(); }
+      if (session) {
+        await session.sendMessage('urn:x-cast:com.google.youtube.mdx', {
+          type: 'loadVideo',
+          data: { videoId, currentTime: bas && bas > 0 ? Math.floor(bas) : 0, resumePlayback: false },
+        });
+      }
+    } catch (e) { console.warn('Yansıtma başlatılamadı:', e); }
+    setBusy(false);
+  }
+  if (!ready) return null;
+  return <button className="btn ghost sm" style={{ marginTop: 4 }} onClick={yansit} disabled={busy} title="Chromecast/Google TV'ye yansıt — aynı Wi-Fi ağında bir cihaz gerekir">📺 {busy ? 'Bağlanıyor…' : 'Yansıt'}</button>;
+}
 // iframeRef verilirse YouTube oynatıcısına dışarıdan postMessage komutu (seekTo/playVideo/pauseVideo) gönderilebilir.
 function EmbedVideo({ url, bas, bit, iframeRef }: { url?: string | null; bas?: number | null; bit?: number | null; iframeRef?: { current: HTMLIFrameElement | null } }) {
   const info = embedInfo(url, bas, bit);
   if (!info) return url ? <a className="btn ghost sm" href={url} target="_blank" rel="noreferrer">▶ Aç</a> : null;
-  if (info.tur === 'yt') return <div className="ytwrap"><iframe ref={iframeRef} src={info.src} title="video" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen /></div>;
+  if (info.tur === 'yt') return (
+    <>
+      <div className="ytwrap"><iframe ref={iframeRef} src={info.src} title="video" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen /></div>
+      <YansitButton videoId={info.id} bas={bas} />
+    </>
+  );
   return <iframe className="igframe" src={info.src} title="video" scrolling="no" allowFullScreen />;
 }
 // Tarayıcının yerel TTS'i (Web Speech API) ile metni sesli okur — dil öğrenim kartlarında kelime/cümle telaffuzu için.
