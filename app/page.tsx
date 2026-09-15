@@ -1414,6 +1414,10 @@ export default function Rite() {
   // Grupları yönet ekranında Meridyen kökünün altında hangi alanın (zengin ad/neden/checklist/örnekler) formu
   // açık: null = kapalı, 'yeni' = yeni alan ekleme, yoksa düzenlenen alt grubun id'si.
   const [alanFormFor, setAlanFormFor] = useState<string | null>(null);
+  // Home'un KENDİ ekranı: içerik değil (o hep Kütüphane'den), sadece Meridyen alanlarından hangisinin Home'da
+  // görüneceği ve sırası (kullanıcı isteği: "Home da sadece o ekranda bulunması, sırasının ayarlanması ve
+  // ekrandan kaldırılması için kendi formu olmalı... Değişiklikler sadece kütüphaneden yapılmalı").
+  const [homeYonetOpen, setHomeYonetOpen] = useState(false);
   const [remMenuFor, setRemMenuFor] = useState<any>(null);
   const [urlInput, setUrlInput] = useState('');
   const [adInput, setAdInput] = useState('');
@@ -1605,9 +1609,9 @@ export default function Rite() {
   }
   // Havuz'daki kalıcı Grup/Alt grup listesi (bkz. dog_gruplar) — Gruplar yönet ekranındaki her ekle/yeniden
   // adlandır/sil/sırala işleminden sonra da tekrar çağrılıyor. Home'un alanları da (anahtar/neden/checklist/
-  // ornekler/sabit) artık aynı tablodan geliyor, o yüzden select bunları da kapsıyor.
+  // ornekler/sabit/home_gizli) artık aynı tablodan geliyor, o yüzden select bunları da kapsıyor.
   async function loadGruplar(clientId: string) {
-    const g = await supabase.from('dog_gruplar').select('id,ad,ust_id,sira,anahtar,neden,checklist,ornekler,sabit').eq('client_id', clientId).order('sira');
+    const g = await supabase.from('dog_gruplar').select('id,ad,ust_id,sira,anahtar,neden,checklist,ornekler,sabit,home_gizli').eq('client_id', clientId).order('sira');
     if (g.error) { console.error('dog_gruplar select hatası:', g.error); alert('Gruplar yüklenemedi: ' + g.error.message); return []; }
     const rows = g.data || [];
     setGrupListesi(rows);
@@ -1988,6 +1992,18 @@ export default function Rite() {
   // homeAlanlar: o kökün alt grupları, sira'ya göre sıralı — Home ekranı ve Detay artık doğrudan bunu okuyor.
   const meridyenRoot = grupListesi.find((g) => !g.ust_id && (g.sabit || g.ad === 'Meridyen'));
   const homeAlanlar = meridyenRoot ? grupListesi.filter((g) => g.ust_id === meridyenRoot.id).sort((a, b) => a.sira - b.sira) : [];
+  // Home ekranında (kart ızgarası + "Kendini değerlendir" formu) SADECE gizlenmemiş alanlar görünür — bkz.
+  // homeYonetOpen, homeAlanGizleDegistir. Home'un kendi yönetim ekranı ise (gizli olanı geri göstermek için)
+  // tam listeyi (homeAlanlar) kullanıyor.
+  const homeAlanlarGorunur = homeAlanlar.filter((a) => !a.home_gizli);
+  // Home'da bir alanı ekrandan kaldırma/geri gösterme — içerik (ad/neden/checklist/ornekler) DEĞİŞMİYOR, sadece
+  // Home'un kart listesinde görünüp görünmeyeceği. Sıra için ayrı bir alan yok, Kütüphane'yle paylaşılan `sira`
+  // kullanılıyor (bkz. grupSiraDegistir — Home'un kendi ekranından da aynı fonksiyon çağrılıyor).
+  async function homeAlanGizleDegistir(a: any) {
+    if (!client) return;
+    await supabase.from('dog_gruplar').update({ home_gizli: !a.home_gizli }).eq('id', a.id);
+    loadGruplar(client.id);
+  }
   // anahtar sadece yeni (kullanıcı tanımlı) alanlarda kullanılıyor — standart 13'ü zaten sabit anahtarlarla
   // tohumlandı (bkz. ensureMeridyenGrubu). Aynı client içinde anahtar çakışırsa sonuna -2, -3… eklenir.
   function slugify(s: string): string {
@@ -3047,23 +3063,28 @@ export default function Rite() {
             dolu, üstü soluk — kullanıcı isteği: "mükemmel, iyi gibi ibareleri okumadan bir bakışta renk
             dilimlerinden durumunu görebilmeli". Alanların kendisi artık sabit değil — Havuz/Kütüphane'nin kalıcı
             grup tablosundan (dog_gruplar, kilitli "Meridyen" kökünün alt grupları) geliyor, standart 13'üyle
-            tohumlanmış durumda; kullanıcı kendi alanını da ekleyebiliyor, ama düzenleme artık doğrudan Havuz'daki
-            "Grupları yönet" ekranından yapılıyor (kullanıcı isteği: "düzenleme doğrudan Kütüphane'de olsa daha
-            mantıklı") — bkz. ensureMeridyenGrubu, alanFormFor. Havuz'a bağlama (eksik alan → gerçek
-            aktivite önerisi, hedef/olmak istediği seviye) hâlâ bu versiyonda yok — Detay'daki örnek aktiviteler
-            şimdilik sabit/temsili metin, kişinin gerçek Havuz'undan gelmiyor. */}
+            tohumlanmış durumda. İçerik (ad/neden/checklist/ornekler) değişikliği SADECE Havuz'daki "Grupları
+            yönet" ekranından yapılıyor (kullanıcı isteği: "değişiklikler sadece kütüphaneden yapılmalı") — Home
+            kendi başına yeni alan ekleyemiyor/içerik düzenleyemiyor. Home'un kendi "⚙️ Alanları yönet" ekranı
+            (homeYonetOpen) SADECE hangi alanların Home'da görüneceğini (home_gizli) ve sırasını (paylaşılan
+            `sira`, bkz. grupSiraDegistir) ayarlıyor — kullanıcı isteği: "Home da sadece o ekranda bulunması,
+            sırasının ayarlanması ve ekrandan kaldırılması için kendi formu olmalı". Kart ızgarası ve
+            "Kendini değerlendir" formu bu yüzden homeAlanlar değil, gizlenmemiş olanları (homeAlanlarGorunur)
+            kullanıyor. Havuz'a bağlama (eksik alan → gerçek aktivite önerisi, hedef/olmak istediği seviye) hâlâ
+            bu versiyonda yok — Detay'daki örnek aktiviteler şimdilik sabit/temsili metin, kişinin gerçek
+            Havuz'undan gelmiyor. */}
         {screen === 'home' && (
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}>
               <div className="note" style={{ margin: 0 }}>Kendini bu alanlarda nasıl görüyorsun? (değerlendirmek için ＋'ya dokun)</div>
-              <span className="minlink" onClick={() => { homeYonetFormAc(); setAlanFormFor(null); setScreen('havuz'); setGruplarYonetOpen(true); }}>⚙️ Alanları yönet</span>
+              <span className="minlink" onClick={() => setHomeYonetOpen(true)}>⚙️ Alanları yönet</span>
             </div>
             {/* 2 sütunlu ızgara (kullanıcı isteği: "her satırda 2 kart olsun"). Gösterge artık 4 ayrı dilim değil,
                 dolan TEK bir pil (kullanıcı isteği) — dolu kısmın tamamı seviyeye göre tek bir renk: %25 koyu
                 kırmızı, %50 turuncu, %75 zeytin yeşili, %100 açık yeşil (bkz. HOME_SEVIYE_RENK, örnek renkler
                 kullanıcıdan). */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              {[...homeAlanlar].sort((a, b) => a.sira - b.sira).map((a) => {
+              {homeAlanlarGorunur.map((a) => {
                 const guncel = homeGuncelDeger(a.anahtar);
                 return (
                   <div key={a.id} className="card" style={{ margin: 0, cursor: 'pointer' }} onClick={() => setHomeDetay(a.anahtar)}>
@@ -4633,7 +4654,7 @@ export default function Rite() {
                   </div>
                 </div>
               )}
-              <span className="minlink" style={{ display: 'inline-block', marginTop: 12 }} onClick={() => { setHomeDetay(null); homeYonetFormAc(a); setAlanFormFor(a.id); setScreen('havuz'); setGruplarYonetOpen(true); }}>✏️ Bu alanı düzenle</span>
+              <div className="note" style={{ marginTop: 12 }}>Bu alanın adını, checklist'ini ya da örneklerini değiştirmek için Kütüphane'deki "Grupları yönet" ekranını kullan.</div>
             </div>
           </div>
         );
@@ -4648,7 +4669,7 @@ export default function Rite() {
                 yok, son yaptığı değerlendirme üzerinden gitmeliyiz") — her seçim doğrudan bugüne (today) yazılıyor.
                 homeDegerlendir'in tarih parametresi altyapıda kalıyor (ileride başka bir nedenle gerekebilir),
                 sadece burada artık kullanılmıyor. */}
-            {[...homeAlanlar].sort((a, b) => a.sira - b.sira).map((a) => {
+            {homeAlanlarGorunur.map((a) => {
               const guncel = homeGuncelDeger(a.anahtar);
               return (
                 <div key={a.id} style={{ marginBottom: 14 }}>
@@ -4662,6 +4683,34 @@ export default function Rite() {
               );
             })}
             <button className="btn" style={{ width: '100%', marginTop: 4 }} onClick={() => setHomeEkleOpen(false)}>Kapat</button>
+          </div>
+        </div>
+      )}
+
+      {/* Home'un KENDİ yönetim ekranı: içerik değişikliği yok (o hep Kütüphane'den) — sadece hangi Meridyen
+          alanının Home'da görüneceği (home_gizli) ve sırası (paylaşılan `sira`, grupSiraDegistir ile). Kullanıcı
+          isteği: "Home da sadece o ekranda bulunması, sırasının ayarlanması ve ekrandan kaldırılması için kendi
+          formu olmalı... değişiklikler sadece kütüphaneden yapılmalı". */}
+      {homeYonetOpen && (
+        <div className="modal" onMouseDown={() => setHomeYonetOpen(false)}>
+          <div className="sheet" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="sheetgrip" onClick={() => setHomeYonetOpen(false)} />
+            <h2>⚙️ Alanları yönet</h2>
+            <div className="note" style={{ marginTop: 0, marginBottom: 12 }}>Hangi alanların Home'da görüneceğini ve sırasını buradan ayarla. Adını, kontrol listesini ya da örneklerini değiştirmek için Kütüphane'deki "Grupları yönet" ekranını kullan.</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {homeAlanlar.length === 0 && <div className="note">Henüz alan yok.</div>}
+              {homeAlanlar.map((a, i) => (
+                <div key={a.id} className="card" style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8, opacity: a.home_gizli ? 0.55 : 1 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                    <button className="minlink" style={{ padding: 0, fontSize: 10 }} onClick={() => grupSiraDegistir(a, -1)} disabled={i === 0}>▲</button>
+                    <button className="minlink" style={{ padding: 0, fontSize: 10 }} onClick={() => grupSiraDegistir(a, 1)} disabled={i === homeAlanlar.length - 1}>▼</button>
+                  </div>
+                  <span style={{ flex: 1 }}>{a.ad}</span>
+                  <span className="minlink" onClick={() => homeAlanGizleDegistir(a)}>{a.home_gizli ? '🙈 Göster' : '👁 Gizle'}</span>
+                </div>
+              ))}
+            </div>
+            <button className="btn ghost sm" style={{ width: '100%', marginTop: 14 }} onClick={() => setHomeYonetOpen(false)}>Kapat</button>
           </div>
         </div>
       )}
