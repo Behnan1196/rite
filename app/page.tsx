@@ -1399,7 +1399,6 @@ export default function Rite() {
   // aynı desen).
   const [ritMenuFor, setRitMenuFor] = useState<any>(null);
   const [homeDetay, setHomeDetay] = useState<string | null>(null);
-  const [homeEkleOpen, setHomeEkleOpen] = useState(false);
   // Home'un alanları artık ayrı bir tablo değil, Havuz/Kütüphane'nin kalıcı Grup listesinin (dog_gruplar) bir
   // parçası: kullanıcının değiştiremeyeceği kilitli "Meridyen" kökünün alt grupları (bkz. grupListesi,
   // meridyenRoot, homeAlanlar altta ve ensureMeridyenGrubu). Düzenleme artık Kütüphane'nin "Grupları yönet"
@@ -3062,8 +3061,9 @@ export default function Rite() {
             üzerinde artık doğrudan seçenek çipleri YOK (kullanıcı isteği: "doğrudan bir anket formu görüntüsünde"
             olmasın) — kartlar SADECE SON değerlendirmeyi gösteriyor (kullanıcı isteği: "geçmiş tarihli
             değerlendirmeler görmemize gerek bile yok, son yaptığı değerlendirme üzerinden gitmeliyiz" — bu yüzden
-            eski sparkline/geçmiş grafiği kaldırıldı), değerlendirme girişi sadece alt bardaki ＋ ile açılan toplu
-            "Kendini değerlendir" formundan (bkz. homeEkleOpen) yapılıyor. Durumu HOME_SEVIYE_RENK renk skalasında
+            eski sparkline/geçmiş grafiği kaldırıldı). Değerlendirme girişi (2026-09, Behnan kararı) artık toplu bir
+            formda değil — karta dokununca açılan Detay'ın (homeDetay) sonundaki "Kendini değerlendir" çiplerinden
+            yapılıyor; alt bardaki ＋ artık Ölçüm ekle açıyor (bkz. olcumEkleOpen). Durumu HOME_SEVIYE_RENK renk skalasında
             dikey bir "termometre" gösteriyor — dört dilim (Zayıf→Mükemmel), geçerli seviyeye kadar kendi rengiyle
             dolu, üstü soluk — kullanıcı isteği: "mükemmel, iyi gibi ibareleri okumadan bir bakışta renk
             dilimlerinden durumunu görebilmeli". Alanların kendisi artık sabit değil — Havuz/Kütüphane'nin kalıcı
@@ -3081,7 +3081,7 @@ export default function Rite() {
         {screen === 'home' && (
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}>
-              <div className="note" style={{ margin: 0 }}>Kendini bu alanlarda nasıl görüyorsun? (değerlendirmek için ＋'ya dokun)</div>
+              <div className="note" style={{ margin: 0 }}>Kendini bu alanlarda nasıl görüyorsun? (değerlendirmek için bir karta dokun)</div>
               <span className="minlink" onClick={() => setHomeYonetOpen(true)}>⚙️ Alanları yönet</span>
             </div>
             {/* 2 sütunlu ızgara (kullanıcı isteği: "her satırda 2 kart olsun"). Gösterge artık 4 ayrı dilim değil,
@@ -3727,20 +3727,19 @@ export default function Rite() {
         ))}
         {/* ＋ tuşu artık her sekmede görünüyor (kullanıcı isteği — Ayarlar'da grileşip devre dışı kalmak,
             hiç kaybolmaktan daha tutarlı). Ajanda'da tam menü, Havuz'da daraltılmış menü (bkz. ekleMenüsü);
-            Gelişim'de kart eklemek yerine hızlı bir Ölçüm/Değerlendirme girişi açıyor (kullanıcı fikri) —
-            böylece Gelişim'deki ＋ de gerçekten işe yarıyor. Home'da da aynı mantıkla, tüm alanları tek seferde
-            değerlendirebileceğin toplu bir form açıyor (bkz. homeEkleOpen) — kullanıcı isteği: kartların kendisi
-            "anket formu" gibi durmasın, girdi ayrı bir yerden (buradan ya da kartın Detay'ından) gelsin. Sadece
+            Gelişim'de kart eklemek yerine hızlı bir Ölçüm girişi açıyor (kullanıcı fikri) — böylece Gelişim'deki
+            ＋ de gerçekten işe yarıyor. Home'da da (2026-09, Behnan kararı) aynı Ölçüm ekle formu açılıyor — eski
+            toplu "Kendini değerlendir" formu (homeEkleOpen) kaldırıldı, kendini değerlendirme artık kartın kendi
+            Detay'ının sonunda ("kartların detayının sonunda daha mantıklıydı" — kullanıcı isteği). Sadece
             Ayarlar'da yapılacak bir "ekleme"/"değerlendirme" yok. */}
         <button
           className={'plus' + (screen === 'bilgi' ? ' dim' : '')}
           disabled={screen === 'bilgi'}
           onClick={() => {
-            if (screen === 'gelisim') { setOlcumSecAnahtar(null); setOlcumOzelAd(''); setOlcumDeger(''); setOlcumBirim(''); setOlcumEkleOpen(true); }
-            else if (screen === 'home') { setHomeEkleOpen(true); }
+            if (screen === 'gelisim' || screen === 'home') { setOlcumSecAnahtar(null); setOlcumOzelAd(''); setOlcumDeger(''); setOlcumBirim(''); setOlcumEkleOpen(true); }
             else if (screen !== 'bilgi') setEkleMenuOpen(true);
           }}
-          aria-label={screen === 'gelisim' ? 'Ölçüm ekle' : screen === 'home' ? 'Kendini değerlendir' : 'Ekle'}
+          aria-label={screen === 'gelisim' || screen === 'home' ? 'Ölçüm ekle' : 'Ekle'}
         >＋</button>
         {[['gelisim', '📈', 'Gelişim'], ['bilgi', '⚙', 'Ayarlar']].map(([k, ic, l]) => (
           <button key={k} className={screen === k ? 'on' : ''} onClick={() => setScreen(k)}><span className="ic">{ic}</span>{l}</button>
@@ -4568,38 +4567,23 @@ export default function Rite() {
                   </div>
                 </div>
               )}
+              {/* Değerlendirme (2026-09, Behnan kararı — geri döndü): toplu "Kendini değerlendir" formu (eski
+                  homeEkleOpen, ＋'dan açılıyordu) kaldırıldı, değerlendirme yine kartın kendi Detay'ının sonunda
+                  ("senin önceden yaptığın gibi kartların detayının sonunda daha mantıklıydı"). ＋ artık Home'da
+                  Ölçüm ekle açıyor (bkz. nav'daki ＋ handler). Tarih seçimi hâlâ yok — her seçim bugüne yazılıyor. */}
+              <div style={{ marginTop: 12 }}>
+                <div className="k" style={{ marginBottom: 5 }}>Kendini değerlendir</div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {HOME_SEVIYE.map((s, i) => (
+                    <span key={s} className={'chip' + (homeGuncelDeger(a.anahtar) === i + 1 ? ' on' : '')} onClick={() => homeDegerlendir(a.anahtar, i + 1)}>{s}</span>
+                  ))}
+                </div>
+              </div>
               <div className="note" style={{ marginTop: 12 }}>Bu alanın adını, checklist'ini ya da örneklerini değiştirmek için Kütüphane'deki "Grupları yönet" ekranını kullan.</div>
             </div>
           </div>
         );
       })()}
-
-      {homeEkleOpen && (
-        <div className="modal" onMouseDown={() => setHomeEkleOpen(false)}>
-          <div className="sheet" onMouseDown={(e) => e.stopPropagation()}>
-            <div className="sheetgrip" onClick={() => setHomeEkleOpen(false)} />
-            <h2>🏠 Kendini değerlendir</h2>
-            {/* Tarih seçimi kaldırıldı (kullanıcı isteği: "geçmiş tarihli değerlendirmeler görmemize gerek bile
-                yok, son yaptığı değerlendirme üzerinden gitmeliyiz") — her seçim doğrudan bugüne (today) yazılıyor.
-                homeDegerlendir'in tarih parametresi altyapıda kalıyor (ileride başka bir nedenle gerekebilir),
-                sadece burada artık kullanılmıyor. */}
-            {homeAlanlarGorunur.map((a) => {
-              const guncel = homeGuncelDeger(a.anahtar);
-              return (
-                <div key={a.id} style={{ marginBottom: 14 }}>
-                  <label className="fldlbl" style={{ marginTop: 0 }}>{a.ad}</label>
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {HOME_SEVIYE.map((s, i) => (
-                      <span key={s} className={'chip' + (guncel === i + 1 ? ' on' : '')} onClick={() => homeDegerlendir(a.anahtar, i + 1)}>{s}</span>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-            <button className="btn" style={{ width: '100%', marginTop: 4 }} onClick={() => setHomeEkleOpen(false)}>Kapat</button>
-          </div>
-        </div>
-      )}
 
       {/* Home'un KENDİ yönetim ekranı: içerik değişikliği yok (o hep Kütüphane'den) — sadece hangi Meridyen
           alanının Home'da görüneceği (home_gizli) ve sırası (paylaşılan `sira`, grupSiraDegistir ile). Kullanıcı
