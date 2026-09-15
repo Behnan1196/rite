@@ -2873,9 +2873,6 @@ export default function Rite() {
   // görünmesi bitis=null altyapısını Alışkanlık'la paylaşmanın yan etkisiydi). Not'un kendi, günlerden bağımsız
   // gösterimi aşağıdaki `notlar` listesi ve Ajanda'nın altındaki "Notlar" şeridi (bkz. rowbody JSX'i).
   const habits = rituals.filter((r) => !r.mezun && !isNotKart(r) && activeOn(r, day));
-  // Günün üstündeki ilerleme şeridi (dayprog) için Ayraç sayılmıyor (Not zaten habits'te yok artık) — "yapıldı"
-  // kavramı taşımadığı için habits'e karışsa oranı asla tamamlanamayan bir şeye kilitlerdi.
-  const habitsSayilan = habits.filter((r) => r.kart_tipi !== 'ayrac');
   // Notlar: güne bağlı değil, mezun olmamış tüm kişisel Not'lar — Ajanda'nın altında, hangi gün seçili olursa
   // olsun hep aynı şekilde görünen ayrı bir şerit (kullanıcı isteği).
   const notlar = rituals.filter((r) => !r.mezun && isNotKart(r));
@@ -2915,9 +2912,6 @@ export default function Rite() {
   const days7 = lastDays(7);
   const last30 = lastDays(30);
   const weekArr = weekDays(day);
-  const gelHabits = rituals;
-  const uyumHabits = rituals.filter((r) => r.aliskanlik && !r.mezun);
-  const weekHabits = rituals.filter((r) => r.aliskanlik && weekArr.some((d) => activeOn(r, d)));
   const ibBadge = inbox.filter((x) => x.durum === 'yeni').length;
   const personalActs = activities.filter((a) => a.client_id === client.id);
   const personalGroupOf = (a: any) => a.grup && a.grup !== 'Kişisel' ? a.grup : 'Genel';
@@ -2995,6 +2989,13 @@ export default function Rite() {
             yapıldıysa o oranda dolu), altta bu haftanın 7 günü — ayrı bir gelişim ekranına girmeden, listeyi
             hiç açmadan görülsün diye (kullanıcı isteği). Sadece liste/ajanda satırında — kart detayında yok. */}
         {rt.aliskanlik && !rt.mezun && (() => {
+          // Seri (🔥) ve bu ayki uyum % — eskiden Gelişim'de ayrı kartlarda (Alışkanlık serileri, Aylık uyum)
+          // listeleniyordu; Behnan'ın "taşımak yerine Ajanda'nın diliyle, satırın üzerinde dursun" kararıyla
+          // buraya, zaten var olan haftalık çubuklar+gün noktalarının hemen altına taşındı (bkz. o kartların
+          // kaldırılışı, Gelişim ekranında). ritStreak yukarıda tanımlı.
+          const streak = ritStreak(rt);
+          const ayAktif = last30.filter((d) => activeOn(rt, d));
+          const ayPct = ayAktif.length ? Math.round((ayAktif.filter((d) => logs.some((l) => l.ritual_id === rt.id && l.tarih === d && l.yapildi)).length / ayAktif.length) * 100) : null;
           let bloklar: number[] | null = null;
           if (rt.bitis) {
             bloklar = [];
@@ -3030,6 +3031,11 @@ export default function Rite() {
                   return <div key={d} style={{ flex: 1, height: 8, borderRadius: 3, background: ok ? 'var(--green)' : '#efe8da' }} title={WD[wday(d)]} />;
                 })}
               </div>
+              {(streak > 0 || ayPct !== null) && (
+                <div className="note" style={{ margin: '3px 2px 0', fontSize: 10.5 }}>
+                  {streak > 0 ? '🔥 ' + streak + ' gün' : ''}{streak > 0 && ayPct !== null ? ' · ' : ''}{ayPct !== null ? 'bu ay %' + ayPct : ''}
+                </div>
+              )}
             </div>
           );
         })()}
@@ -3136,50 +3142,6 @@ export default function Rite() {
                 })}
               </div>
             )}
-
-            {ajView === 'gun' && habitsSayilan.length > 0 && (() => {
-              const doneCount = habitsSayilan.filter((r) => ritDone(r.id)).length;
-              const pct = Math.round((doneCount / habitsSayilan.length) * 100);
-              return (
-                <div className="dayprog">
-                  <div className="bar"><i style={{ width: pct + '%' }} /></div>
-                  <span className="lbl">{doneCount}/{habitsSayilan.length} tamamlandı</span>
-                </div>
-              );
-            })()}
-
-            {/* Alan pilleri (v1): dayprog "bugün ne kaldı"yı gösterirken, bu şerit "son bir haftada dengeni nasıl
-                tuttun"u gösteriyor — kişinin kendi Alışkanlık/Yapılacak/Randevu kartlarına opsiyonel etiketlediği
-                (bkz. PIL_ALAN, kart_config.pilAlan) dört alan için, son 7 günün ağırlıklı (bugüne en ağırlıklı)
-                tamamlanma oranı. Hiç kart o alana etiketlenmemiş olsa bile dört alan da hep görünür kalıyor —
-                boş bir pil, ajandaya dönüp bir şey eklemek için kendiliğinden bir dürtme olsun diye (kullanıcı
-                isteği). Etiketli kart bulunmayan günler ortalamaya hiç katılmıyor (yapay düşüş olmasın diye). */}
-            {ajView === 'gun' && (() => {
-              const seviyeler = PIL_ALAN_SIRA.map((anahtar) => {
-                let wsum = 0, wtot = 0;
-                days7.forEach((d, i) => {
-                  const adaylar = rituals.filter((r) => !r.mezun && r.kaynak === 'Kendi' && r.kart_tipi === 'bilgi' && !r.kart_config?.genel && r.kart_config?.pilAlan === anahtar && activeOn(r, d));
-                  if (adaylar.length === 0) return;
-                  const yapilan = adaylar.filter((r) => logs.some((l) => l.ritual_id === r.id && l.tarih === d && l.yapildi)).length;
-                  const w = Math.pow(0.75, days7.length - 1 - i); // bugün (son gün) en ağır, geriye doğru üstel azalır
-                  wsum += (yapilan / adaylar.length) * w;
-                  wtot += w;
-                });
-                return { anahtar, etiket: PIL_ALAN[anahtar], pct: wtot > 0 ? Math.round((wsum / wtot) * 100) : 0 };
-              });
-              return (
-                <div style={{ display: 'flex', gap: 8, margin: '0 0 12px' }}>
-                  {seviyeler.map((s) => (
-                    <div key={s.anahtar} style={{ flex: 1, textAlign: 'center' }} title={s.etiket + ': %' + s.pct}>
-                      <div style={{ height: 42, borderRadius: 8, background: '#efe8da', display: 'flex', alignItems: 'flex-end', overflow: 'hidden' }}>
-                        <div style={{ width: '100%', height: s.pct + '%', background: 'var(--green)', transition: 'height .3s' }} />
-                      </div>
-                      <div style={{ fontSize: 10.5, marginTop: 3, color: 'var(--muted)' }}>{s.etiket}</div>
-                    </div>
-                  ))}
-                </div>
-              );
-            })()}
 
             {programGruplari.length > 0 && <div style={{ marginBottom: 4 }}>{programGruplari.map((g) => {
               const gunNo = Math.max(1, Math.round((parseD(today).getTime() - parseD(g.bas).getTime()) / 86400000) + 1);
@@ -3572,41 +3534,17 @@ export default function Rite() {
                 );
               })()}
             </div>
-            <div className="card"><h3>Readiness (son 7 gün)</h3>
-              <div className="spark">{days7.map((d) => {
-                const sched = gelHabits.filter((r) => activeOn(r, d));
-                const done = sched.filter((r) => logs.some((l) => l.ritual_id === r.id && l.tarih === d && l.yapildi)).length;
-                const h = sched.length ? Math.round((done / sched.length) * 100) : 0;
-                return <i key={d} style={{ height: Math.max(4, h) + '%' }} />;
-              })}</div>
-            </div>
+            {/* Readiness, "Alışkanlık serileri 🔥", "Bu hafta ızgarası", haftalık/aylık uyum % kartları
+                KALDIRILDI (2026-09, Behnan kararı) — hepsi dog_ritual_logs tamamlanma verisinin ayrı bir
+                ekrana taşınmış tekrarlarıydı. Ajanda'da zaten her alışkanlık satırının kendi üzerinde haftalık
+                doluluk çubukları + bu haftanın gün noktaları vardı (bkz. RitItem); seri (🔥) ve bu ayki uyum %
+                da artık aynı satırın altına eklendi (bkz. RitItem — "Seri ve bu ayki uyum %" yorumu). Ayrıca
+                Ajanda'nın gün görünümünün en üstündeki "X/Y tamamlandı" şeridi ve alan pilleri şeridi de
+                kaldırıldı (Behnan isteği). */}
             {measByKey['ruh_hali'] && <div className="card"><h3>Ruh hali (son 7 gün)</h3>
               <div style={{ fontSize: 24, letterSpacing: 6 }}>{measByKey['ruh_hali'].slice(-7).map((m: any, i: number) => <span key={i} title={m.tarih}>{MOOD[Math.round(Number(m.deger)) - 1] || '·'}</span>)}</div>
               {(() => { const arr = measByKey['ruh_hali'].slice(-7).map((m: any) => Number(m.deger)); const ort = arr.reduce((a: number, b: number) => a + b, 0) / arr.length; return <div className="note" style={{ marginTop: 4 }}>Ortalama: {MOOD[Math.round(ort) - 1]} ({ort.toFixed(1)}/5)</div>; })()}
             </div>}
-            {uyumHabits.length > 0 && <div className="card"><h3>Alışkanlık serileri 🔥</h3>
-              {(() => { const rows = uyumHabits.map((r) => ({ r, s: ritStreak(r) })).sort((a, b) => b.s - a.s); return rows.map(({ r, s }) => (
-                <div key={r.id} className="mrow"><span>{r.ad}</span><b>{s > 0 ? '🔥 ' + s + ' gün' : '—'}</b></div>
-              )); })()}
-              <div className="soul">Seri = art arda yaptığın gün sayısı; bugünü kaçırmadıysan kırılmaz. Kısa seri de bir başlangıç.</div>
-            </div>}
-            <div className="card"><h3>Bu hafta (alışkanlık ızgarası)</h3>
-              <table className="tracker">
-                <thead><tr><th style={{ textAlign: 'left' }}>Alışkanlık</th>{weekArr.map((d) => <th key={d}>{WD[parseD(d).getDay()]}</th>)}</tr></thead>
-                <tbody>
-                  {weekHabits.map((rt) => (
-                    <tr key={rt.id}><td className="h">{rt.ad}</td>
-                      {weekArr.map((d) => {
-                        if (!activeOn(rt, d)) return <td key={d}><span className="dot na"></span></td>;
-                        const ok = logs.some((l) => l.ritual_id === rt.id && l.tarih === d && l.yapildi);
-                        return <td key={d}><span className={'dot ' + (ok ? 'y' : 'n')}>{ok ? '✓' : '·'}</span></td>;
-                      })}
-                    </tr>
-                  ))}
-                  {weekHabits.length === 0 && <tr><td className="h" colSpan={8}>Bu hafta alışkanlık yok.</td></tr>}
-                </tbody>
-              </table>
-            </div>
             <div className="card"><h3>Ölçümler</h3>
               {(() => {
                 const keys = Object.keys(measByKey).filter((k) => k !== 'ruh_hali');
@@ -3631,22 +3569,6 @@ export default function Rite() {
                   </div>
                 ));
               })()}
-            </div>
-            <div className="card"><h3>Alışkanlık uyumu (bu hafta)</h3>
-              <div className="mrow" style={{ borderTop: 'none' }}><span>Tamamlanan</span><b>%{(() => { let act = 0, done = 0; days7.forEach((d) => uyumHabits.forEach((r) => { if (activeOn(r, d)) { act++; if (logs.some((l) => l.ritual_id === r.id && l.tarih === d && l.yapildi)) done++; } })); return act ? Math.round((done / act) * 100) : 0; })()}</b></div>
-            </div>
-            <div className="card"><h3>Aylık alışkanlık uyumu (aktif günlere göre)</h3>
-              {(() => {
-                const rows = uyumHabits.map((rt) => {
-                  const act = last30.filter((d) => activeOn(rt, d));
-                  if (!act.length) return null;
-                  const n = act.filter((d) => logs.some((l) => l.ritual_id === rt.id && l.tarih === d && l.yapildi)).length;
-                  const pct = Math.round((n / act.length) * 100);
-                  return <div key={rt.id} className="mbar"><div className="l"><span>{rt.ad}</span><b>%{pct} <span className="note" style={{ margin: 0 }}>({n}/{act.length})</span></b></div><div className="track"><div className="fill" style={{ width: pct + '%' }} /></div></div>;
-                }).filter(Boolean);
-                return rows.length ? rows : <div className="note">Alışkanlık yok.</div>;
-              })()}
-              <div className="soul">Düşük uyum = başarısızlık değil, sinyal. Yüzde, ritüelin yalnız <b>aktif olduğu günler</b> üzerinden hesaplanır.</div>
             </div>
             {cNot && <div className="card"><h3>Koç notu</h3><p style={{ fontSize: 12, color: '#4a565c', lineHeight: 1.55 }}>{cNot}</p></div>}
           </div>
