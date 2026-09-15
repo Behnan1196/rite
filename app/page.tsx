@@ -73,100 +73,14 @@ const HOME_SEVIYE = ['Zayıf', 'İdare eder', 'İyi', 'Mükemmel'];
 // Home kartlarındaki dikey "termometre" göstergesinin dilim renkleri — HOME_SEVIYE ile aynı sırada (kırmızıdan
 // yeşile). Kullanıcı isteği: kart metnini okumadan bir bakışta renkten durumu anlayabilmek.
 const HOME_SEVIYE_RENK = ['#8b3223', '#d98a3d', '#8a8f3e', '#8fbf72'];
-// Home'un alanları artık sabit bir JS listesi değil, Havuz/Kütüphane'nin kalıcı grup tablosundan (dog_gruplar,
-// kullanıcının değiştiremeyeceği kilitli "Meridyen" kökünün alt grupları) okunuyor — bkz. ensureMeridyenGrubu,
-// homeAlanEkle/Guncelle/Sil ve migration dosyası (rite_gruplar_alan_migration.sql). Düzenleme artık Havuz'daki
-// "Grupları yönet" ekranından yapılıyor (kullanıcı isteği: "düzenleme doğrudan Kütüphane'de olsa daha mantıklı").
-// Bu sabit dizi SADECE bir client'ın Meridyen kökünün hiç alt grubu yokken (ilk açılış, ya da eski
-// dog_home_alanlar'da da satır yoksa) tohumlanacak standart alanların başlangıç içeriği. v2 (2026-09): Behnan'ın kendi "Esenlik çalışması"
-// (yüklediği PDF) 4 üst sütun (Bedensel & Metabolik / Zihinsel & Duygusal / Çevresel & Sosyal / Aktif Üretim)
-// altında 13 alt-alan tanımlıyor — kullanıcı isteği: "pdf de bulunan 13 alan ile başlayabiliriz". Checklist
-// maddeleri PDF'teki alt-madde listelerinden birebir alındı (Behnan'ın kendi araştırması, üçüncü taraf kaynak
-// değil). Eski 6 alanın anahtarları (beslenme/egzersiz/uyku/stres/mesgale/sosyal) BİLEREK yeniden kullanılmadı
-// — taksonomi tamamen değişti, eski test dog_measurements kayıtları (home_beslenme vb.) artık hiçbir alana
-// bağlı değil ama zararsız, sadece görünmüyor. Mevcut bir client'ın eski 6 alanını yeni 13'e geçirmesi için
-// "Alanları yönet" ekranında bir "Standart alanlara sıfırla" seçeneği var (bkz. homeAlanlarSifirla) — tüm
-// mevcut alanlarını silip bu diziyle yeniden tohumluyor.
-const HOME_ALAN_VARSAYILAN: { anahtar: string; ad: string; neden: string; checklist: string[]; ornekler: string[] }[] = [
-  {
-    anahtar: 'uyku_isik', ad: 'Uyku & Gün Işığı',
-    neden: 'Sirkadiyen ritmi koruyan uyku düzeni ve doğal ışık alımı bedenin ve zihnin saatini doğru kurar.',
-    checklist: ['Sabah doğal ışık maruziyeti', 'Akşam ekran ve mavi ışık sınırı', 'Tutarlı yatış-kalkış sirkadiyen ritmi'],
-    ornekler: ['Sabah güneşte kısa yürüyüş', 'Akşam ekran kapatma saati', 'Sabit yatış saati'],
-  },
-  {
-    anahtar: 'beslenme_takviye', ad: 'Beslenme & Takviyeler',
-    neden: 'Günlük beslenme planı ve doğru takviye rutini bedenin makinesini besleyen temel girdidir.',
-    checklist: ['Akıllı Tabak ve öğün planlaması', 'Günlük takviye rutini (Kreatin, Omega-3, K2D3 ve Magnezyum)', 'Günlük hidrasyon ve sıvı dengesi'],
-    ornekler: ['Öğün planlama', 'Takviye hatırlatıcısı', 'Su takibi'],
-  },
-  {
-    anahtar: 'seker_kalp', ad: 'Şeker & Kalp Sağlığı',
-    neden: 'Kan şekeri dengesi, insülin direnci kontrolü ve kalp-damar koruyucu alışkanlıklar uzun vadeli sağlığın omurgası.',
-    checklist: ['Yemek sonrası 15 dakikalık glisemi yürüyüşleri', 'Kan şekeri ve insülin dalgalanmalarını dengeleme', 'Sabah doğa yürüyüşleri ve 45 dakikalık akşam yürüyüşleri'],
-    ornekler: ['Yemek sonrası kısa yürüyüş', 'Sabah doğa yürüyüşü', 'Akşam yürüyüşü'],
-  },
-  {
-    anahtar: 'kas_eklem_omurga', ad: 'Kas, Eklem & Omurga Mekaniği',
-    neden: 'Kas gücünü, denge ve eklem sağlığını korumak günlük yaşam bağımsızlığının temelidir.',
-    checklist: ['Günlük hareket & yürüyüşler (sabah doğa yürüyüşü, 45 dk akşam yürüyüşü, yemek sonrası glisemi turu)', 'Genel vücut lenf drenajı', 'Dik durmak & omurga rahatlığı (oturma ergonomisi, esneme)', 'Kasları korumak & güçlü kalmak (direnç çalışması, kreatin desteği)', 'Denge & adım güvenliği', 'Pelvik taban sağlığı', 'Diz & eklem sağlığı (fizyoterapi odaklı hareketler)', 'Fonksiyonel vücut gücü (günlük yaşam bağımsızlığını koruyan temel kuvvet)'],
-    ornekler: ['Direnç egzersizi', 'Denge çalışması', 'Esneme/omurga rutini'],
-  },
-  {
-    anahtar: 'yuz_cilt', ad: 'Yüz & Cilt Zindeliği',
-    neden: 'Somatik bakım ve cilt sağlığını koruyan rutinler görünüşten çok kan dolaşımı ve öz-bakımla ilgili.',
-    checklist: ['Somatik yüz masajı ve cilt kan dolaşımı pratikleri', 'Temel cilt koruma ve nem rutinleri', 'Yüz çevresi ve yüz lenf drenajı'],
-    ornekler: ['Yüz masajı', 'Nem rutini', 'Lenf drenajı'],
-  },
-  {
-    anahtar: 'zihni_dinlendirme', ad: 'Zihni Dinlendirme',
-    neden: 'Gün içinde zihni durduran, sakinleştiren anlar zihnin işletim sistemini rahatlatır.',
-    checklist: ['Gün içi kısa zihinsel durma ve nefes molaları', 'Akşam zihni rölantiye alma anları'],
-    ornekler: ['Nefes molası', 'Akşam sakinleşme anı'],
-  },
-  {
-    anahtar: 'ic_huzur', ad: 'İç Huzur & Duygusal Sağlamlık',
-    neden: 'İç sesle sağlıklı ilişki kurmak ve zihinsel dayanıklılık, dalgalanmalara karşı asıl zemin.',
-    checklist: ['İç sesle sağlıklı ilişki kurma ve farkındalık halleri', 'Günlük duygusal denge ve esneklik pratiği'],
-    ornekler: ['Farkındalık pratiği', 'Günlük tutma'],
-  },
-  {
-    anahtar: 'ekran_mesafe', ad: 'Ekran & Dijital Mesafe',
-    neden: 'Dijital sınırları korumak, aşırı bildirim ve haber yükünden kaçınmayı sağlar.',
-    checklist: ['Yoğun bildirim ve haber tüketimini sınırlama', 'Akşamları dijital detoks zamanları'],
-    ornekler: ['Bildirim sınırlama', 'Akşam dijital detoks'],
-  },
-  {
-    anahtar: 'sosyal_baglar', ad: 'Sosyal Bağlar',
-    neden: 'Sosyal bağları canlı tutan derin sohbetler ve buluşmalar, yalnızlığa karşı en güçlü kalkan.',
-    checklist: ['Yakın dostlarla buluşmalar ve grup gezileri (ör. 4 kişilik arkadaş grubuyla seyahat)', 'Toplumsal ve sivil toplum katkıları'],
-    ornekler: ['Arkadaş buluşması', 'Grup gezisi', 'Gönüllü/sivil katkı'],
-  },
-  {
-    anahtar: 'ev_ortam', ad: 'Ev & Ortam Düzeni',
-    neden: 'Yaşam alanının konforu ve düzeni, içinde yaşadığın zeminin sağlamlığını belirler.',
-    checklist: ['Çalışma ve yaşam alanı ergonomisi', 'Mekansal sadeleşme ve düzen'],
-    ornekler: ['Çalışma alanı düzenleme', 'Sadeleşme/temizlik turu'],
-  },
-  {
-    anahtar: 'finansal_guvenlik', ad: 'Finansal Güvenlik',
-    neden: 'Finansal sürdürülebilirlik, çevresel/sosyal zeminin bir parçası olan güvenlik hissini besler.',
-    checklist: ['Kişisel bütçe ve harcama dengesi', 'Uzun vadeli sürdürülebilir finansal planlama'],
-    ornekler: ['Bütçe gözden geçirme', 'Uzun vadeli planlama'],
-  },
-  {
-    anahtar: 'hobiler_beceri', ad: 'Hobiler & El-Zihin Becerileri',
-    neden: 'Nöroplastisiteyi destekleyen enstrüman ve hobi çalışmaları zihni ve eli canlı tutar.',
-    checklist: ['Enstrüman pratiği', 'Dijital içerik, tasarım ve bilişsel uğraşlar', 'Yeni dil öğrenme'],
-    ornekler: ['Enstrüman pratiği', 'Dil öğrenme', 'Yaratıcı/bilişsel uğraş'],
-  },
-  {
-    anahtar: 'geleneksel_hareket', ad: 'Geleneksel Hareket Formları',
-    neden: 'Ba Duan Jin ve Tai Chi gibi geleneksel zihin-beden pratikleri, hareketi nefes ve farkındalıkla birleştirir.',
-    checklist: ['Ba Duan Jin geleneksel hareket setleri', 'Tai Chi akışları'],
-    ornekler: ['Ba Duan Jin seti', 'Tai Chi akışı'],
-  },
-];
+// Home'un alanları artık sabit bir JS listesi değil, iki katmanlı: (1) kanonik İÇERİK — dog_meridyen_alanlar
+// tablosu (ad/neden/checklist/örnekler), Rite Studio'dan (app-meridyen/atama) TEK yerden yönetiliyor, bkz.
+// meridyenAlanlarLib; (2) danışanın Havuz/Kütüphane'sindeki kalıcı grup tablosunda (dog_gruplar, kullanıcının
+// değiştiremeyeceği kilitli "Meridyen" kökünün alt grupları) sadece "hangi alan (anahtar) + görünür mü + sırası
+// ne" taşıyan ince satırlar — bkz. ensureMeridyenGrubu, homeAlanlar. 2026-09 (Behnan kararı — "Alanlar"
+// mimarisi, "hep senkronize olacaklar"): içerik burada hiç tutulmuyor/düzenlenmiyor, bir danışana bir alanın
+// atanması Rite Studio'daki "Ata" fonksiyonuyla oluyor — eskiden burada duran sabit 13-alan JS listesi
+// (HOME_ALAN_VARSAYILAN) ve otomatik toplu tohumlama bu yüzden kaldırıldı.
 // kart_config.stil — Meridyen Studio'da seçilen renk/tema preseti (bg = açık zemin, ac = vurgu rengi, tx = yazı rengi). Liste Meridyen'deki STIL_PRESETS ile aynı kalmalı.
 const STIL_LOOKUP: Record<string, { bg: string; ac: string; tx: string }> = {
   yesil: { bg: '#e9f4e6', ac: '#5f8a4e', tx: '#2f4a2a' },
@@ -1401,21 +1315,12 @@ export default function Rite() {
   const [homeDetay, setHomeDetay] = useState<string | null>(null);
   // Home'un alanları artık ayrı bir tablo değil, Havuz/Kütüphane'nin kalıcı Grup listesinin (dog_gruplar) bir
   // parçası: kullanıcının değiştiremeyeceği kilitli "Meridyen" kökünün alt grupları (bkz. grupListesi,
-  // meridyenRoot, homeAlanlar altta ve ensureMeridyenGrubu). Düzenleme artık Kütüphane'nin "Grupları yönet"
-  // ekranından yapılıyor (bkz. alanFormFor) — bu state'ler o formun ortak alanları.
-  // Yönetim: mevcut bir alanı düzenlerken formu doldurup homeAlanDuzenleId'ye o satırın id'sini yazıyoruz; yeni
-  // alan eklerken id null kalıyor ama form yine aynı state'leri kullanıyor.
-  const [homeAlanDuzenleId, setHomeAlanDuzenleId] = useState<string | null>(null);
-  const [homeAlanAd, setHomeAlanAd] = useState('');
-  const [homeAlanNeden, setHomeAlanNeden] = useState('');
-  const [homeAlanChecklist, setHomeAlanChecklist] = useState('');
-  const [homeAlanOrnekler, setHomeAlanOrnekler] = useState('');
-  // Grupları yönet ekranında Meridyen kökünün altında hangi alanın (zengin ad/neden/checklist/örnekler) formu
-  // açık: null = kapalı, 'yeni' = yeni alan ekleme, yoksa düzenlenen alt grubun id'si.
-  const [alanFormFor, setAlanFormFor] = useState<string | null>(null);
-  // Home'un KENDİ ekranı: içerik değil (o hep Kütüphane'den), sadece Meridyen alanlarından hangisinin Home'da
-  // görüneceği ve sırası (kullanıcı isteği: "Home da sadece o ekranda bulunması, sırasının ayarlanması ve
-  // ekrandan kaldırılması için kendi formu olmalı... Değişiklikler sadece kütüphaneden yapılmalı").
+  // meridyenRoot, homeAlanlar altta ve ensureMeridyenGrubu). 2026-09 (Behnan kararı — "Alanlar" mimarisi):
+  // İÇERİK (ad/neden/checklist/örnekler) artık burada hiç düzenlenmiyor — tek kanonik kaynak Rite Studio'daki
+  // (app-meridyen/atama) Alanlar, dog_meridyen_alanlar tablosunda tutuluyor (bkz. meridyenAlanlarLib altta).
+  // Danışanın kendi dog_gruplar satırı sadece "hangi alan (anahtar) + görünür mü (home_gizli) + sırası ne
+  // (sira)" taşıyan ince bir satır; eski zengin düzenleme formu (alanFormFor, homeAlanEkle/Guncelle/Sil/
+  // Sifirla) bu yüzden tamamen kaldırıldı. Home'un KENDİ ekranı (homeYonetOpen) hâlâ sadece görünürlük+sıra.
   const [homeYonetOpen, setHomeYonetOpen] = useState(false);
   const [remMenuFor, setRemMenuFor] = useState<any>(null);
   const [urlInput, setUrlInput] = useState('');
@@ -1429,6 +1334,7 @@ export default function Rite() {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { delay: 300, tolerance: 6 } }));
   const [faydaList, setFaydaList] = useState<any[]>([]);
   const [alanList, setAlanList] = useState<string[]>([]);
+  const [meridyenAlanlarLib, setMeridyenAlanlarLib] = useState<any[]>([]);
   const [kZamanlar, setKZamanlar] = useState<string[]>(['gün']);
   const [kEditId, setKEditId] = useState<string | null>(null);
   const [studioOpen, setStudioOpen] = useState(false);
@@ -1543,7 +1449,7 @@ export default function Rite() {
     setClient(nc); localStorage.setItem(LS, JSON.stringify(nc));
   }
 
-  useEffect(() => { loadActivities(); loadFaydalar(); loadAreas(); }, []);
+  useEffect(() => { loadActivities(); loadFaydalar(); loadAreas(); loadMeridyenAlanlar(); }, []);
   useEffect(() => {
     if (!client || !day) return;
     // Bu günü bu oturumda daha önce hiç çekmediysek sunucudan al. Zaten yerelde varsa (ilk yüklemeden ya da
@@ -1565,6 +1471,13 @@ export default function Rite() {
   async function loadAreas() {
     const r = await supabase.from('dog_ref_items').select('ad,sira').eq('tur', 'wellbeing_alan').eq('aktif', true).order('sira');
     setAlanList((r.data || []).map((x: any) => x.ad));
+  }
+  // Home'un Meridyen alanlarının KANONİK içeriği — client'tan bağımsız, tek kaynak (Rite Studio'dan yazılıyor).
+  // bkz. homeAlanlar altta: danışanın dog_gruplar satırı sadece anahtar/home_gizli/sira taşıyor, ad/neden/
+  // checklist/ornekler burada anahtar üzerinden eşleniyor.
+  async function loadMeridyenAlanlar() {
+    const r = await supabase.from('dog_meridyen_alanlar').select('*').eq('aktif', true).order('sira');
+    setMeridyenAlanlarLib(r.data || []);
   }
   async function loadActivities() {
     const r = await supabase.from('dog_activities').select('*').eq('aktif', true).order('grup').order('sira');
@@ -1623,26 +1536,22 @@ export default function Rite() {
   // Home'un alanlarının yaşadığı, kullanıcının yeniden adlandıramayacağı/silemeyeceği kilitli kök grup: "Meridyen".
   // Kullanıcı Havuz'da bunu zaten elle oluşturmuştu (kullanıcı isteği: "zaten Meridyen diye bir grup yaratmıştım,
   // ve oraya kullanıcının dokunmamasını istiyordum") — bulunca üstüne sabit:true basıyoruz, hiç yoksa oluşturuyoruz.
-  // İçi boşsa önce eski dog_home_alanlar'da (varsa, kullanıcının daha önce düzenlemiş olabileceği) client'a özel
-  // alanları buraya taşıyoruz, o da boşsa HOME_ALAN_VARSAYILAN'ı tohumluyoruz. Client açılışında bir kere çağrılıyor.
+  // Client açılışında bir kere çağrılıyor.
+  // 2026-09 (Behnan kararı — "Alanlar" mimarisi, "her alanı danışana yollamıyoruz"): bu fonksiyon artık SADECE
+  // kilitli "Meridyen" kök grubunun var olduğunu garanti ediyor — otomatik olarak hiçbir alan tohumlamıyor.
+  // Hangi alanların bu danışana ait olacağı Rite Studio'daki (app-meridyen/atama) "Ata" fonksiyonundan geliyor;
+  // yeni bir danışanın Home'u, kendisine en az bir alan atanana kadar boş görünür (bkz. Home ekranındaki boş
+  // durum notu). Eski toplu tohumlama (HOME_ALAN_VARSAYILAN, dog_home_alanlar migration fallback'i) kaldırıldı.
   async function ensureMeridyenGrubu(clientId: string, rows: any[]) {
     let root = rows.find((g) => !g.ust_id && (g.sabit || g.ad === 'Meridyen'));
     if (!root) {
       const ins = await supabase.from('dog_gruplar').insert({ client_id: clientId, ad: 'Meridyen', ust_id: null, sira: -1, sabit: true }).select().single();
       if (ins.error) { console.error('Meridyen grubu oluşturulamadı:', ins.error); alert('Meridyen grubu oluşturulamadı: ' + ins.error.message); return; }
-      root = ins.data;
     } else if (!root.sabit) {
       const upd = await supabase.from('dog_gruplar').update({ sabit: true }).eq('id', root.id);
       if (upd.error) { console.error('Meridyen sabit işaretlenemedi:', upd.error); alert('Meridyen grubu kilitlenemedi: ' + upd.error.message); return; }
-      root = { ...root, sabit: true };
-    }
-    const altlar = rows.filter((g) => g.ust_id === root.id);
-    if (altlar.length === 0) {
-      const eski = await supabase.from('dog_home_alanlar').select('anahtar,ad,neden,checklist,ornekler,sira').eq('client_id', clientId).order('sira');
-      const kaynak = eski.data && eski.data.length > 0 ? eski.data : HOME_ALAN_VARSAYILAN;
-      const seed = kaynak.map((a: any, i: number) => ({ client_id: clientId, ust_id: root.id, ad: a.ad, anahtar: a.anahtar, neden: a.neden || '', checklist: a.checklist || [], ornekler: a.ornekler || [], sira: i, sabit: false }));
-      const ins2 = await supabase.from('dog_gruplar').insert(seed);
-      if (ins2.error) { console.error('Alanlar taşınamadı:', ins2.error); alert('Alanlar oluşturulamadı: ' + ins2.error.message); return; }
+    } else {
+      return; // kök zaten var ve kilitli — yapacak bir şey yok, gereksiz loadGruplar tekrarını atla.
     }
     await loadGruplar(clientId);
   }
@@ -1997,72 +1906,29 @@ export default function Rite() {
     await supabase.from('dog_gruplar').update({ sira: g.sira }).eq('id', diger.id);
     loadGruplar(client.id);
   }
-  // ---------- Home: düzenlenebilir alan listesi (artık dog_gruplar'ın "Meridyen" kökü altındaki alt gruplar) ----------
+  // ---------- Home: alan listesi (dog_gruplar'ın "Meridyen" kökü altındaki ince/thin alt gruplar + kanonik içerik) ----------
   // meridyenRoot: kilitli kök grup satırı (bkz. ensureMeridyenGrubu — client açılışında garanti ediliyor).
-  // homeAlanlar: o kökün alt grupları, sira'ya göre sıralı — Home ekranı ve Detay artık doğrudan bunu okuyor.
+  // homeAlanlar: o kökün alt grupları (client'a ÖZEL: sadece anahtar/home_gizli/sira), sira'ya göre sıralı,
+  // ad/neden/checklist/ornekler ise meridyenAlanlarLib'den (kanonik, TEK kaynak) anahtar üzerinden eşleniyor —
+  // 2026-09 Behnan kararı: "hep senkronize olacaklar", içerik artık burada hiç tutulmuyor. Eşleşme bulunamazsa
+  // (kanonik satır sonradan pasifleştirilmiş/silinmiş olabilir) satırın kendi eski değerlerine düşülüyor, hiç
+  // kırılmasın diye.
   const meridyenRoot = grupListesi.find((g) => !g.ust_id && (g.sabit || g.ad === 'Meridyen'));
-  const homeAlanlar = meridyenRoot ? grupListesi.filter((g) => g.ust_id === meridyenRoot.id).sort((a, b) => a.sira - b.sira) : [];
-  // Home ekranında (kart ızgarası + "Kendini değerlendir" formu) SADECE gizlenmemiş alanlar görünür — bkz.
+  const homeAlanlar = meridyenRoot ? grupListesi.filter((g) => g.ust_id === meridyenRoot.id).sort((a, b) => a.sira - b.sira).map((g) => {
+    const lib = meridyenAlanlarLib.find((x) => x.anahtar === g.anahtar);
+    return lib ? { ...g, ad: lib.ad, neden: lib.neden, checklist: lib.checklist, ornekler: lib.ornekler } : g;
+  }) : [];
+  // Home ekranında (kart ızgarası + Detay'daki "Kendini değerlendir") SADECE gizlenmemiş alanlar görünür — bkz.
   // homeYonetOpen, homeAlanGizleDegistir. Home'un kendi yönetim ekranı ise (gizli olanı geri göstermek için)
   // tam listeyi (homeAlanlar) kullanıyor.
   const homeAlanlarGorunur = homeAlanlar.filter((a) => !a.home_gizli);
-  // Home'da bir alanı ekrandan kaldırma/geri gösterme — içerik (ad/neden/checklist/ornekler) DEĞİŞMİYOR, sadece
-  // Home'un kart listesinde görünüp görünmeyeceği. Sıra için ayrı bir alan yok, Kütüphane'yle paylaşılan `sira`
-  // kullanılıyor (bkz. grupSiraDegistir — Home'un kendi ekranından da aynı fonksiyon çağrılıyor).
+  // Home'da bir alanı ekrandan kaldırma/geri gösterme — içerik zaten burada hiç yok, sadece Home'un kart
+  // listesinde görünüp görünmeyeceği. Sıra için ayrı bir alan yok, Kütüphane'yle paylaşılan `sira` kullanılıyor
+  // (bkz. grupSiraDegistir — Home'un kendi ekranından da aynı fonksiyon çağrılıyor).
   async function homeAlanGizleDegistir(a: any) {
     if (!client) return;
     await supabase.from('dog_gruplar').update({ home_gizli: !a.home_gizli }).eq('id', a.id);
     loadGruplar(client.id);
-  }
-  // anahtar sadece yeni (kullanıcı tanımlı) alanlarda kullanılıyor — standart 13'ü zaten sabit anahtarlarla
-  // tohumlandı (bkz. ensureMeridyenGrubu). Aynı client içinde anahtar çakışırsa sonuna -2, -3… eklenir.
-  function slugify(s: string): string {
-    const harfler: Record<string, string> = { ç: 'c', ğ: 'g', ı: 'i', ö: 'o', ş: 's', ü: 'u', İ: 'i', Ç: 'c', Ğ: 'g', Ö: 'o', Ş: 's', Ü: 'u' };
-    return s.trim().toLowerCase().replace(/[çğıöşüİÇĞÖŞÜ]/g, (c) => harfler[c] || c).replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'alan';
-  }
-  function coklu(s: string): string[] { return s.split('\n').map((x) => x.trim()).filter(Boolean); }
-  async function homeAlanEkle(ad: string, neden: string, checklist: string[], ornekler: string[]) {
-    if (!client || !ad.trim() || !meridyenRoot) return;
-    let temel = slugify(ad);
-    let anahtar = temel;
-    let n = 2;
-    while (homeAlanlar.some((a) => a.anahtar === anahtar)) { anahtar = temel + '_' + n; n++; }
-    const sira = homeAlanlar.length ? Math.max(...homeAlanlar.map((a) => a.sira)) + 1 : 0;
-    const ins = await supabase.from('dog_gruplar').insert({ client_id: client.id, ust_id: meridyenRoot.id, anahtar, ad: ad.trim(), neden: neden.trim(), checklist, ornekler, sira, sabit: false }).select().single();
-    if (ins.error) { alert('Eklenemedi: ' + ins.error.message); return; }
-    await loadGruplar(client.id);
-  }
-  async function homeAlanGuncelle(id: string, ad: string, neden: string, checklist: string[], ornekler: string[]) {
-    if (!client || !ad.trim()) return;
-    await supabase.from('dog_gruplar').update({ ad: ad.trim(), neden: neden.trim(), checklist, ornekler }).eq('id', id);
-    loadGruplar(client.id);
-  }
-  async function homeAlanSil(a: any) {
-    if (!client) return;
-    if (!confirm('"' + a.ad + '" alanı silinsin mi? (Bu alana daha önce girilmiş değerlendirmeler kalır ama artık gösterilmez.)')) return;
-    await supabase.from('dog_gruplar').delete().eq('id', a.id);
-    loadGruplar(client.id);
-  }
-  function homeYonetFormAc(a?: any) {
-    if (a) { setHomeAlanDuzenleId(a.id); setHomeAlanAd(a.ad); setHomeAlanNeden(a.neden || ''); setHomeAlanChecklist((a.checklist || []).join('\n')); setHomeAlanOrnekler((a.ornekler || []).join('\n')); }
-    else { setHomeAlanDuzenleId(null); setHomeAlanAd(''); setHomeAlanNeden(''); setHomeAlanChecklist(''); setHomeAlanOrnekler(''); }
-  }
-  async function homeYonetKaydet() {
-    const checklist = coklu(homeAlanChecklist);
-    const ornekler = coklu(homeAlanOrnekler);
-    if (homeAlanDuzenleId) await homeAlanGuncelle(homeAlanDuzenleId, homeAlanAd, homeAlanNeden, checklist, ornekler);
-    else await homeAlanEkle(homeAlanAd, homeAlanNeden, checklist, ornekler);
-    homeYonetFormAc();
-  }
-  // Alan taksonomisi değiştiğinde (ör. HOME_ALAN_VARSAYILAN güncellenince) mevcut bir client'ın eski alanlarını
-  // yeni standart listeyle değiştirmesi için — Meridyen kökünün altındaki tüm alt grupları (kullanıcının kendi
-  // eklediği özel alanlar dahil) siler, ensureMeridyenGrubu bir sonraki yüklemede "hiç alt grup yoksa tohumla"
-  // mantığıyla HOME_ALAN_VARSAYILAN'ı yeniden yazar.
-  async function homeAlanlarSifirla() {
-    if (!client || !meridyenRoot) return;
-    if (!confirm('Tüm alanların silinip standart listeyle değiştirilsin mi? Kendi eklediğin özel alanlar da dahil silinir (geçmiş değerlendirmeler etkilenmez, sadece artık hiçbir alana bağlı görünmezler).')) return;
-    await supabase.from('dog_gruplar').delete().eq('ust_id', meridyenRoot.id);
-    await ensureMeridyenGrubu(client.id, await loadGruplar(client.id));
   }
   function sureGun(rt: any): number { if (!rt.bitis) return 0; const b = parseD(rt.baslangic || today); const e = parseD(rt.bitis); return Math.round((e.getTime() - b.getTime()) / 86400000) + 1; }
   // Ajanda'da (tur='ritual') sadece detay.obj yamalanır — act ayrı bir kavram (bağlı Program şablonu) olabilir,
@@ -3077,28 +2943,39 @@ export default function Rite() {
             yapılıyor; alt bardaki ＋ artık Ölçüm ekle açıyor (bkz. olcumEkleOpen). Durumu HOME_SEVIYE_RENK renk skalasında
             dikey bir "termometre" gösteriyor — dört dilim (Zayıf→Mükemmel), geçerli seviyeye kadar kendi rengiyle
             dolu, üstü soluk — kullanıcı isteği: "mükemmel, iyi gibi ibareleri okumadan bir bakışta renk
-            dilimlerinden durumunu görebilmeli". Alanların kendisi artık sabit değil — Havuz/Kütüphane'nin kalıcı
-            grup tablosundan (dog_gruplar, kilitli "Meridyen" kökünün alt grupları) geliyor, standart 13'üyle
-            tohumlanmış durumda. İçerik (ad/neden/checklist/ornekler) değişikliği SADECE Havuz'daki "Grupları
-            yönet" ekranından yapılıyor (kullanıcı isteği: "değişiklikler sadece kütüphaneden yapılmalı") — Home
-            kendi başına yeni alan ekleyemiyor/içerik düzenleyemiyor. Home'un kendi "⚙️ Alanları yönet" ekranı
-            (homeYonetOpen) SADECE hangi alanların Home'da görüneceğini (home_gizli) ve sırasını (paylaşılan
-            `sira`, bkz. grupSiraDegistir) ayarlıyor — kullanıcı isteği: "Home da sadece o ekranda bulunması,
-            sırasının ayarlanması ve ekrandan kaldırılması için kendi formu olmalı". Kart ızgarası ve
-            "Kendini değerlendir" formu bu yüzden homeAlanlar değil, gizlenmemiş olanları (homeAlanlarGorunur)
-            kullanıyor. Havuz'a bağlama (eksik alan → gerçek aktivite önerisi, hedef/olmak istediği seviye) hâlâ
-            bu versiyonda yok — Detay'daki örnek aktiviteler şimdilik sabit/temsili metin, kişinin gerçek
-            Havuz'undan gelmiyor. */}
+            dilimlerinden durumunu görebilmeli". Alanların kendisi artık sabit bir JS listesi DEĞİL — Havuz/
+            Kütüphane'nin kalıcı grup tablosundan (dog_gruplar, kilitli "Meridyen" kökünün alt grupları) geliyor,
+            ama bu satırlar artık İNCE (thin): sadece "hangi alan (anahtar) + görünür mü + sırası ne" taşıyor.
+            İÇERİK (ad/neden/checklist/örnekler) 2026-09'dan (Behnan kararı — "Alanlar" mimarisi) beri TEK
+            kanonik kaynaktan, dog_meridyen_alanlar'dan (bkz. meridyenAlanlarLib) anahtar üzerinden okunuyor ve
+            SADECE Rite Studio'da (app-meridyen/atama) düzenleniyor — Rite tarafında (Home dahil, Kütüphane'nin
+            "Grupları yönet" ekranı dahil) hiçbir içerik düzenleme/yeni alan ekleme imkânı yok. Hangi alanların bu
+            danışana ait olacağı da Studio'daki "Ata" fonksiyonundan geliyor — her danışana otomatik olarak tüm
+            alanlar tohumlanmıyor (bkz. ensureMeridyenGrubu, Home'daki boş durum notu). Home'un kendi
+            "⚙️ Alanları yönet" ekranı (homeYonetOpen) SADECE hangi (kendisine atanmış) alanların Home'da
+            görüneceğini (home_gizli) ve sırasını (paylaşılan `sira`, bkz. grupSiraDegistir) ayarlıyor. Kart
+            ızgarası ve Detay'daki "Kendini değerlendir" bu yüzden homeAlanlar değil, gizlenmemiş olanları
+            (homeAlanlarGorunur) kullanıyor. Detay'daki "Aktivitelerin" listesi (bkz. Home Detay modalı) ise
+            danışanın kendi kişisel aktivitelerini (dog_activities.home_alanlar) gösteriyor — bu ayrı, canlı bir
+            mekanizma, alan içeriğiyle karıştırılmasın. */}
         {screen === 'home' && (
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}>
               <div className="note" style={{ margin: 0 }}>Kendini bu alanlarda nasıl görüyorsun? (değerlendirmek için bir karta dokun)</div>
               <span className="minlink" onClick={() => setHomeYonetOpen(true)}>⚙️ Alanları yönet</span>
             </div>
-            {/* 2 sütunlu ızgara (kullanıcı isteği: "her satırda 2 kart olsun"). Gösterge artık 4 ayrı dilim değil,
+            {/* 2026-09 (Behnan kararı — "Alanlar" mimarisi): artık her danışana otomatik tüm alanlar
+                tohumlanmıyor, Rite Studio'dan atanana kadar Home boş görünebilir — bu iki durumu ayrı ayrı
+                açıklıyoruz (hiç atanmamış vs hepsi gizlenmiş). */}
+            {homeAlanlar.length === 0 ? (
+              <div className="note">Henüz sana atanmış bir alan yok — Meridyen tarafından atandığında burada görünecek.</div>
+            ) : homeAlanlarGorunur.length === 0 ? (
+              <div className="note">Tüm alanları gizledin — "⚙️ Alanları yönet"den geri gösterebilirsin.</div>
+            ) : (
+            /* 2 sütunlu ızgara (kullanıcı isteği: "her satırda 2 kart olsun"). Gösterge artık 4 ayrı dilim değil,
                 dolan TEK bir pil (kullanıcı isteği) — dolu kısmın tamamı seviyeye göre tek bir renk: %25 koyu
                 kırmızı, %50 turuncu, %75 zeytin yeşili, %100 açık yeşil (bkz. HOME_SEVIYE_RENK, örnek renkler
-                kullanıcıdan). */}
+                kullanıcıdan). */
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               {homeAlanlarGorunur.map((a) => {
                 const guncel = homeGuncelDeger(a.anahtar);
@@ -3117,6 +2994,7 @@ export default function Rite() {
                 );
               })}
             </div>
+            )}
             {/* Son ölçümler (2026-09, Behnan kararı): Gelişim'in eski "Ölçümler" kartının yerini alıyor —
                 "home'a yerleştirsek güzel olur, son ölçümleri orada alırız". Alan/dikey gruplaması yok, sadece
                 her ölçümün en son değeri (bkz. sonOlcumler) — Meridyen'in 13 alanıyla eski fayda-kaynaklı alan
@@ -4610,7 +4488,7 @@ export default function Rite() {
                   ))}
                 </div>
               </div>
-              <div className="note" style={{ marginTop: 12 }}>Bu alanın adını, checklist'ini ya da örneklerini değiştirmek için Kütüphane'deki "Grupları yönet" ekranını kullan.</div>
+              <div className="note" style={{ marginTop: 12 }}>Bu alanın içeriği (ad, checklist, örnekler) Meridyen tarafından yönetiliyor.</div>
             </div>
           </div>
         );
@@ -4883,9 +4761,9 @@ export default function Rite() {
           besleniyor — serbestçe yazılan, kalıcı olmayan bir isimden çok, "Duruş" / "Bel çukurluğu" gibi
           gerçek bir araştırma başlığı listesi. */}
       {gruplarYonetOpen && (
-        <div className="modal" onMouseDown={() => { setGruplarYonetOpen(false); setGrupDuzenleId(null); setAltGrupEkleFor(null); setAlanFormFor(null); homeYonetFormAc(); }}>
+        <div className="modal" onMouseDown={() => { setGruplarYonetOpen(false); setGrupDuzenleId(null); setAltGrupEkleFor(null); }}>
           <div className="sheet" onMouseDown={(e) => e.stopPropagation()}>
-            <button className="x" onClick={() => { setGruplarYonetOpen(false); setGrupDuzenleId(null); setAltGrupEkleFor(null); setAlanFormFor(null); homeYonetFormAc(); }}>×</button>
+            <button className="x" onClick={() => { setGruplarYonetOpen(false); setGrupDuzenleId(null); setAltGrupEkleFor(null); }}>×</button>
             <h2>🗂 Grupları yönet</h2>
             <div className="note" style={{ marginTop: 0 }}>Her Grup bir araştırma başlığı, Alt gruplar onun altındaki daha ince konular.</div>
             {grupUst.length === 0 && <div className="note">Henüz Grup yok — aşağıdan ekle.</div>}
@@ -4917,24 +4795,24 @@ export default function Rite() {
                     )}
                   </div>
                   <div style={{ margin: '4px 0 0 24px' }}>
-                    {/* "Meridyen" kökünün alt grupları (= Home'un alanları) sadece ad değil, neden/checklist/
-                        örnekler de taşıyor — o yüzden düz yeniden-adlandırma yerine zengin form (bkz. alanFormFor,
-                        homeYonetFormAc/homeYonetKaydet — Home'daki "Alanları yönet" ile aynı state ve fonksiyonlar,
-                        sadece burada gösteriliyor: kullanıcı isteği "düzenleme doğrudan Kütüphane'de olsa daha
-                        mantıklı"). Sıradan Grup/Alt gruplar eskisi gibi düz ad ile kalıyor. */}
-                    {altlar.map((ag, j) => (
+                    {/* "Meridyen" kökünün alt grupları (= Home'un alanları) artık salt-okunur burada — içerik
+                        (ad/neden/checklist/örnekler) ve hangi alanların bu danışana ait olacağı (2026-09, Behnan
+                        kararı — "Alanlar" mimarisi) TEK kaynak olarak Rite Studio'dan (app-meridyen/atama)
+                        yönetiliyor. Sıra/görünürlük hâlâ Home'un kendi "Alanları yönet" ekranında. Sıradan
+                        Grup/Alt gruplar eskisi gibi (rename/sil, düz ad) kalıyor. */}
+                    {g.sabit ? (
+                      homeAlanlar.length > 0 ? homeAlanlar.map((ag) => (
+                        <div key={ag.id} style={{ margin: '3px 0' }}>
+                          <span className="note" style={{ margin: 0 }}>{ag.ad}</span>
+                        </div>
+                      )) : <div className="note">Henüz Meridyen'den atanmış bir alan yok.</div>
+                    ) : altlar.map((ag, j) => (
                       <div key={ag.id} style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '3px 0' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                           <button className="minlink" style={{ padding: 0, fontSize: 10 }} onClick={() => grupSiraDegistir(ag, -1)} disabled={j === 0}>▲</button>
                           <button className="minlink" style={{ padding: 0, fontSize: 10 }} onClick={() => grupSiraDegistir(ag, 1)} disabled={j === altlar.length - 1}>▼</button>
                         </div>
-                        {g.sabit ? (
-                          <>
-                            <span className="note" style={{ margin: 0, flex: 1 }}>{ag.ad}</span>
-                            <button className="minlink" onClick={() => { homeYonetFormAc(ag); setAlanFormFor(ag.id); }}>✎</button>
-                            <button className="minlink" style={{ color: 'var(--red)' }} onClick={() => homeAlanSil(ag)}>🗑</button>
-                          </>
-                        ) : grupDuzenleId === ag.id ? (
+                        {grupDuzenleId === ag.id ? (
                           <>
                             <input value={grupDuzenleAd} onChange={(e) => setGrupDuzenleAd(e.target.value)} style={{ flex: 1 }} autoFocus />
                             <button className="btn sm" onClick={() => { grupYenidenAdlandir(ag.id, grupDuzenleAd); setGrupDuzenleId(null); }}>Kaydet</button>
@@ -4950,25 +4828,7 @@ export default function Rite() {
                       </div>
                     ))}
                     {g.sabit ? (
-                      (alanFormFor === 'yeni' || altlar.some((x) => x.id === alanFormFor)) ? (
-                        <div className="card" style={{ margin: '8px 0 0', padding: 10 }}>
-                          <div className="note" style={{ marginTop: 0, marginBottom: 8 }}>{alanFormFor === 'yeni' ? 'Yeni alan ekle' : 'Alanı düzenle'}</div>
-                          <label className="fldlbl">Ad</label>
-                          <input value={homeAlanAd} onChange={(e) => setHomeAlanAd(e.target.value)} placeholder="ör. Maneviyat" style={{ marginBottom: 8, width: '100%' }} />
-                          <label className="fldlbl">Neden önemli</label>
-                          <textarea value={homeAlanNeden} onChange={(e) => setHomeAlanNeden(e.target.value)} rows={2} style={{ width: '100%', marginBottom: 8 }} />
-                          <label className="fldlbl">Kontrol listesi (her satır bir madde)</label>
-                          <textarea value={homeAlanChecklist} onChange={(e) => setHomeAlanChecklist(e.target.value)} rows={4} style={{ width: '100%', marginBottom: 8 }} />
-                          <label className="fldlbl">Örnek aktiviteler (her satır bir madde)</label>
-                          <textarea value={homeAlanOrnekler} onChange={(e) => setHomeAlanOrnekler(e.target.value)} rows={3} style={{ width: '100%', marginBottom: 10 }} />
-                          <div className="rowbtns">
-                            <button className="btn ghost sm" onClick={() => { homeYonetFormAc(); setAlanFormFor(null); }}>Vazgeç</button>
-                            <button className="btn sm" style={{ flex: 1 }} onClick={async () => { await homeYonetKaydet(); setAlanFormFor(null); }} disabled={!homeAlanAd.trim()}>{alanFormFor === 'yeni' ? '＋ Ekle' : 'Kaydet'}</button>
-                          </div>
-                        </div>
-                      ) : (
-                        <button className="minlink" style={{ margin: '4px 0 0' }} onClick={() => { homeYonetFormAc(); setAlanFormFor('yeni'); }}>+ Yeni alan ekle</button>
-                      )
+                      <div className="note" style={{ margin: '6px 0 0' }}>Alanların içeriğini ve atamasını Meridyen'deki Rite Studio'dan yönet — sıra ve görünürlük için "⚙️ Alanları yönet" (Home) ekranını kullan.</div>
                     ) : altGrupEkleFor === g.id ? (
                       <div style={{ display: 'flex', gap: 6, margin: '4px 0' }}>
                         <input value={altGrupYeniAd} onChange={(e) => setAltGrupYeniAd(e.target.value)} placeholder="Alt grup adı" style={{ flex: 1 }} autoFocus />
@@ -4978,7 +4838,6 @@ export default function Rite() {
                     ) : (
                       <button className="minlink" style={{ margin: '4px 0 0' }} onClick={() => { setAltGrupEkleFor(g.id); setAltGrupYeniAd(''); }}>+ Alt grup</button>
                     )}
-                    {g.sabit && <div className="minlink" style={{ margin: '8px 0 0' }} onClick={homeAlanlarSifirla}>↺ Standart alanlara sıfırla</div>}
                   </div>
                 </div>
               );
