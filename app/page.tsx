@@ -2899,16 +2899,15 @@ export default function Rite() {
     const arr = measByKey['home_' + alan];
     return arr && arr.length ? Number(arr[arr.length - 1].deger) : null;
   };
-  // Kartlara atanan opsiyonel "alan" (dikey) etiketinden ölçüm anahtarı → dikey haritası çıkar (OLCU_ALAN'ın statik tahminine göre öncelikli).
-  const anahtarDikey: Record<string, string> = {};
-  rituals.forEach((r) => {
-    const dikey = r.kart_config?.dikey;
-    if (!dikey) return;
-    if (r.kart_tipi === 'olcum') (r.kart_config?.alanlar || []).forEach((a: any) => { if (a?.anahtar) anahtarDikey[a.anahtar] = dikey; });
-    else if (r.kart_tipi === 'ruhhali') anahtarDikey['ruh_hali'] = dikey;
-    else if (r.kart_tipi === 'pomodoro') anahtarDikey['odak_dk'] = dikey;
-    else if (r.kart_tipi === 'su') anahtarDikey['su'] = dikey;
-  });
+  // Home'da gösterilecek "Son ölçümler": ruh_hali (ayrı yeri var) ve home_* (alan öz-değerlendirme seviyeleri,
+  // zaten alan kartlarının kendisi) hariç her ölçüm anahtarının en son değeri — alan/dikey gruplaması YOK
+  // (Behnan kararı: "son ölçümleri orada alırız", eski fayda-kaynaklı alan sözlüğünü Meridyen'in 13 alanına
+  // eşlemeye gerek kalmadan). Gelişim'deki eski "Ölçümler" kartının yerini alıyor.
+  const sonOlcumler = Object.keys(measByKey).filter((k) => k !== 'ruh_hali' && !k.startsWith('home_')).map((k) => {
+    const arr = measByKey[k]; const l = arr[arr.length - 1];
+    const etiket = OLCU_ETIKET[k] || (k.startsWith('ozel_') ? k.slice(5).replace(/_/g, ' ') : k);
+    return { k, etiket, deger: l.deger, birim: l.birim || '' };
+  }).sort((a, b) => a.etiket.localeCompare(b.etiket, 'tr'));
   const days7 = lastDays(7);
   const last30 = lastDays(30);
   const weekArr = weekDays(day);
@@ -3107,6 +3106,18 @@ export default function Rite() {
                 );
               })}
             </div>
+            {/* Son ölçümler (2026-09, Behnan kararı): Gelişim'in eski "Ölçümler" kartının yerini alıyor —
+                "home'a yerleştirsek güzel olur, son ölçümleri orada alırız". Alan/dikey gruplaması yok, sadece
+                her ölçümün en son değeri (bkz. sonOlcumler) — Meridyen'in 13 alanıyla eski fayda-kaynaklı alan
+                sözlüğü arasında bir eşleme gerektirmiyor. Yeni ölçüm girişi hâlâ Gelişim'in ＋'sından. */}
+            {sonOlcumler.length > 0 && (
+              <div className="card" style={{ marginTop: 10 }}>
+                <h3>Son ölçümler</h3>
+                {sonOlcumler.map((o) => (
+                  <div key={o.k} className="mrow"><span>{o.etiket}</span><b>{o.deger} {o.birim}</b></div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -3545,31 +3556,12 @@ export default function Rite() {
               <div style={{ fontSize: 24, letterSpacing: 6 }}>{measByKey['ruh_hali'].slice(-7).map((m: any, i: number) => <span key={i} title={m.tarih}>{MOOD[Math.round(Number(m.deger)) - 1] || '·'}</span>)}</div>
               {(() => { const arr = measByKey['ruh_hali'].slice(-7).map((m: any) => Number(m.deger)); const ort = arr.reduce((a: number, b: number) => a + b, 0) / arr.length; return <div className="note" style={{ marginTop: 4 }}>Ortalama: {MOOD[Math.round(ort) - 1]} ({ort.toFixed(1)}/5)</div>; })()}
             </div>}
-            <div className="card"><h3>Ölçümler</h3>
-              {(() => {
-                const keys = Object.keys(measByKey).filter((k) => k !== 'ruh_hali');
-                if (keys.length === 0) return <div className="note">Ölçüm kartıyla girdiğinde ya da koçun girince burada grafikleşir.</div>;
-                const gruplar: Record<string, string[]> = {};
-                keys.forEach((k) => {
-                  const alan = (anahtarDikey[k] && DIKEY_LABEL[anahtarDikey[k]]) || OLCU_ALAN[k] || 'Diğer';
-                  (gruplar[alan] = gruplar[alan] || []).push(k);
-                });
-                return ALAN_SIRA.filter((a) => gruplar[a]).map((alan) => (
-                  <div key={alan} style={{ marginBottom: 6 }}>
-                    <div className="note" style={{ margin: '4px 0 2px', fontWeight: 800, textTransform: 'uppercase', fontSize: 10, letterSpacing: .3 }}>{alan}</div>
-                    {gruplar[alan].map((k) => {
-                      const arr = measByKey[k]; const l = arr[arr.length - 1];
-                      const son = arr.slice(-7).map((m: any) => Number(m.deger)); const mn = Math.min(...son), mx = Math.max(...son);
-                      // "ozel_..." önekli anahtarlar Gelişim'deki hızlı Ölçüm ekle formundan (kullanıcının kendi
-                      // yazdığı serbest etiket) geliyor — OLCU_ETIKET'te olmadığından ham anahtar yerine önek
-                      // temizlenip okunur hale getiriliyor (bkz. olcumEkleOpen formu).
-                      const etiket = OLCU_ETIKET[k] || (k.startsWith('ozel_') ? k.slice(5).replace(/_/g, ' ') : k);
-                      return <div key={k} className="mrow"><span>{etiket}<span className="msprk">{son.map((v: number, i: number) => <i key={i} style={{ height: (mx > mn ? ((v - mn) / (mx - mn)) * 100 : 50) + '%' }} />)}</span></span><b>{l.deger} {l.birim || ''}</b></div>;
-                    })}
-                  </div>
-                ));
-              })()}
-            </div>
+            {/* "Ölçümler" kartı da KALDIRILDI (2026-09, Behnan kararı) — son ölçümler artık Home'da (bkz. Home
+                ekranındaki "Son ölçümler" bölümü). Kapsama şimdilik burada duruyor — Behnan'ın notu: Home'un
+                alan kartlarına taşımak eski (fayda-kaynaklı) alan sözlüğü ile Meridyen'in yeni 13 alanı arasında
+                bir eşleme gerektirir, otomatik işleyen bir mantık kurulmadan buna gerek yok ("home daki
+                değerlendirme mantığıyla bence yok... ileride otomatik işleyen bir mantık oluşturulursa alan
+                kartlarında belirtilir"). */}
             {cNot && <div className="card"><h3>Koç notu</h3><p style={{ fontSize: 12, color: '#4a565c', lineHeight: 1.55 }}>{cNot}</p></div>}
           </div>
         )}
