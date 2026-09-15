@@ -76,48 +76,93 @@ const HOME_SEVIYE_RENK = ['#8b3223', '#d98a3d', '#8a8f3e', '#8fbf72'];
 // Home'un alanları artık sabit bir JS listesi değil, dog_home_alanlar tablosundan (client_id'ye özel, kullanıcı
 // düzenleyebilir/ekleyebilir) okunuyor — bkz. loadHomeAlanlar, homeAlanEkle/Guncelle/Sil ve migration dosyası
 // (rite_home_alanlar_migration.sql). Bu sabit dizi SADECE bir client'ın ilk açılışında (hiç satırı yoksa) o
-// tabloya YAZILACAK altı standart alanın başlangıç içeriği — kullanıcı isteği: "standart alanlar ilk başta
-// olsun", ve her birinin kontrol listesi genel/bilinen sağlık kılavuzlarına (WHO hareket önerisi, CDC uyku
-// hijyeni, ABD Beslenme Kılavuzu, APA stres yönetimi, ABD Surgeon General'ın sosyal bağ tavsiyesi) dayanıyor —
-// kullanıcı isteği: "sende bir araştırmayla bunları hazırlayabilirsin". anahtar'lar bilerek eski PIL/HOME
-// sabitleriyle aynı bırakıldı (beslenme/egzersiz/uyku/stres/mesgale/sosyal) ki daha önce test için girilmiş
-// dog_measurements kayıtları koptan kopmasın.
+// tabloya YAZILACAK standart alanların başlangıç içeriği. v2 (2026-09): Behnan'ın kendi "Esenlik çalışması"
+// (yüklediği PDF) 4 üst sütun (Bedensel & Metabolik / Zihinsel & Duygusal / Çevresel & Sosyal / Aktif Üretim)
+// altında 13 alt-alan tanımlıyor — kullanıcı isteği: "pdf de bulunan 13 alan ile başlayabiliriz". Checklist
+// maddeleri PDF'teki alt-madde listelerinden birebir alındı (Behnan'ın kendi araştırması, üçüncü taraf kaynak
+// değil). Eski 6 alanın anahtarları (beslenme/egzersiz/uyku/stres/mesgale/sosyal) BİLEREK yeniden kullanılmadı
+// — taksonomi tamamen değişti, eski test dog_measurements kayıtları (home_beslenme vb.) artık hiçbir alana
+// bağlı değil ama zararsız, sadece görünmüyor. Mevcut bir client'ın eski 6 alanını yeni 13'e geçirmesi için
+// "Alanları yönet" ekranında bir "Standart alanlara sıfırla" seçeneği var (bkz. homeAlanlarSifirla) — tüm
+// mevcut alanlarını silip bu diziyle yeniden tohumluyor.
 const HOME_ALAN_VARSAYILAN: { anahtar: string; ad: string; neden: string; checklist: string[]; ornekler: string[] }[] = [
   {
-    anahtar: 'beslenme', ad: 'Beslenme',
-    neden: 'Enerjini, kilonu ve genel sağlığını doğrudan etkiler — belki de en çabuk fark edilen alan.',
-    checklist: ['Her öğünde tabağının yarısı sebze/meyve olsun', 'Günde en az 6-8 bardak su iç', 'Rafine şeker ve aşırı işlenmiş gıdayı sınırla', 'Tam tahıllı/lifli gıdaları tercih et', 'Öğünleri düzenli saatlerde, atlamadan yap', 'Tuzu ölçülü kullan'],
-    ornekler: ['Günlük su takibi', 'Haftalık market listesi', 'Ana öğün planlayıcı'],
+    anahtar: 'uyku_isik', ad: 'Uyku & Gün Işığı',
+    neden: 'Sirkadiyen ritmi koruyan uyku düzeni ve doğal ışık alımı bedenin ve zihnin saatini doğru kurar.',
+    checklist: ['Sabah doğal ışık maruziyeti', 'Akşam ekran ve mavi ışık sınırı', 'Tutarlı yatış-kalkış sirkadiyen ritmi'],
+    ornekler: ['Sabah güneşte kısa yürüyüş', 'Akşam ekran kapatma saati', 'Sabit yatış saati'],
   },
   {
-    anahtar: 'egzersiz', ad: 'Egzersiz',
-    neden: 'Hareketsizlik yaşla birlikte güç ve denge kaybına yol açar; düzenli hareket bunu büyük ölçüde yavaşlatır.',
-    checklist: ['Haftada en az 150 dakika tempolu yürüyüş/hareket (günde ~20-30 dk)', 'Haftada 2 gün kas güçlendirici hareket (hafif ağırlık, bahçe işi)', 'Uzun süre oturmayı ara ara böl, kalkıp yürü', 'Merdiven gibi günlük fırsatları değerlendir', 'Denge/esneklik çalışması ekle'],
-    ornekler: ['Sabah yürüyüşü', 'Esneme rutini', 'Merdiven hedefi'],
+    anahtar: 'beslenme_takviye', ad: 'Beslenme & Takviyeler',
+    neden: 'Günlük beslenme planı ve doğru takviye rutini bedenin makinesini besleyen temel girdidir.',
+    checklist: ['Akıllı Tabak ve öğün planlaması', 'Günlük takviye rutini (Kreatin, Omega-3, K2D3 ve Magnezyum)', 'Günlük hidrasyon ve sıvı dengesi'],
+    ornekler: ['Öğün planlama', 'Takviye hatırlatıcısı', 'Su takibi'],
   },
   {
-    anahtar: 'uyku', ad: 'Uyku',
-    neden: 'Uyku kalitesi; ruh halini, hafızayı ve bağışıklığı doğrudan etkiler, çoğu zaman göz ardı edilir.',
-    checklist: ['Her gün aşağı yukarı aynı saatte yat-kalk (hafta sonu dahil)', 'Gecede en az 7 saat uyu', 'Yatmadan 1 saat önce ekrandan uzak dur', 'Öğleden sonra kafeini, akşam alkolü sınırla', 'Yatak odasını karanlık, sessiz ve serin tut', 'Gündüz uzun/geç şekerlemelerden kaçın'],
-    ornekler: ['Sabit yatış saati hatırlatıcısı', 'Ekran kapatma alışkanlığı', 'Akşam sakinleşme rutini'],
+    anahtar: 'seker_kalp', ad: 'Şeker & Kalp Sağlığı',
+    neden: 'Kan şekeri dengesi, insülin direnci kontrolü ve kalp-damar koruyucu alışkanlıklar uzun vadeli sağlığın omurgası.',
+    checklist: ['Yemek sonrası 15 dakikalık glisemi yürüyüşleri', 'Kan şekeri ve insülin dalgalanmalarını dengeleme', 'Sabah doğa yürüyüşleri ve 45 dakikalık akşam yürüyüşleri'],
+    ornekler: ['Yemek sonrası kısa yürüyüş', 'Sabah doğa yürüyüşü', 'Akşam yürüyüşü'],
   },
   {
-    anahtar: 'stres', ad: 'Stres Yönetimi',
-    neden: 'Biriken stres uzun vadede hem ruh hem beden sağlığını yıpratır; fark etmeden büyür.',
-    checklist: ['Günde birkaç dakika nefes/gevşeme egzersizi yap', 'Düzenli hareket et — stresi azaltan en güçlü araçlardan biri', 'Yeterli uyu, stres toleransını doğrudan etkiler', 'Duygularını biriktirmeden güvendiğin biriyle paylaş', 'Kontrol edemediğin şeyleri bırakmayı, önceliklendirmeyi dene', 'Gerekirse bir uzmandan destek almaktan çekinme'],
-    ornekler: ['Nefes egzersizi', 'Kısa yürüyüş molası', 'Günlük tutma'],
+    anahtar: 'kas_eklem_omurga', ad: 'Kas, Eklem & Omurga Mekaniği',
+    neden: 'Kas gücünü, denge ve eklem sağlığını korumak günlük yaşam bağımsızlığının temelidir.',
+    checklist: ['Günlük hareket & yürüyüşler (sabah doğa yürüyüşü, 45 dk akşam yürüyüşü, yemek sonrası glisemi turu)', 'Genel vücut lenf drenajı', 'Dik durmak & omurga rahatlığı (oturma ergonomisi, esneme)', 'Kasları korumak & güçlü kalmak (direnç çalışması, kreatin desteği)', 'Denge & adım güvenliği', 'Pelvik taban sağlığı', 'Diz & eklem sağlığı (fizyoterapi odaklı hareketler)', 'Fonksiyonel vücut gücü (günlük yaşam bağımsızlığını koruyan temel kuvvet)'],
+    ornekler: ['Direnç egzersizi', 'Denge çalışması', 'Esneme/omurga rutini'],
   },
   {
-    anahtar: 'mesgale', ad: 'Meşgale',
-    neden: 'Zihni canlı ve motive tutar — özellikle boş zamanı çok olan biri için önemli bir denge unsuru.',
-    checklist: ['Haftada düzenli, keyif aldığın bir uğraşa zaman ayır', 'Yeni bir şey öğrenmeyi dene', 'Elle/bedenle bir şey üreten bir uğraş seç (bahçe, el işi, müzik)', 'Uğraşını paylaşabileceğin bir ortam ara (kurs, kulüp)'],
-    ornekler: ['Yeni bir hobiye zaman ayırma', 'Kitap/öğrenme saati', 'Bahçe/el işi'],
+    anahtar: 'yuz_cilt', ad: 'Yüz & Cilt Zindeliği',
+    neden: 'Somatik bakım ve cilt sağlığını koruyan rutinler görünüşten çok kan dolaşımı ve öz-bakımla ilgili.',
+    checklist: ['Somatik yüz masajı ve cilt kan dolaşımı pratikleri', 'Temel cilt koruma ve nem rutinleri', 'Yüz çevresi ve yüz lenf drenajı'],
+    ornekler: ['Yüz masajı', 'Nem rutini', 'Lenf drenajı'],
   },
   {
-    anahtar: 'sosyal', ad: 'Sosyal İlişkiler',
-    neden: 'Yalnızlık, fiziksel sağlık kadar önemli bir risk taşır; düzenli sosyal temas bunu azaltır.',
-    checklist: ['Haftada birkaç kez sevdiklerinle gerçek (yüz yüze/sesli) temas kur', 'Yeni tanışıklıklara açık ol — komşu, ortak ilgi grupları', 'Bir topluluğa/gruba düzenli katıl (dernek, kulüp, spor grubu)', 'İlişkilerine sadece kriz anında değil, düzenli zaman ayır', 'Kendini yalnız hissettiğinde bunu biriyle paylaş'],
-    ornekler: ['Haftalık arama listesi', 'Komşu/arkadaş buluşması', 'Bir etkinliğe katılma'],
+    anahtar: 'zihni_dinlendirme', ad: 'Zihni Dinlendirme',
+    neden: 'Gün içinde zihni durduran, sakinleştiren anlar zihnin işletim sistemini rahatlatır.',
+    checklist: ['Gün içi kısa zihinsel durma ve nefes molaları', 'Akşam zihni rölantiye alma anları'],
+    ornekler: ['Nefes molası', 'Akşam sakinleşme anı'],
+  },
+  {
+    anahtar: 'ic_huzur', ad: 'İç Huzur & Duygusal Sağlamlık',
+    neden: 'İç sesle sağlıklı ilişki kurmak ve zihinsel dayanıklılık, dalgalanmalara karşı asıl zemin.',
+    checklist: ['İç sesle sağlıklı ilişki kurma ve farkındalık halleri', 'Günlük duygusal denge ve esneklik pratiği'],
+    ornekler: ['Farkındalık pratiği', 'Günlük tutma'],
+  },
+  {
+    anahtar: 'ekran_mesafe', ad: 'Ekran & Dijital Mesafe',
+    neden: 'Dijital sınırları korumak, aşırı bildirim ve haber yükünden kaçınmayı sağlar.',
+    checklist: ['Yoğun bildirim ve haber tüketimini sınırlama', 'Akşamları dijital detoks zamanları'],
+    ornekler: ['Bildirim sınırlama', 'Akşam dijital detoks'],
+  },
+  {
+    anahtar: 'sosyal_baglar', ad: 'Sosyal Bağlar',
+    neden: 'Sosyal bağları canlı tutan derin sohbetler ve buluşmalar, yalnızlığa karşı en güçlü kalkan.',
+    checklist: ['Yakın dostlarla buluşmalar ve grup gezileri (ör. 4 kişilik arkadaş grubuyla seyahat)', 'Toplumsal ve sivil toplum katkıları'],
+    ornekler: ['Arkadaş buluşması', 'Grup gezisi', 'Gönüllü/sivil katkı'],
+  },
+  {
+    anahtar: 'ev_ortam', ad: 'Ev & Ortam Düzeni',
+    neden: 'Yaşam alanının konforu ve düzeni, içinde yaşadığın zeminin sağlamlığını belirler.',
+    checklist: ['Çalışma ve yaşam alanı ergonomisi', 'Mekansal sadeleşme ve düzen'],
+    ornekler: ['Çalışma alanı düzenleme', 'Sadeleşme/temizlik turu'],
+  },
+  {
+    anahtar: 'finansal_guvenlik', ad: 'Finansal Güvenlik',
+    neden: 'Finansal sürdürülebilirlik, çevresel/sosyal zeminin bir parçası olan güvenlik hissini besler.',
+    checklist: ['Kişisel bütçe ve harcama dengesi', 'Uzun vadeli sürdürülebilir finansal planlama'],
+    ornekler: ['Bütçe gözden geçirme', 'Uzun vadeli planlama'],
+  },
+  {
+    anahtar: 'hobiler_beceri', ad: 'Hobiler & El-Zihin Becerileri',
+    neden: 'Nöroplastisiteyi destekleyen enstrüman ve hobi çalışmaları zihni ve eli canlı tutar.',
+    checklist: ['Enstrüman pratiği', 'Dijital içerik, tasarım ve bilişsel uğraşlar', 'Yeni dil öğrenme'],
+    ornekler: ['Enstrüman pratiği', 'Dil öğrenme', 'Yaratıcı/bilişsel uğraş'],
+  },
+  {
+    anahtar: 'geleneksel_hareket', ad: 'Geleneksel Hareket Formları',
+    neden: 'Ba Duan Jin ve Tai Chi gibi geleneksel zihin-beden pratikleri, hareketi nefes ve farkındalıkla birleştirir.',
+    checklist: ['Ba Duan Jin geleneksel hareket setleri', 'Tai Chi akışları'],
+    ornekler: ['Ba Duan Jin seti', 'Tai Chi akışı'],
   },
 ];
 // kart_config.stil — Meridyen Studio'da seçilen renk/tema preseti (bg = açık zemin, ac = vurgu rengi, tx = yazı rengi). Liste Meridyen'deki STIL_PRESETS ile aynı kalmalı.
@@ -1958,6 +2003,15 @@ export default function Rite() {
     if (homeAlanDuzenleId) await homeAlanGuncelle(homeAlanDuzenleId, homeAlanAd, homeAlanNeden, checklist, ornekler);
     else await homeAlanEkle(homeAlanAd, homeAlanNeden, checklist, ornekler);
     homeYonetFormAc();
+  }
+  // Alan taksonomisi değiştiğinde (ör. HOME_ALAN_VARSAYILAN güncellenince) mevcut bir client'ın eski alanlarını
+  // yeni standart listeyle değiştirmesi için — tüm mevcut alanları (kullanıcının kendi eklediği özel alanlar
+  // dahil) siler, loadHomeAlanlar zaten "hiç satır yoksa tohumla" mantığıyla HOME_ALAN_VARSAYILAN'ı yeniden yazar.
+  async function homeAlanlarSifirla() {
+    if (!client) return;
+    if (!confirm('Tüm alanların silinip standart listeyle değiştirilsin mi? Kendi eklediğin özel alanlar da dahil silinir (geçmiş değerlendirmeler etkilenmez, sadece artık hiçbir alana bağlı görünmezler).')) return;
+    await supabase.from('dog_home_alanlar').delete().eq('client_id', client.id);
+    await loadHomeAlanlar(client.id);
   }
   function sureGun(rt: any): number { if (!rt.bitis) return 0; const b = parseD(rt.baslangic || today); const e = parseD(rt.bitis); return Math.round((e.getTime() - b.getTime()) / 86400000) + 1; }
   // Ajanda'da (tur='ritual') sadece detay.obj yamalanır — act ayrı bir kavram (bağlı Program şablonu) olabilir,
@@ -4591,7 +4645,7 @@ export default function Rite() {
           <div className="sheet" onMouseDown={(e) => e.stopPropagation()}>
             <div className="sheetgrip" onClick={() => { setHomeYonetOpen(false); homeYonetFormAc(); }} />
             <h2>⚙️ Alanları yönet</h2>
-            <div className="note" style={{ marginTop: 0, marginBottom: 12 }}>Standart altı alan (Beslenme, Egzersiz, Uyku, Stres Yönetimi, Meşgale, Sosyal İlişkiler) hazır geliyor — istersen düzenle, sil ya da kendi alanını ekle.</div>
+            <div className="note" style={{ marginTop: 0, marginBottom: 12 }}>Standart 13 alan hazır geliyor — istersen düzenle, sil ya da kendi alanını ekle. <span className="minlink" onClick={homeAlanlarSifirla}>↺ Standart alanlara sıfırla</span></div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
               {[...homeAlanlar].sort((a, b) => a.sira - b.sira).map((a) => (
                 <div key={a.id} className="card" style={{ padding: '10px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
