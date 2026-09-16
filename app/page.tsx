@@ -114,9 +114,11 @@ function kisaTarih(d?: string | null): string {
 // satırında (kart arka planı/köşeleri için) aynı koşul iki yerde tekrarlanmasın diye ortak bir yardımcı.
 function isNotKart(rt: any): boolean {
   const cfg = rt?.kart_config || {};
-  // gorev (Yapılacak) da hariç — o da bitissiz/her gün görünür ama checkbox'ı ve kendi ikonu olan ayrı bir
-  // tip, Not'un yapışkan-not (ikonsuz, checkbox'sız, tam sarı satır) görünümüne girmemeli.
-  return rt?.kart_tipi === 'bilgi' && rt?.kaynak === 'Kendi' && !cfg.genel && !cfg.randevu && !cfg.gorev && !rt?.aliskanlik;
+  // gorev (Aktivite'nin "Bugün" hâli) da hariç — o da bitissiz/her gün görünür ama checkbox'ı ve kendi ikonu
+  // olan ayrı bir tip, Not'un yapışkan-not (ikonsuz, checkbox'sız, tam sarı satır) görünümüne girmemeli.
+  // cfg.genel eski/kaldırılmış "Kart" tipinin işaretiydi (bkz. 2026-09-16 kaldırma notu) — artık kontrol
+  // edilmiyor, olası eski bir kayıt varsa da diğer alanlara göre Not/Aktivite/Randevu'dan birine düşüyor.
+  return rt?.kart_tipi === 'bilgi' && rt?.kaynak === 'Kendi' && !cfg.randevu && !cfg.gorev && !rt?.aliskanlik;
 }
 // Adım pencerelerini çöz: ardisik=true ise önceki adımın bitişinden başlar.
 function programSpans(adimlar: any[], sure?: number | null) {
@@ -772,10 +774,10 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi, sadeceAcik
                   <div style={{ whiteSpace: 'pre-wrap' }}>{secili.ozelNot}</div>
                 </div>
               )}
-              {/* ekAyri (Not/Alışkanlık/Yapılacak, isKisisel altında): kompakt foto eki burada artık
-                  gösterilmiyor — tek dosyaya indirilip Bildirim'le aynı satıra, sayfa seviyesine taşındı
-                  (kullanıcı isteği: "bildirimle aynı satırda olabilir mi"). Kart (isYeniKart) ekAyri
-                  geçmiyor, o yüzden kendi eski konumunda (video şeridinin altında) kalmaya devam ediyor. */}
+              {/* ekAyri (Not/Aktivite, isKisisel altında): kompakt foto eki burada artık gösterilmiyor — tek
+                  dosyaya indirilip Bildirim'le aynı satıra, sayfa seviyesine taşındı (kullanıcı isteği:
+                  "bildirimle aynı satırda olabilir mi"). Salt-okunur önizlemede (isKisisel olmayan, ekAyri
+                  geçmeyen) kendi eski konumunda (video şeridinin altında) kalmaya devam ediyor. */}
               {notTasarimi && !ekAyri && resimAttachmentJsx}
             </div>
             )}
@@ -1332,11 +1334,6 @@ export default function Rite() {
   // aşağıdaki Düzenle/Vazgeç/Kaydet butonları ve setRitAd/setBilgiCfg/ritTasi/setRitSure/setRitGunler/
   // setRitReminder'daki "duzenleModu ise sadece yerelde tut" dalları).
   const [duzenleOrijinal, setDuzenleOrijinal] = useState<any>(null);
-  // "Kart" (deneysel, tek/genel kart tipi — Not/Alışkanlık/Randevu'ya dokunmadan ayrı bir tip olarak eklendi,
-  // bkz. isYeniKart): ilk açılışta sade kalsın diye Video/Zamanlama/Bildirim tek bir "+ Daha fazla" şeridinin
-  // arkasında — zaten içerik varsa (video/zamanlama/bildirim doluysa) açık başlıyor, tamamen boşsa kapalı
-  // başlıyor (bkz. aşağıdaki useEffect'teki hesap).
-  const [dahaFazlaAcik, setDahaFazlaAcik] = useState(false);
   // Alışkanlık Zamanlama şeridi — Günler: varsayılan sade görünümde sadece "Her gün" chip'i var (zaten seçili
   // geliyor), haftanın günleri gizli; "Her gün"e basınca (kullanıcı isteği: "basarsak altta günler çıksa")
   // altında açılıp özel gün seçimine izin veriyor. Kart zaten özel günlerle geldiyse (gunler doluysa) baştan
@@ -1367,20 +1364,16 @@ export default function Rite() {
     if (lastDetayAnahtarRef.current !== anahtar) {
       lastDetayAnahtarRef.current = anahtar;
       const isDraft2 = !o2.id && !detay.preview;
-      // Not/Alışkanlık/Yapılacak/Randevu/Kart artık her açıldığında doğrudan düzenleme modunda gelir — ayrı
+      // Not/Aktivite(Bugün-Tekrarla)/Randevu artık her açıldığında doğrudan düzenleme modunda gelir — ayrı
       // bir "Düzenle"ye basma adımı yok (kullanıcı isteği: "artık hiçbir kartta... Kapat, Düzenle butonları
       // olmayacak, doğrudan düzenleme modunda açılacak"). Randevu da artık aynı Vazgeç/Kaydet mantığına
       // getirildi (kullanıcı isteği: "öncelikle randevuyu da Vazgeç,Kaydet mantığına getirelim") — diğer
       // (Meridyen/Havuz) tipler hâlâ eski davranışında, onlar sadece taslakken ya da yeni kaydedilmiş/taze
       // iken bu moddaydı, o mantık değişmedi.
-      // isKisisel (Not/Alışkanlık/Yapılacak/Randevu, hepsi) || isYeniKart (Kart) ile birebir aynı koşul —
-      // ikisi de kart_tipi='bilgi' && kaynak='Kendi', tek fark kart_config.genel (bkz. isKisisel/isYeniKart).
       const zorunluDuzenle = detay.tur === 'ritual' && o2.kart_tipi === 'bilgi' && o2.kaynak === 'Kendi';
       setDuzenleModu(zorunluDuzenle || isDraft2 || (!!o2.id && taze === o2.id));
       setDuzenleOrijinal(null);
       setZamanOpen(false);
-      const cfg2 = o2.kart_config || {};
-      setDahaFazlaAcik(!!(cfg2.videolar?.length || cfg2.resimler?.length || cfg2.resim || o2.hatirlatma_saat || (o2.bitis && o2.bitis !== o2.baslangic) || (o2.gunler && o2.gunler.length)));
       setGunlerAcik(!!(o2.gunler && o2.gunler.length));
       setEkYukleniyor(false);
       setEkHata('');
@@ -1781,11 +1774,11 @@ export default function Rite() {
     else await supabase.from('dog_ritual_logs').insert({ client_id: client.id, ritual_id: ritId, tarih: day, yapildi: true });
     loadData(client.id);
   }
-  // "Kart"ın "Yapılacak" hâli (bkz. kartYapilacakSec — kart_config.gorev, bitissiz, alışkanlık değil) için
-  // ayrı bir tamamlama: alışkanlıktaki gibi sadece o günün kaydı değil, kalıcı bir kapanış (kullanıcı isteği:
+  // Aktivite'nin "Bugün" hâli (kart_config.gorev, bitissiz, aliskanlik=false) için ayrı bir tamamlama:
+  // Tekrarla açıkken (aliskanlik) olduğu gibi sadece o günün kaydı değil, kalıcı bir kapanış (kullanıcı isteği:
   // "yapıncaya kadar devam edebilir" — işaretlenince kart bir daha görünmemeli). toggleRit'in kendisine hiç
-  // dokunmuyoruz (Not/Alışkanlık/Randevu aynen eski davranışında kalsın diye), bu tamamen ayrı, Kart'a özel bir
-  // fonksiyon — sadece isYeniKart dalındaki "yaptım" tikinden çağrılıyor.
+  // dokunmuyoruz (Not/Randevu aynen eski davranışında kalsın diye), bu tamamen ayrı bir fonksiyon —
+  // sadece kisiselTur==='yapilacak' dalındaki "yaptım" tikinden çağrılıyor.
   async function kartYapildiToggle(rt: any) {
     if (!client) return;
     const oncekiYapildi = ritDone(rt.id);
@@ -2177,45 +2170,33 @@ export default function Rite() {
   // fonksiyonları (setRitAd, setBilgiCfg, setRitReminder, setRitKisiselNot) id yokken sadece bu ekranda yerel
   // tutuyor, veritabanına hiçbir şey yazmıyor (bkz. o fonksiyonlar ve isRit araç çubuğundaki isDraft/zamanlamaGoster).
   // Kart ancak alttaki "Kaydet" (taslakKaydet) ile gerçekten oluşuyor.
+  // "Aktivite" (2026-09-16, Behnan kararı — eski ayrı Yapılacak/Alışkanlık ＋ menü girişleri birleşti):
+  // ＋'dan hep 'yapilacak' hâliyle (varsayılan "Bugün", tek seferlik) açılır — kartın içindeki "🔁 Tekrarla"
+  // anahtarı (bkz. setRitTekrarla) tur'u sonradan 'aliskanlik'e çevirir. Eski "Kart" (deneysel 4. tip,
+  // kart_config.genel) tamamen kaldırıldı (bkz. eski isYeniKart/yeniKartTaslakAc, artık yok).
   function yeniTaslakAc(tur: 'not' | 'randevu' | 'aliskanlik' | 'yapilacak') {
     const cfg: any = { icerik: null, videolar: [] };
     if (tur === 'randevu') cfg.randevu = true;
-    // Yapılacak: "Kart"ın deneysel Tür seçicisindeki Yapılacak hâliyle aynı işaret — kart_config.gorev
-    // (bkz. kartYapilacakSec/kartYapildiToggle) — böylece tamamlama mantığı hiç yeniden yazılmadan doğrudan
-    // paylaşılıyor: bitissiz (yapıncaya kadar her gün görünür), işaretlenince kalıcı kapanır.
+    // Yapılacak (Aktivite'nin "Bugün" hâli): kart_config.gorev — bitissiz (yapıncaya kadar her gün görünür),
+    // işaretlenince kalıcı kapanır (bkz. kartYapildiToggle).
     if (tur === 'yapilacak') cfg.gorev = true;
     openRit({
       id: null,
-      ad: tur === 'randevu' ? 'Yeni randevu' : tur === 'aliskanlik' ? 'Yeni alışkanlık' : tur === 'yapilacak' ? 'Yeni yapılacak' : 'Yeni not',
+      ad: tur === 'randevu' ? 'Yeni randevu' : (tur === 'aliskanlik' || tur === 'yapilacak') ? 'Yeni aktivite' : 'Yeni not',
       kaynak: 'Kendi', tip: 'aliskanlik', kart_tipi: 'bilgi', kart_config: cfg,
       aliskanlik: tur === 'aliskanlik', aktif: true, mezun: false,
       // Not artık Randevu gibi tek günlük değil — bir yapışkan not gibi, silininceye kadar her gün duruyor
       // (Ayraç'takiyle aynı mantık: bitis=null, gunler boş → her gün). Kullanıcı isteği: "tarihi yok, silene
       // kadar durur" — teknik olarak baslangic hâlâ var (📅 rozetinden taşınabilir) ama bitiş asla set edilmiyor.
-      // Alışkanlık ise varsayılan olarak Süreli geliyor, 21 gün (kullanıcı isteği: "default olarak süreli
-      // gelip gün sayısı da yine default 21 gün olsa") — setRitSure'daki "+gun-1" ile birebir aynı hesap.
-      // Yapılacak artık Randevu gibi varsayılan olarak tek günlük geliyor (kullanıcı isteği: "başlangıç tarihi
-      // olan süresiz bir task yerine default olarak 1 gün süreli gelmesi daha mantıklı"). Günü geçtiğinde
+      // Aktivite "Tekrarla" açık geldiğinde (kisiselTur==='aliskanlik') varsayılan olarak Süreli, 21 gün
+      // (kullanıcı isteği: "default olarak süreli gelip gün sayısı da yine default 21 gün olsa") — setRitSure'daki
+      // "+gun-1" ile birebir aynı hesap; setRitTekrarla de aynı hesabı kullanıyor.
+      // Aktivite varsayılan olarak "Bugün" (tek seferlik) geliyor (kullanıcı isteği: "başlangıç tarihi olan
+      // süresiz bir task yerine default olarak 1 gün süreli gelmesi daha mantıklı"). Günü geçtiğinde
       // yapılmamışsa ne olacağı (otomatik ertesi güne taşınması vb.) ayrı bir konu — henüz karara bağlanmadı,
       // şimdilik o gün geçince aynı Randevu gibi bir daha görünmüyor. Kapanış hâlâ bitis=day'e geçişle oluyor
       // (kartYapildiToggle), o kısım değişmedi.
       baslangic: day, bitis: (tur === 'randevu' || tur === 'yapilacak') ? day : tur === 'aliskanlik' ? (() => { const e = parseD(day); e.setDate(e.getDate() + 20); return iso(e); })() : null,
-      hatirlatma_saat: null, kisisel_not: null, gunler: null, faydalar: [],
-    });
-  }
-  // "Kart" — deneysel, Not/Alışkanlık/Randevu'nun DIŞINDA, ayrı bir 4. kişisel kart tipi (kullanıcı isteği:
-  // "not, alışkanlık ve randevuya dokunmadan yeni bir kart ve detay form tipi olarak tasarla"). kart_config.genel
-  // işaretiyle ayrılıyor (bkz. isYeniKart) — tek fark bu, geri kalanı (taslak/Kaydet akışı) yeniTaslakAc ile
-  // birebir aynı. Sadece Ajanda'da (screen!=='havuz') sunuluyor — Randevu gibi baslangic/bitis/hatirlatma_saat
-  // gerektiriyor, Havuz'un (dog_activities) bu kolonları yok.
-  function yeniKartTaslakAc() {
-    const cfg: any = { icerik: null, videolar: [], genel: true };
-    openRit({
-      id: null,
-      ad: 'Yeni kart',
-      kaynak: 'Kendi', tip: 'aliskanlik', kart_tipi: 'bilgi', kart_config: cfg,
-      aliskanlik: false, aktif: true, mezun: false,
-      baslangic: day, bitis: day,
       hatirlatma_saat: null, kisisel_not: null, gunler: null, faydalar: [],
     });
   }
@@ -2392,6 +2373,30 @@ export default function Rite() {
     // hâle getiriyoruz — yoksa "alışkanlık" işaretlense bile kart bir daha görünmezdi, kullanıcının ayrıca
     // Zamanlama'ya girip Süre'yi "Süregelen" yapması gerekirdi (kullanıcı geri bildirimi).
     if (val && rt && rt.bitis && rt.bitis === rt.baslangic) patch.bitis = null;
+    await supabase.from('dog_rituals').update(patch).eq('id', id);
+    patchDetay(patch);
+    loadData(client.id);
+  }
+  // "🔁 Tekrarla" anahtarı (2026-09-16, Behnan kararı — eski ayrı Yapılacak/Alışkanlık girişleri "Aktivite" adı
+  // altında birleşti): Aktivite'nin tek-seferlik ("Bugün", kisiselTur='yapilacak') mi yoksa tekrarlanan
+  // ("Tekrarla", kisiselTur='aliskanlik') mi olduğunu kartın kendi içinden değiştirir — notuTasi'yle (Not'u
+  // türe çevirme) aynı alan setini yazıyor (aliskanlik + kart_config.gorev + bitis), ama SADECE bu ikisi
+  // arasında geçiş yapıyor (randevu/not'a dokunmuyor) ve taslak-güvenli: id yokken ya da düzenleme modunda
+  // diğer setter'larla aynı desenle yereldeki patchDetay'e düşüyor. Tekrarla AÇILINCA yeniTaslakAc'le aynı
+  // 21 günlük varsayılan pencere kuruluyor (kart_config.gorev=false); KAPANINCA kart tek güne (baslangic)
+  // iniyor (kart_config.gorev=true) — gunler kasıtlı olarak dokunulmuyor, kullanıcının önceki gün seçimi
+  // Tekrarla'yı tekrar açınca geri geliyor.
+  async function setRitTekrarla(id: string | null, val: boolean) {
+    if (!client) return;
+    const rt = id ? rituals.find((r) => r.id === id) : detay?.obj;
+    const cfg = { ...(rt?.kart_config || {}) };
+    const bas = rt?.baslangic || day;
+    const patch: any = {
+      aliskanlik: val,
+      kart_config: { ...cfg, gorev: !val },
+      bitis: val ? (() => { const e = parseD(bas); e.setDate(e.getDate() + 20); return iso(e); })() : bas,
+    };
+    if (!id || duzenleModu) { patchDetay(patch); return; } // taslak / düzenleme modu
     await supabase.from('dog_rituals').update(patch).eq('id', id);
     patchDetay(patch);
     loadData(client.id);
@@ -3791,10 +3796,10 @@ export default function Rite() {
         const bilgiKaydet = canliAdim && o.sablon_id
           ? (c: any) => setSablonAdimKart(o.sablon_id, o.sablon_adim ?? 0, c)
           : (c: any) => setBilgiCfg(o.id, c);
-        // Kişisel kartların (Not/Alışkanlık/Yapılacak/Randevu) ortak, tek dosyalık "ek" — Bildirim satırıyla
-        // aynı yerde (kullanıcı isteği). BilgiKartEdit'in kendi resimAttachmentJsx/resimGridJsx'iyle AYNI
-        // yükleme akışı (resimKucult + /api/upload), ama burada sayfa seviyesinde tutuluyor ki Bildirim'le
-        // aynı flex satıra girebilsin — Kart (isYeniKart) buna dokunulmuyor, o hâlâ kendi eski konumunda.
+        // Kişisel kartların (Not/Aktivite/Randevu) ortak, tek dosyalık "ek" — Bildirim satırıyla aynı yerde
+        // (kullanıcı isteği). BilgiKartEdit'in kendi resimAttachmentJsx/resimGridJsx'iyle AYNI yükleme akışı
+        // (resimKucult + /api/upload), ama burada sayfa seviyesinde tutuluyor ki Bildirim'le aynı flex satıra
+        // girebilsin.
         const ekUrl: string | null = (Array.isArray(kCfg?.resimler) && kCfg.resimler[0]) || kCfg?.resim || null;
         async function ekYukle(e: React.ChangeEvent<HTMLInputElement>) {
           const f = e.target.files?.[0];
@@ -3821,8 +3826,8 @@ export default function Rite() {
           setEkBuyuk(false);
         }
         const noDone = kTip === 'anket' || kTip === 'coktan' || kTip === 'nefes' || kTip === 'ruhhali' || kTip === 'tarif' || kTip === 'sukran' || kTip === 'topraklama' || kTip === 'pomodoro' || kTip === 'beden' || kTip === 'uykuoncesi' || kTip === 'su' || kTip === 'maruz' || kTip === 'niyet' || kTip === 'workout' || (kTip === 'video' && kCfg.done === false) || (kTip === 'randevu' && kCfg.done === false);
-        // kCfg?.gorev SADECE "Kart"ın "Yapılacak" modunda set edilir (bkz. kartYapilacakSec) — Not/Alışkanlık/
-        // Randevu bu alanı hiç yazmıyor, o yüzden onların "süregelen" etiketi burada değişmiyor.
+        // kCfg?.gorev SADECE Aktivite'nin "Bugün" hâlinde set edilir (bkz. yeniTaslakAc/setRitTekrarla) —
+        // Not/Randevu bu alanı hiç yazmıyor, o yüzden onların "süregelen" etiketi burada değişmiyor.
         const gunOzet = !o.baslangic ? "📥 Inbox'ta bekliyor" : (o.baslangic === o.bitis ? '📅 ' + kisaTarih(o.baslangic) : (o.bitis ? kisaTarih(o.baslangic) + ' → ' + kisaTarih(o.bitis) : (kCfg?.gorev ? 'yapılacak · ' + kisaTarih(o.baslangic) + "'den" : 'süregelen · ' + kisaTarih(o.baslangic) + "'den")));
         const yarin = (() => { const d = parseD(today); d.setDate(d.getDate() + 1); return iso(d); })();
         // Meridyen'den (koçtan) gelen kart/program — doğrudan atanmış ya da şablona bağlı (sablon_id) — danışan
@@ -3837,33 +3842,31 @@ export default function Rite() {
         const isDraft = !o.id && !preview;
         // "Not" (Ajanda'da, salt kart_tipi='bilgi', randevu/alışkanlık değil) için deneme aşamasındaki yeni
         // tasarım: title bar artık düzenlenebilir bir alan değil, sabit bir etiket ("Yeni not"/"Not düzenleme");
-        // asıl Ad girişi içeriğe iniyor. Randevu/Alışkanlık/Rutin/Havuz taslağı şimdilik eski haliyle kalıyor.
-        // Kişisel kart (Not/Randevu/Alışkanlık) — üçü de kart_tipi='bilgi', kaynak='Kendi'; Not'ta denenen
+        // asıl Ad girişi içeriğe iniyor. Randevu/Aktivite/Rutin/Havuz taslağı şimdilik eski haliyle kalıyor.
+        // Kişisel kart (Not/Randevu/Aktivite) — üçü de kart_tipi='bilgi', kaynak='Kendi'; Not'ta denenen
         // yeni tasarım (sabit başlık etiketi + içerikte Ad alanı + düz/çerçeveli Açıklama + video için hazır
         // alan) beğenilince kullanıcı isteğiyle üçüne de uygulandı.
-        // "Kart": deneysel, tek/genel yeni kart tipi — kart_config.genel işaretiyle ayrılıyor, isKisisel'in
-        // (Not/Randevu/Alışkanlık) dışında tutuluyor ki o üçün davranışı hiç etkilenmesin (kullanıcı isteği:
-        // "not, alışkanlık ve randevuya dokunmadan yeni bir kart ve detay form tipi olarak tasarla"). Beğenilirse
-        // diğerlerinin yerini alabilir; beğenilmezse burası (ve aşağıdaki isYeniKart dalları) silinip
-        // isKisisel'deki "&& !kCfg?.genel" da kaldırılınca iz bırakmadan geri alınabilir.
-        const isYeniKart = isRit && kTip === 'bilgi' && o.kaynak === 'Kendi' && !!kCfg?.genel;
-        const isKisisel = isRit && kTip === 'bilgi' && o.kaynak === 'Kendi' && !kCfg?.genel;
-        // Yapılacak: "Kart"ın Tür seçicisindeki aynı kart_config.gorev işaretiyle ayrışıyor (kullanıcı isteği:
-        // 4. bir kart daha — "görev ya da todo... done kutucuklu olan"), Not'un tersine gorev=true olduğunda.
+        const isKisisel = isRit && kTip === 'bilgi' && o.kaynak === 'Kendi';
+        // "Aktivite" (2026-09-16, Behnan kararı): eski ayrı Yapılacak/Alışkanlık kavramları tek kullanıcı-görünür
+        // isim altında birleşti — kisiselTur içeride hâlâ 'yapilacak' (Bugün/tek seferlik) ile 'aliskanlik'
+        // (Tekrarla açık) diye ayrışıyor (davranış/veri hâlâ farklı: kartYapildiToggle vs toggleRit, Süre/Günler
+        // paneli vs yok), ama ikisi de aynı "Aktivite" etiketi ve aynı ＋ menü girişinden (yeniTaslakAc('yapilacak'))
+        // geliyor — geçiş kartın içindeki "🔁 Tekrarla" anahtarından (bkz. setRitTekrarla). Eski deneysel "Kart"
+        // tipi (kart_config.genel, isYeniKart) tamamen kaldırıldı — isKisisel artık onu da (varsa eski kayıtlar)
+        // kapsıyor, kart_config.genel bayrağının kendisi kullanılmıyor.
         const kisiselTur: 'not' | 'randevu' | 'aliskanlik' | 'yapilacak' = kCfg?.randevu ? 'randevu' : (o.aliskanlik ? 'aliskanlik' : (kCfg?.gorev ? 'yapilacak' : 'not'));
-        const kisiselEtiket = kisiselTur === 'randevu' ? 'Randevu' : kisiselTur === 'aliskanlik' ? 'Alışkanlık' : kisiselTur === 'yapilacak' ? 'Yapılacak' : 'Not';
-        const kisiselYeni = kisiselTur === 'randevu' ? 'Yeni randevu' : kisiselTur === 'aliskanlik' ? 'Yeni alışkanlık' : kisiselTur === 'yapilacak' ? 'Yeni yapılacak' : 'Yeni not';
+        const kisiselEtiket = kisiselTur === 'randevu' ? 'Randevu' : (kisiselTur === 'aliskanlik' || kisiselTur === 'yapilacak') ? 'Aktivite' : 'Not';
+        const kisiselYeni = kisiselTur === 'randevu' ? 'Yeni randevu' : (kisiselTur === 'aliskanlik' || kisiselTur === 'yapilacak') ? 'Yeni aktivite' : 'Yeni not';
         // Kart daha bu an ＋ menüsünden oluşturulduysa (taze) ya da hâlâ taslaksa, "zaten var olan bir kart"
         // için anlamlı mezun et / paylaş seçenekleri gizli kalır (kullanıcı isteği) — hem aşağıdaki genel
         // zamanlama şeridinde hem de kişisel kartın kendi ince başlık şeridinde kullanılıyor.
         const isTaze = isDraft || (!!o.id && taze === o.id);
         // Görüntüleme modu KALKTI (kullanıcı isteği — "artık hiçbir kartta... Kapat, Düzenle butonları
-        // olmayacak, doğrudan düzenleme modunda açılacak"): Not/Alışkanlık/Kart artık her zaman düzenlenebilir
-        // açılıyor, bu iki değişken hep false — geri kalan onlarca yerdeki "kisiselGorunumModu ? görüntüle :
-        // düzenle" ifadeleri tek satırlık bu değişikliklerle otomatik olarak hep "düzenle" dalına düşüyor,
+        // olmayacak, doğrudan düzenleme modunda açılacak"): Not/Aktivite artık her zaman düzenlenebilir
+        // açılıyor, bu değişken hep false — geri kalan onlarca yerdeki "kisiselGorunumModu ? görüntüle :
+        // düzenle" ifadeleri tek satırlık bu değişiklikle otomatik olarak hep "düzenle" dalına düşüyor,
         // tek tek dokunmaya gerek kalmadı. Randevu zaten hiç bu ayrımı kullanmıyordu, değişmedi.
         const kisiselGorunumModu = false;
-        const yeniKartGorunumModu = false;
         // "Vazgeç"/"Kaydet" artık kartı kapatıyor da (eskiden sadece görüntüleme moduna dönüyordu — o mod
         // kalmadığı için artık anlamı yok). Değişiklikler zaten hep yerelde tutuluyor (duzenleModu useEffect'te
         // bu tipler için hep zorunlu true — bkz. yukarısı), o yüzden Vazgeç'in ayrıca bir şey geri yazmasına
@@ -3879,9 +3882,6 @@ export default function Rite() {
             gunler: o.gunler || null,
             hatirlatma_saat: o.hatirlatma_saat || null,
             son_bildirim: o.son_bildirim ?? null,
-            // "Kart" Zamanlama'dan Süregelen/Süreli/Günler'e dokununca otomatik alışkanlığa dönüşür (bkz.
-            // kartSuregelenSec/kartSureliSec/kartGunSec) — o anda sadece yerelde işaretlenir, gerçek kayıt
-            // burada oluyor. Not/Alışkanlık için bu zaten olan değeri aynen geri yazıyor, etkisiz.
             aliskanlik: !!o.aliskanlik,
           }).eq('id', o.id);
           loadData(client.id);
@@ -3890,23 +3890,9 @@ export default function Rite() {
         };
         // Taslak (yeni oluşturma, henüz kaydedilmemiş) formu zaten dışarı/× ile kapanmıyordu (bkz. aşağısı) —
         // kayıtlı bir kartı düzenlerken de aynı sebepten (yanlışlıkla dışarı dokunup değişiklikleri kaybetme
-        // riski) aynı kilit uygulanıyor; artık görüntüleme modu kalmadığı için bu kilit Not/Alışkanlık/Kart'ta
+        // riski) aynı kilit uygulanıyor; artık görüntüleme modu kalmadığı için bu kilit Not/Aktivite'de
         // her zaman geçerli (yalnızca × yerine Vazgeç/Kaydet ile kapanır).
-        const kilitliForm = isDraft || isKisisel || isYeniKart;
-        // "Kart" Zamanlama şeridinde Süregelen/Süreli seçmek ya da belirli Günler işaretlemek kartı otomatik
-        // alışkanlığa dönüştürür (kullanıcı isteği: "otomatik, zamanlamaya dokununca") — "Hangi güne taşı" ile
-        // tek günü değiştirmek bunu tetiklemiyor, sadece süre/gün deseni değiştirmek tetikliyor.
-        const kartSuregelenSec = () => { setRitSure(o.id, null); if (!o.aliskanlik) patchDetay({ aliskanlik: true }); };
-        const kartSureliSec = () => { setRitSure(o.id, parseInt(sureInput) || 21); if (!o.aliskanlik) patchDetay({ aliskanlik: true }); };
-        const kartGunSec = (nx: number[]) => { setRitGunler(o.id, nx); if (!o.aliskanlik) patchDetay({ aliskanlik: true }); };
-        // "Kart"ın üç basit hâli (kullanıcı isteği — temelden tartışma sonucu): Bugün / Yapılacak / Alışkanlık.
-        // Zamanlama şeridi ve tamamlanma DAVRANIŞI (bkz. kartYapildiToggle) aynı tek seçime bağlı — kullanıcı
-        // hiçbir zaman "zamanlama tipi" ve "tamamlanma tipi" diye iki ayrı soru görmüyor. gorev (kart_config
-        // içinde) SADECE bu üç fonksiyonla yazılıyor, Not/Alışkanlık/Randevu hiç dokunmuyor.
-        const kartTur: 'bugun' | 'yapilacak' | 'aliskanlik' = o.aliskanlik ? 'aliskanlik' : (kCfg?.gorev ? 'yapilacak' : 'bugun');
-        const kartBugunSec = () => { patchDetay({ aliskanlik: false, bitis: o.baslangic || day, gunler: null, kart_config: { ...(kCfg || {}), gorev: false } }); };
-        const kartYapilacakSec = () => { patchDetay({ aliskanlik: false, bitis: null, kart_config: { ...(kCfg || {}), gorev: true } }); };
-        const kartAliskanlikSec = () => { setRitSure(o.id, null); patchDetay({ aliskanlik: true, kart_config: { ...(kCfg || {}), gorev: false } }); };
+        const kilitliForm = isDraft || isKisisel;
         return (
         // Taslak (henüz kaydedilmemiş, ＋'dan yeni açılmış "İlk ekle") YA DA kayıtlı bir kişisel kartı düzenleme
         // modundayken (kilitliForm) form gerçek bir modal gibi davranıyor: dışarı dokununca ya da üstteki
@@ -3949,45 +3935,33 @@ export default function Rite() {
                   {kisiselTur === 'aliskanlik' && !preview && !isTaze && !o.mezun && (
                     <button type="button" onClick={() => setHabitMenuFor(o)} title="Alışkanlık seçenekleri" aria-label="Alışkanlık seçenekleri" style={{ background: 'none', border: 'none', padding: 0, fontSize: 16, cursor: 'pointer', opacity: .55 }}>🎓</button>
                   )}
-                  {/* Alışkanlık'ın tarihini Zamanlama panosunun içinden değiştirmek pratik değildi (kullanıcı
-                      isteği: "başka bir yerden tarih seçimiyle daha pratik yapılmalı") — başlıkta doğrudan
-                      erişilebilir bir native tarih seçici eklendi. Ayrı bir 📅 ikonu kalktı (kullanıcı isteği:
-                      "önemli olan tarih seçen sağdaki, ilk ikon kalkabilir") — asıl işlevi gören zaten input'un
-                      kendisi. Zamanlama içindeki "Hangi güne taşı" satırı da duruyor (aynı ritTasi'yi çağırıyor),
-                      bu sadece daha hızlı bir kısayol. */}
-                  {kisiselTur === 'aliskanlik' && (
-                    <input type="date" value={o.baslangic || ''} onChange={(e) => e.target.value && ritTasi(o.id, e.target.value)} title="Tarih" style={{ width: 90, border: 'none', background: 'none', padding: 0, fontSize: 10.5, fontWeight: 700, color: 'var(--muted)' }} />
+                  {/* "🔁 Tekrarla" (2026-09-16, Behnan kararı): Aktivite'nin (eski Yapılacak/Alışkanlık) tek-seferlik
+                      ("Bugün") mi tekrarlanan mı olduğunu kartın içinden değiştiren anahtar — bkz. setRitTekrarla.
+                      Açıkken (kisiselTur==='aliskanlik') dolu/vurgulu, kapalıyken (kisiselTur==='yapilacak') soluk. */}
+                  {(kisiselTur === 'aliskanlik' || kisiselTur === 'yapilacak') && (
+                    <button type="button" onClick={() => setRitTekrarla(o.id, kisiselTur !== 'aliskanlik')} title={kisiselTur === 'aliskanlik' ? 'Tekrarlamayı kapat (Bugün)' : 'Tekrarla'} aria-label="Tekrarla" style={{ background: 'none', border: 'none', padding: 0, fontSize: 16, cursor: 'pointer', opacity: kisiselTur === 'aliskanlik' ? 1 : .4 }}>🔁</button>
                   )}
-                  {/* Yapılacak: Randevu'ya benziyor (belirli bir güne konur) ama aynısı değil — tek seferlik/saatli
-                      bir buluşma değil, o günden itibaren yapılana kadar duran bir görev; sık sık taşınması
-                      gerekebildiği için Alışkanlık'takiyle aynı hızlı tarih seçici (kullanıcı isteği). ritTasi
-                      bitis:null'ı (süregelen) olduğu gibi koruyarak sadece başlangıcı kaydırıyor. */}
-                  {kisiselTur === 'yapilacak' && (
+                  {/* Alışkanlık/Aktivite'nin tarihini Zamanlama panosunun içinden değiştirmek pratik değildi
+                      (kullanıcı isteği: "başka bir yerden tarih seçimiyle daha pratik yapılmalı") — başlıkta
+                      doğrudan erişilebilir bir native tarih seçici eklendi. Ayrı bir 📅 ikonu kalktı (kullanıcı
+                      isteği: "önemli olan tarih seçen sağdaki, ilk ikon kalkabilir") — asıl işlevi gören zaten
+                      input'un kendisi. Zamanlama içindeki "Hangi güne taşı" satırı da duruyor (aynı ritTasi'yi
+                      çağırıyor), bu sadece daha hızlı bir kısayol. Tekrarla açık/kapalı iki hâlde de aynı davranış
+                      (ritTasi bitis:null'ı olduğu gibi koruyarak sadece başlangıcı kaydırıyor). */}
+                  {(kisiselTur === 'aliskanlik' || kisiselTur === 'yapilacak') && (
                     <input type="date" value={o.baslangic || ''} onChange={(e) => e.target.value && ritTasi(o.id, e.target.value)} title="Tarih" style={{ width: 90, border: 'none', background: 'none', padding: 0, fontSize: 10.5, fontWeight: 700, color: 'var(--muted)' }} />
                   )}
                   {/* Not'ta tarih seçimi/rozeti YOK (bu bir yanlış anlamaydı — Not zaten tarihsiz, "silininceye
                       kadar duran" bir yapışkan not; kullanıcı isteği "tarih seçimi öyle mi konuşmuştuk"
                       sonrası kaldırıldı). baslangic hâlâ dahili olarak var (Ayraç mantığıyla "hangi günden
                       itibaren görünsün" için) ama kullanıcıya hiç gösterilmiyor/değiştirilmiyor. */}
-                  {/* Not'ta ve Alışkanlık'ta Paylaş yok artık (kullanıcı isteği — çoklu video/zengin içerik
+                  {/* Not'ta ve Aktivite'de Paylaş yok artık (kullanıcı isteği — çoklu video/zengin içerik
                       olmadığı için paylaşımın pek bir anlamı kalmıyor; sadece ailece kullanılan Randevu'da
                       kalıyor). */}
                   {kisiselTur === 'randevu' && !paylasilamaz && !isTaze && <button type="button" onClick={() => { setPaylasOpen(true); setKMsg(''); }} title="Paylaş" style={{ background: 'none', border: 'none', padding: 0, fontSize: 16, cursor: 'pointer', opacity: .55 }}>↪️</button>}
                   {/* Randevu'nun 🔔'ü artık burada değil — diğer kartlarla aynı yerde, gövdedeki standart
                       Bildirim şeridinde (kullanıcı isteği: "bildirimin yerini standart yapacağız, randevuda
                       da aynen gövdede olacak"). */}
-                </div>
-              ) : isYeniKart ? (
-                // "Kart" (deneysel yeni tip) — Not/Alışkanlık'ın ince başlık şeridiyle aynı iskelet, ama tamamen
-                // kendi dalı: isKisisel'e hiç dokunmuyor. 🎓 (mezun) yok — otomatik alışkanlığa dönüşüm burada
-                // henüz bir "mezun ol" kavramı taşımıyor, sade tutuluyor.
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingRight: 34, marginTop: -8 }}>
-                  {/* "Yaptım" burada toggleRit değil kartYapildiToggle çağırıyor — "Yapılacak" hâlinde (bkz.
-                      kartYapilacakSec) tamamlama kalıcı bir kapanış olmalı, alışkanlıktaki gibi günlük bir kayıt
-                      değil (kullanıcı isteği). isKisisel'in kendi tiki (yukarısı) buna hiç dokunmuyor. */}
-                  {!isDraft && <div className={'chk' + (ritDone(o.id) ? ' on' : '')} onClick={() => kartYapildiToggle(o)} title="Yaptım">{ritDone(o.id) ? '✓' : ''}</div>}
-                  <div style={{ flex: 1, fontSize: 11.5, fontWeight: 800, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.4px' }}>{isDraft ? 'Yeni kart' : (duzenleModu ? 'Kart Düzenle' : 'Kart')}</div>
-                  {!paylasilamaz && !isTaze && <button type="button" onClick={() => { setPaylasOpen(true); setKMsg(''); }} title="Paylaş" style={{ background: 'none', border: 'none', padding: 0, fontSize: 16, cursor: 'pointer', opacity: .55 }}>↪️</button>}
                 </div>
               ) : (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -4014,22 +3988,6 @@ export default function Rite() {
                   onChange={(e) => setAdInput(e.target.value)}
                   onBlur={() => { if (adInput.trim() && adInput.trim() !== (o.ad || '')) setRitAd(o.id, adInput); }}
                   placeholder={kisiselEtiket + ' adı'}
-                  autoFocus={isDraft}
-                  style={{ width: '100%', padding: 0, margin: '10px 0 14px', fontSize: 21 }}
-                />
-              )
-            )}
-            {isYeniKart && (
-              yeniKartGorunumModu ? (
-                <div style={{ width: '100%', margin: '10px 0 14px', fontSize: 21, fontWeight: 700 }}>{o.ad}</div>
-              ) : (
-                <input
-                  className="detbaslik"
-                  value={adInput}
-                  onFocus={(e) => e.target.select()}
-                  onChange={(e) => setAdInput(e.target.value)}
-                  onBlur={() => { if (adInput.trim() && adInput.trim() !== (o.ad || '')) setRitAd(o.id, adInput); }}
-                  placeholder="Kart adı"
                   autoFocus={isDraft}
                   style={{ width: '100%', padding: 0, margin: '10px 0 14px', fontSize: 21 }}
                 />
@@ -4071,11 +4029,11 @@ export default function Rite() {
               aciklamaGoster && <div className="howto"><div className="k">📋 Nasıl yapılır</div><div className="v">{aciklamaGoster}</div></div>
             ))}
 
-            {isRit && !isKisisel && !isYeniKart && (() => {
+            {isRit && !isKisisel && (() => {
               // Bu genel zamanlama/mezun/bildirim/paylaş şeridi artık yalnızca kişisel OLMAYAN ritüellerde
-              // (Meridyen/program kaynaklı vb.) gösteriliyor — kişisel kartların (Not/Randevu/Alışkanlık) hepsi
-              // kendi ince başlık şeridini kullanıyor (Alışkanlık'ta 🗓️/🎓 de dahil, bkz. yukarısı). "Kart" da
-              // (isYeniKart) burayı kullanmıyor — kendi Zamanlama/Bildirim şeritleri var, bkz. aşağısı.
+              // (Meridyen/program kaynaklı vb.) gösteriliyor — kişisel kartların (Not/Randevu/Aktivite) hepsi
+              // kendi ince başlık şeridini kullanıyor (Aktivite'de 🗓️/🔁, Tekrarla açıkken ayrıca 🎓 dahil,
+              // bkz. yukarısı).
               return (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, margin: '2px 0 10px' }}>
                 <div style={{ display: 'flex', gap: 6, flex: '0 0 auto' }}>
@@ -4140,7 +4098,9 @@ export default function Rite() {
                 böylece Ajandama eklemeden kart orada da (Havuz'da olduğu gibi) açılabiliyor. */}
             {kTip === 'bilgi' && (() => {
               const editable = !preview && (isRit ? o.kaynak === 'Kendi' : isDraft);
-              if (editable) return <BilgiKartEdit cfg={kCfg} onSave={bilgiKaydet} randevu={!!kCfg?.randevu} notTasarimi={isKisisel || isYeniKart} readOnly={isYeniKart ? yeniKartGorunumModu : kisiselGorunumModu} sadeceAciklama={isYeniKart && !dahaFazlaAcik} tekVideo={isYeniKart} cokluVideo={isKisisel && kisiselTur === 'aliskanlik'} videoEkleTetik={videoEkleAcik} onVideoEkleTetikKapat={() => setVideoEkleAcik(false)} videoYok={isKisisel && kisiselTur === 'yapilacak'} ekAyri={isKisisel} />;
+              // cokluVideo artık Aktivite'nin her iki hâlinde de (Bugün/Tekrarla, yani 'yapilacak'/'aliskanlik')
+              // açık — Not zaten kendi tekli video mekanizmasını notTasarimi dalından kullanıyor (bkz. videoYok).
+              if (editable) return <BilgiKartEdit cfg={kCfg} onSave={bilgiKaydet} randevu={!!kCfg?.randevu} notTasarimi={isKisisel} readOnly={kisiselGorunumModu} cokluVideo={isKisisel && (kisiselTur === 'aliskanlik' || kisiselTur === 'yapilacak')} videoEkleTetik={videoEkleAcik} onVideoEkleTetikKapat={() => setVideoEkleAcik(false)} videoYok={false} ekAyri={isKisisel} />;
               if (!preview && isRit) return <BilgiKart cfg={kCfg} onSave={bilgiKaydet} />;
               return <BilgiKartEdit cfg={kCfg} onSave={() => {}} randevu={!!kCfg?.randevu} readOnly />;
             })()}
@@ -4232,12 +4192,13 @@ export default function Rite() {
                         </>
                       )}
                     </div>
-                    {/* "🎬 Video" — SADECE Alışkanlık, Ek'in hemen solunda (kullanıcı isteği, 2026-09-16: video
-                        ekleme artık açıklamanın altındaki tek satırlık link kutusundan değil, buradan — tıklayınca
-                        BilgiKartEdit'in kendi ekleme modalini açan tek atımlık videoEkleAcik bayrağı). İlk video
-                        da, ikinci/üçüncü video da hep bu düğmeden eklenir; videonun üstündeki şerit (bkz.
-                        BilgiKartEdit içindeki cokluVideo dalı) artık sadece video seçimi + ⚙️ Ayarla taşıyor. */}
-                    {!kisiselGorunumModu && kisiselTur === 'aliskanlik' && (
+                    {/* "🎬 Video" — Aktivite'nin her iki hâlinde de (Bugün/Tekrarla), Ek'in hemen solunda
+                        (kullanıcı isteği, 2026-09-16: video ekleme artık açıklamanın altındaki tek satırlık link
+                        kutusundan değil, buradan — tıklayınca BilgiKartEdit'in kendi ekleme modalini açan tek
+                        atımlık videoEkleAcik bayrağı). İlk video da, ikinci/üçüncü video da hep bu düğmeden
+                        eklenir; videonun üstündeki şerit (bkz. BilgiKartEdit içindeki cokluVideo dalı) artık
+                        sadece video seçimi + ⚙️ Ayarla taşıyor. */}
+                    {!kisiselGorunumModu && (kisiselTur === 'aliskanlik' || kisiselTur === 'yapilacak') && (
                       <span className="chip" style={{ borderStyle: 'dashed', flex: '0 0 auto' }} onClick={() => setVideoEkleAcik(true)} title="Video ekle">🎬 Video</span>
                     )}
                     {/* Ek (attachment) — Bildirim'le aynı satırda, tek dosya (kullanıcı isteği). Şimdilik yine
@@ -4268,107 +4229,11 @@ export default function Rite() {
                 )}
               </div>
             )}
-            {/* "Kart" (deneysel) — Zamanlama/Bildirim/Video ilk açılışta TEK bir "+ Daha fazla" şeridinin
-                arkasında (kullanıcı isteği: "ilk açtığında basit bir notu rahatça girmeli, diğer fonksiyonlar
-                kafasını karıştırmamalı"). Video bloğu BilgiKartEdit'in sadeceAciklama prop'uyla (bkz. yukarısı)
-                aynı dahaFazlaAcik state'ine bağlı — tek dokunuşla üçü birden açılır. Görüntüleme modunda ise
-                Not/Alışkanlık'taki gibi sadece dolu olanlar görünür, "Daha fazla" hiç yok. */}
-            {isRit && isYeniKart && (
-              <div style={{ margin: '0 0 8px' }}>
-                {yeniKartGorunumModu ? (
-                  <>
-                    <div style={{ padding: '7px 10px', borderRadius: 8, background: 'var(--card2,#f6f4ee)', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                      <span>🗓️</span>
-                      <span style={{ fontSize: 13, color: 'var(--muted)' }}>{gunOzet}</span>
-                    </div>
-                    {o.hatirlatma_saat && (
-                      <div style={{ padding: '7px 10px', borderRadius: 8, background: 'var(--card2,#f6f4ee)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span>🔔</span>
-                        <span style={{ fontSize: 13, color: 'var(--muted)' }}>{o.hatirlatma_saat}</span>
-                      </div>
-                    )}
-                  </>
-                ) : !dahaFazlaAcik ? (
-                  <div
-                    onClick={() => setDahaFazlaAcik(true)}
-                    style={{ padding: '7px 10px', borderRadius: 8, background: 'var(--card2,#f6f4ee)', display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}
-                  >
-                    <span style={{ fontSize: 13, color: 'var(--muted)', flex: 1 }}>+ Daha fazla — video, zamanlama, bildirim</span>
-                    <span style={{ fontSize: 11, color: 'var(--muted)', opacity: .6 }}>▾</span>
-                  </div>
-                ) : (
-                  <>
-                    <div
-                      onClick={() => setZamanOpen((v) => !v)}
-                      style={{ padding: '7px 10px', borderRadius: 8, background: 'var(--card2,#f6f4ee)', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, cursor: 'pointer' }}
-                    >
-                      <span>🗓️</span>
-                      <span style={{ fontSize: 13, color: 'var(--muted)', flex: 1 }}>{gunOzet}</span>
-                      <span style={{ fontSize: 11, color: 'var(--muted)', opacity: .6 }}>{zamanOpen ? '▴' : '▾'}</span>
-                    </div>
-                    {zamanOpen && (
-                      <div style={{ padding: '7px 8px', borderRadius: 8, background: '#fff', border: '1px solid var(--line)', margin: '2px 0 8px' }}>
-                        <div className="kv" style={{ marginTop: 0 }}><div className="k">Hangi güne taşı</div>
-                          <div>
-                            <span className={'chip' + (o.baslangic === today ? ' on' : '')} onClick={() => ritTasi(o.id, today)}>Bugün</span>
-                            <span className={'chip' + (o.baslangic === yarin ? ' on' : '')} onClick={() => ritTasi(o.id, yarin)}>Yarın</span>
-                            <input type="date" value={o.baslangic || ''} onChange={(e) => e.target.value && ritTasi(o.id, e.target.value)} style={{ width: 'auto', marginLeft: 4 }} />
-                          </div>
-                        </div>
-                        {/* Kullanıcıyla "temelden" tartışıp vardığımız üç basit hâl — jargon (süregelen/süreli)
-                            sadece Alışkanlık seçilince görünüyor, ilk bakışta hep üç düz kelime var. Hangisi
-                            seçilirse hem zamanlama hem tamamlanma davranışı (bkz. kartYapildiToggle) o an
-                            birlikte ayarlanıyor, kullanıcı bunu iki ayrı karar olarak hiç görmüyor. */}
-                        <div className="kv" style={{ marginTop: 0 }}><div className="k">Tür</div>
-                          <div>
-                            <span className={'chip' + (kartTur === 'bugun' ? ' on' : '')} onClick={kartBugunSec}>Bugün</span>
-                            <span className={'chip' + (kartTur === 'yapilacak' ? ' on' : '')} onClick={kartYapilacakSec}>Yapılacak</span>
-                            <span className={'chip' + (kartTur === 'aliskanlik' ? ' on' : '')} onClick={kartAliskanlikSec}>Alışkanlık</span>
-                          </div>
-                          {kartTur === 'bugun' && <div className="note">Sadece bugün görünür.</div>}
-                          {kartTur === 'yapilacak' && <div className="note">İşaretleyip tamamlayana kadar her gün görünür, işaretlenince kapanır.</div>}
-                        </div>
-                        {kartTur === 'aliskanlik' && (
-                          <>
-                            <div className="kv"><div className="k">Süre</div>
-                              <div>
-                                <span className={'chip' + (!o.bitis ? ' on' : '')} onClick={kartSuregelenSec}>Süregelen</span>
-                                <span className={'chip' + (o.bitis ? ' on' : '')} onClick={kartSureliSec}>Süreli</span>
-                                {o.bitis && <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', marginLeft: 8 }}>
-                                  <input type="number" min={1} value={sureInput} onChange={(e) => setSureInput(e.target.value)} style={{ width: 60 }} /> gün
-                                  <button className="btn sm" onClick={kartSureliSec}>Uygula</button>
-                                </span>}
-                              </div>
-                              {o.bitis && <div className="note">Başlangıç {kisaTarih(o.baslangic)} · bitiş {kisaTarih(o.bitis)}</div>}
-                            </div>
-                            <div className="kv"><div className="k">Günler</div>
-                              <div>
-                                <span className={'chip' + ((!o.gunler || o.gunler.length === 0) ? ' on' : '')} onClick={() => kartGunSec([])}>Her gün</span>
-                                {GUNLER.map(([n, l]) => {
-                                  const sel = !!(o.gunler && o.gunler.includes(n));
-                                  return <span key={n} className={'chip' + (sel ? ' on' : '')} onClick={() => { const cur: number[] = o.gunler ? [...o.gunler] : []; const nx = cur.includes(n) ? cur.filter((x) => x !== n) : [...cur, n]; kartGunSec(nx); }}>{l}</span>;
-                                })}
-                              </div>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    )}
-                    <div style={{ padding: '7px 10px', borderRadius: 8, background: 'var(--card2,#f6f4ee)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span>🔔</span>
-                      <input type="time" value={o.hatirlatma_saat || ''} onChange={(e) => setRitReminder(o.id, e.target.value)} style={{ width: 'auto', fontSize: 13 }} />
-                      {o.hatirlatma_saat && <span className="chip" style={{ borderStyle: 'dashed', marginLeft: 'auto' }} onClick={() => setRitReminder(o.id, '')}>Kaldır</span>}
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-            {/* Kayıtlı kişisel kartlarda (Not/Alışkanlık/Yapılacak/Randevu) ve "Kart"ta artık tek hâl: doğrudan
-                düzenleme modunda açılıyor, bu yüzden buton çifti hep Vazgeç/Kaydet — ayrı bir Kapat/Düzenle
-                görüntüleme adımı kalmadı (kullanıcı isteği: "artık hiçbir kartta... doğrudan düzenleme modunda
-                açılacak", ve Randevu için de sonradan: "öncelikle randevuyu da Vazgeç,Kaydet mantığına
-                getirelim"). */}
-            {isRit && (isKisisel || isYeniKart) && !isTaze && (
+            {/* Kayıtlı kişisel kartlarda (Not/Aktivite/Randevu) artık tek hâl: doğrudan düzenleme modunda
+                açılıyor, bu yüzden buton çifti hep Vazgeç/Kaydet — ayrı bir Kapat/Düzenle görüntüleme adımı
+                kalmadı (kullanıcı isteği: "artık hiçbir kartta... doğrudan düzenleme modunda açılacak", ve
+                Randevu için de sonradan: "öncelikle randevuyu da Vazgeç,Kaydet mantığına getirelim"). */}
+            {isRit && isKisisel && !isTaze && (
               <div style={{ display: 'flex', gap: 8, margin: '2px 0 8px' }}>
                 <button className="btn ghost" style={{ flex: 1 }} onClick={kisiselDuzenleVazgec}>Vazgeç</button>
                 <button className="btn" style={{ flex: 1 }} onClick={kisiselDuzenleKaydet}>Kaydet</button>
@@ -4413,10 +4278,10 @@ export default function Rite() {
             )}
 
             {/* Bu modal artık SADECE kişisel olmayan ritüellerde (Meridyen/program vb.) açılıyor — Not kendi
-                gövdesinde doğrudan bir tarih alanı kullanıyor, Alışkanlık da artık kendi Zamanlama şeridinin
+                gövdesinde doğrudan bir tarih alanı kullanıyor, Aktivite de artık kendi Zamanlama şeridinin
                 altında aynı içeriği (Taşı/Süre/Günler) modal açmadan gösteriyor (bkz. yukarısı, kullanıcı
                 isteği: "zamanlama için de benzer şekilde düzenleyelim"). */}
-            {isRit && !isKisisel && !isYeniKart && zamanOpen && (
+            {isRit && !isKisisel && zamanOpen && (
               <div className="modal top2" onMouseDown={() => setZamanOpen(false)}>
               <div className="sheet" onMouseDown={(e) => e.stopPropagation()}>
                 <button className="x" onClick={() => setZamanOpen(false)}>×</button>
@@ -4885,15 +4750,15 @@ export default function Rite() {
                   isteği "sarı sticker olursa güzel olur". Emoji fontlarında gerçek bir "sarı sticky note" glifi
                   olmadığı için (📝 sadece "not" anlamına geliyor, renk taşımıyor) rengi doğrudan CSS'le veriyoruz. */}
               <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); (screen === 'havuz' ? yeniHavuzTaslakAc : yeniTaslakAc)('not'); }}><span className="ekic" style={{ display: 'inline-block', width: 22, height: 22, borderRadius: 4, background: '#f5d76e', border: '1px solid #d9b84a', boxShadow: '1px 1px 2px rgba(0,0,0,.15)' }} />Not</button>
-              {/* Sıralama Not-Yapılacak-Alışkanlık-Randevu (kullanıcı isteği — önceki sıra Not-Alışkanlık-
-                  Yapılacak-Randevu idi). Yapılacak — Randevu gibi baslangic/bitis'e dayanıyor, Havuz'un
-                  (dog_activities) bu kolonları yok, o yüzden sadece Ajanda'da (kullanıcı isteği: tablodaki 4.
-                  kart tipi, "done kutucuklu"). */}
-              {screen !== 'havuz' && <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); yeniTaslakAc('yapilacak'); }}><span className="ekic">☑️</span>Yapılacak</button>}
-              <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); (screen === 'havuz' ? yeniHavuzTaslakAc : yeniTaslakAc)('aliskanlik'); }}><span className="ekic">🎓</span>Alışkanlık</button>
+              {/* Sıralama Not-Aktivite-Randevu (kullanıcı isteği, 2026-09-16: eski ayrı Yapılacak/Alışkanlık ＋
+                  girişleri "Aktivite" adı altında birleşti — varsayılan "Bugün"/tek seferlik, kartın içindeki
+                  "🔁 Tekrarla" anahtarı sonradan Süre/Günler'i açar, bkz. setRitTekrarla). Aktivite — Randevu
+                  gibi baslangic/bitis'e dayanıyor, Havuz'un (dog_activities) bu kolonları yok, o yüzden sadece
+                  Ajanda'da; Havuz'un kendi "Alışkanlık" girişi (yeniHavuzTaslakAc) ayrı bir kavram (şablonun
+                  Günler'i olup olmayacağı) olduğu için dokunulmadı. */}
+              {screen !== 'havuz' && <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); yeniTaslakAc('yapilacak'); }}><span className="ekic">☑️</span>Aktivite</button>}
+              {screen === 'havuz' && <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); yeniHavuzTaslakAc('aliskanlik'); }}><span className="ekic">🎓</span>Alışkanlık</button>}
               {screen !== 'havuz' && <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); yeniTaslakAc('randevu'); }}><span className="ekic">📅</span>Randevu</button>}
-              {/* "Kart" — deneysel yeni tip, bkz. yeniKartTaslakAc; Not/Alışkanlık/Randevu'ya dokunmuyor. */}
-              {screen !== 'havuz' && <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); yeniKartTaslakAc(); }}><span className="ekic">🗂️</span>Kart</button>}
               {screen !== 'havuz' && <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); setAyracAdVal(''); setAyracYeniOpen(true); }}><span className="ekic">➖</span>Ayraç</button>}
               {screen !== 'havuz' && <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); setScreen('ajanda'); setAjView('gun'); startLink(); }}><span className="ekic">🔗</span>Rutin</button>}
             </div>
