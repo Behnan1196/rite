@@ -4399,30 +4399,45 @@ export default function Rite() {
         );
       })()}
 
-      {/* Liste satırındaki ⋯ menüsü — habitMenuFor ile aynı bottom-sheet deseni. Şimdilik tek seçenek Sil
-          (ritSil zaten kendi confirm()'ünü soruyor); Paylaş ve başka eylemler ileride buraya eklenecek
-          (kullanıcı isteği). */}
-      {ritMenuFor && (
+      {/* Liste satırındaki ⋯ menüsü — habitMenuFor ile aynı bottom-sheet deseni. 2026-09-16 (Behnan kararı,
+          mimari tartışmanın 4. maddesi — "havuza kaydet, Puanla içinde ... menüsü uygun"): Puanla ve Paylaş/
+          Havuza-kaydet buraya eklendi, kişisel kartların (Not/Aktivite/Randevu) hepsinde. Puanla kendi başına
+          yeten bir modal (puanModal) olduğu için detayı hiç açmadan direkt çalışıyor; Paylaş/Havuza-kaydet ise
+          var olan Paylaş modalini (detay ekranının içinde, "📥 Kendi Havuzuma al" da dahil) kullandığı için
+          önce openRit ile detayı açıp üstüne paylasOpen'ı tetikliyor. */}
+      {ritMenuFor && (() => {
+        const rmCfg = ritMenuFor.kart_config || {};
+        const rmKisisel = ritMenuFor.kart_tipi === 'bilgi' && ritMenuFor.kaynak === 'Kendi';
+        const rmTur: 'not' | 'randevu' | 'aliskanlik' | 'yapilacak' = rmCfg.randevu ? 'randevu' : (ritMenuFor.aliskanlik ? 'aliskanlik' : (rmCfg.gorev ? 'yapilacak' : 'not'));
+        return (
         <div className="modal top2" onMouseDown={() => setRitMenuFor(null)}>
           <div className="sheet small" onMouseDown={(e) => e.stopPropagation()}>
             <button className="x" onClick={() => setRitMenuFor(null)}>×</button>
             <h3 style={{ marginBottom: 8 }}>{ritMenuFor.ad}</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {/* Not'u ajandaya taşı (kullanıcı isteği: sürüklemek yerine tür seçerek) — hedef gün her zaman o an
-                  Ajanda'da görüntülenen gün (day). Sadece Not'larda görünür, diğer kart tiplerinde anlamsız. */}
+                  Ajanda'da görüntülenen gün (day). Sadece Not'larda görünür. Tek "Aktivite yap" seçeneği (2026-09-16:
+                  eski ayrı Yapılacak/Alışkanlık dönüştürme butonları Aktivite birleşmesiyle tek butona indi —
+                  varsayılan "Bugün", kartın içindeki 🔁 Tekrarla ile sonradan tekrarlanan yapılabilir). */}
               {isNotKart(ritMenuFor) && (
                 <>
-                  <button className="btn ghost sm" onClick={() => { const id = ritMenuFor.id; setRitMenuFor(null); notuTasi(id, 'yapilacak'); }}>☑️ Yapılacak yap ({kisaTarih(day)})</button>
-                  <button className="btn ghost sm" onClick={() => { const id = ritMenuFor.id; setRitMenuFor(null); notuTasi(id, 'aliskanlik'); }}>🎓 Alışkanlık yap ({kisaTarih(day)}&apos;den)</button>
+                  <button className="btn ghost sm" onClick={() => { const id = ritMenuFor.id; setRitMenuFor(null); notuTasi(id, 'yapilacak'); }}>☑️ Aktivite yap ({kisaTarih(day)})</button>
                   <button className="btn ghost sm" onClick={() => { const id = ritMenuFor.id; setRitMenuFor(null); notuTasi(id, 'randevu'); }}>📅 Randevu yap ({kisaTarih(day)})</button>
                 </>
+              )}
+              {rmKisisel && rmTur !== 'randevu' && (
+                <button className="btn ghost sm" onClick={() => { setPuanDeger(ritMenuFor.puan || 0); setPuanModal(ritMenuFor); setRitMenuFor(null); }}>⭐ Puanla{ritMenuFor.puan ? ' (' + ritMenuFor.puan + '★)' : ''}</button>
+              )}
+              {rmKisisel && !ritMenuFor.sablon_id && (
+                <button className="btn ghost sm" onClick={() => { const r = ritMenuFor; setRitMenuFor(null); openRit(r); setPaylasOpen(true); setKMsg(''); }}>↪️ Paylaş{rmTur !== 'randevu' ? ' / Havuza kaydet' : ''}</button>
               )}
               <button className="btn ghost sm" onClick={() => { const id = ritMenuFor.id; setRitMenuFor(null); ritSil(id); }}>🗑️ Sil</button>
               <button className="btn ghost sm" onClick={() => setRitMenuFor(null)}>Vazgeç</button>
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {homeDetay && (() => {
         const a = homeAlanlar.find((x) => x.anahtar === homeDetay);
