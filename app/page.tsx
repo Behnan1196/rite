@@ -1750,18 +1750,9 @@ export default function Rite() {
     setKAd(a.ad || ''); setKAcik(a.aciklama || ''); setKGrup(a.grup && a.grup !== 'Kişisel' ? a.grup : 'Genel'); setKVin({ baslik: '', url: (a.videolar && a.videolar[0]?.url) || '' }); setKZamanlar(a.zamanlar && a.zamanlar.length ? [a.zamanlar[0]] : [a.zaman || 'gün']); setKEditId(a.id); setKHomeAlanlar(a.home_alanlar || []);
     setStudioOpen(true);
   }
-  // Home'un bir alan Detay'ından "+ Aktivite ekle" ile açılırken: boş bir taslak, sadece o alanın anahtarıyla
-  // önceden dolduruluyor — kaydedince studioKaydet zaten normal insert akışına giriyor. Kütüphane grubu (kGrup)
-  // BİLEREK alan adına eşitlenmiyor (önceki davranış) — Kütüphane'nin kendi Kişisel grup listesi Meridyen'in
-  // alan ağacından tamamen ayrı bir yapı; aynı isimle yeni bir grup oluşturmak "bu Meridyen alanının bir
-  // parçasıymış" izlenimi veriyor ama değil, kafa karıştırıyordu (Behnan geri bildirimi, 2026-09-16). Aktivite
-  // zaten home_alanlar etiketiyle bu alanın "Aktivitelerin" listesinde görünüyor — Kütüphane grubu varsayılan
-  // 'Genel' kalıyor, kullanıcı isterse formda değiştirebilir.
-  function openStudioForHomeAlan(alan: any) {
-    studioReset();
-    setKHomeAlanlar([alan.anahtar]);
-    setStudioOpen(true);
-  }
+  // (openStudioForHomeAlan KALDIRILDI — 2026-09-16, Behnan kararı: Home'un alan Detay'ındaki "+ Aktivite ekle"
+  // danışanı eski/güncel olmayan bir kişisel-aktivite formuna açıyordu; şimdilik bu ekleme yolu tamamen
+  // kapatıldı, danışan sadece var olan "Aktivitelerin" listesini ve Meridyen'den atanmış programları görüyor.)
   // Adım zamanlama özeti: "↳ ardından · M gün" / "başla +Ng · M gün"
   function adimZamanOzet(st: any): string {
     if (st.zincirli) return '🔗 önceki ile zincir';
@@ -2811,11 +2802,16 @@ export default function Rite() {
   const ibBadge = inbox.filter((x) => x.durum === 'yeni').length;
   const personalActs = activities.filter((a) => a.client_id === client.id);
   const personalGroupOf = (a: any) => a.grup && a.grup !== 'Kişisel' ? a.grup : 'Genel';
-  // Havuz gruplama: Genel ve Meridyen her zaman seçenek olarak durur (boş bile olsalar), üstüne kullanıcının
-  // kendi eklediği gruplar eklenir — sabit iki sekme yerine büyüyebilen bir chip listesi.
-  const HAVUZ_VARSAYILAN_GRUPLAR = ['Genel', 'Meridyen'];
-  // Kalıcı Grup listesi (bkz. dog_gruplar / Gruplar yönet ekranı) — ust_id boş olanlar üst seviye Grup.
-  const grupUst = grupListesi.filter((g) => !g.ust_id);
+  // Havuz gruplama: Genel her zaman seçenek olarak durur (boş bile olsa), üstüne kullanıcının kendi eklediği
+  // gruplar eklenir — sabit tek sekme yerine büyüyebilen bir chip listesi.
+  // (2026-09-16, Behnan kararı: kilitli "Meridyen" kökü — Home'un alan atamalarının depolandığı yer — artık
+  // Kütüphanede HİÇ gösterilmiyor; atanmış alanlara ve onların programlarına erişim tamamen Home üzerinden.
+  // Kütüphanede ayrıca göstermek, aynı veriye ikinci ve eski/tutarsız bir erişim yolu açmaktan başka işe
+  // yaramıyordu. Alttaki dog_gruplar satırı ve ensureMeridyenGrubu hâlâ var — sadece UI'dan gizlendi.)
+  const HAVUZ_VARSAYILAN_GRUPLAR = ['Genel'];
+  // Kalıcı Grup listesi (bkz. dog_gruplar / Gruplar yönet ekranı) — ust_id boş olanlar üst seviye Grup;
+  // kilitli "Meridyen" kökü (sabit:true) burada BİLEREK dışarıda — yukarıdaki not.
+  const grupUst = grupListesi.filter((g) => !g.ust_id && !g.sabit);
   // ekstraGruplar: "+ yeni grup" ile önceden açılmış ama henüz hiç aktivitesi olmayan gruplar (bu oturumda) —
   // bir aktivite o gruba girince zaten personalActs üzerinden kalıcı olarak da gelir.
   const personalGroups = Array.from(new Set([...HAVUZ_VARSAYILAN_GRUPLAR, ...grupUst.map((g) => g.ad), ...personalActs.map(personalGroupOf), ...ekstraGruplar]));
@@ -4480,7 +4476,10 @@ export default function Rite() {
               )}
               {/* Aktivitelerin (2026-09, Behnan kararı — "aktiviteleri canlı yapmak"): bu alanla Studio'dan
                   etiketlenmiş GERÇEK kişisel Havuz aktiviteleri (bkz. kHomeAlanlar/home_alanlar). Tıklayınca
-                  aktivitenin kendi Detay'ı (openDetay) Home'un üstünde açılıyor. */}
+                  aktivitenin kendi Detay'ı (openDetay) Home'un üstünde açılıyor.
+                  "+ Aktivite ekle" KALDIRILDI (2026-09-16, Behnan kararı) — eski/güncel olmayan bir kişisel-
+                  aktivite formuna açıyordu, şimdilik danışan buradan yeni aktivite eklemiyor, sadece var olanları
+                  ve Meridyen'den atanmış programları görüyor (altta). */}
               <div style={{ marginTop: 10 }}>
                 <div className="k" style={{ marginBottom: 5 }}>Aktivitelerin</div>
                 {(() => {
@@ -4495,7 +4494,6 @@ export default function Rite() {
                     <div className="note" style={{ margin: '0 0 6px' }}>Bu alanla ilişkili bir aktiviten henüz yok.</div>
                   );
                 })()}
-                <span className="minlink" onClick={() => { setHomeDetay(null); openStudioForHomeAlan(a); }}>+ Aktivite ekle</span>
               </div>
               {/* Meridyen'den programlar (2026-09-16, Behnan sorusu üzerine): Rite Studio'da (app-meridyen/atama)
                   bir Program/Kart bu alana etiketlenmişse (dog_activities.alan_anahtarlari, client_id null —
