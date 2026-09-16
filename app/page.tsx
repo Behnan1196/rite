@@ -193,9 +193,14 @@ async function resimKucult(file: File, maxDim = 1600, quality = 0.82): Promise<B
   const blob: Blob | null = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
   return blob || file;
 }
-function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi, sadeceAciklama, tekVideo, videoYok, ekAyri }: { cfg: any; onSave: (cfg: any) => void; randevu?: boolean; readOnly?: boolean; notTasarimi?: boolean; sadeceAciklama?: boolean; tekVideo?: boolean; videoYok?: boolean; ekAyri?: boolean }) {
+function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi, sadeceAciklama, tekVideo, cokluVideo, videoEkleTetik, onVideoEkleTetikKapat, videoYok, ekAyri }: { cfg: any; onSave: (cfg: any) => void; randevu?: boolean; readOnly?: boolean; notTasarimi?: boolean; sadeceAciklama?: boolean; tekVideo?: boolean; cokluVideo?: boolean; videoEkleTetik?: boolean; onVideoEkleTetikKapat?: () => void; videoYok?: boolean; ekAyri?: boolean }) {
   const videolar: { baslik?: string; url: string; bas?: number; bit?: number; ozelNot?: string }[] = cfg?.videolar || [];
   const [vidSec, setVidSec] = useState(0);
+  // cokluVideo (Alışkanlık, 2026-09-16 — "çoklu video" tasarımı): video ekleme artık sayfa seviyesindeki
+  // Bildirim/Ek şeridindeki "🎬 Video" düğmesinden (bkz. videoEkleTetik) tetikleniyor, kendi satır-içi
+  // ＋ düğmesi yok. Videonun üstündeki şerit de sadece seçim + ⚙️ Ayarla taşıyor (bkz. aşağıdaki ayarAcik) —
+  // ekleme/düzenleme/silme hep bu tek modalde toplanıyor.
+  const [ayarAcik, setAyarAcik] = useState(false);
   // vidFormMode: 'add' = boş formla yeni video; 'edit' = seçili videoyu (secili) doldurup düzenler; null = kapalı.
   const [vidFormMode, setVidFormMode] = useState<'add' | 'edit' | null>(null);
   const [vAd, setVAd] = useState('');
@@ -234,6 +239,10 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi, sadeceAcik
     setVidFormMode(mode);
   }
   function formuKapat() { setVidFormMode(null); }
+  // cokluVideo: sayfa seviyesindeki "🎬 Video" düğmesine basılınca (videoEkleTetik true olunca) burada aynı
+  // ekleme modalini (vidFormMode='add') açıyoruz, sonra tetikleyiciyi hemen sıfırlıyoruz (one-shot) — asıl
+  // form kapanışı/kaydı yine formuKapat/videoKaydet üzerinden, bu bayrağın kendisi sadece "aç" komutu.
+  useEffect(() => { if (videoEkleTetik) { formuAc('add'); onVideoEkleTetikKapat?.(); } }, [videoEkleTetik]);
   // Link + ad + dk:sn aralığı + (md) açıklama — tek form hem "Ekle" hem "Kaydet" (düzenle) için kullanılıyor.
   function videoKaydet() {
     if (!vUrl.trim()) return;
@@ -494,7 +503,7 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi, sadeceAcik
             sırayı kullanıyor (bkz. call site, orada notTasarimi=false kalıyor). */}
         {!randevu && (
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <div style={{ order: notTasarimi ? 1 : 2 }}>
+            <div style={{ order: cokluVideo ? 2 : (notTasarimi ? 1 : 2) }}>
               {/* Kişisel kartlarda Açıklama artık düz metin — Meridyen'in md ile yazdığı içerikten farklı olarak
                   kullanıcıdan hiçbir sözdizimi (#, **, -…) beklemiyoruz, sadece satır aralarını koruyoruz. */}
               {(!readOnly || icerikVal.trim()) && <div className="k">Açıklama</div>}
@@ -536,10 +545,88 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi, sadeceAcik
                 girmeli, diğer fonksiyonlar kafasını karıştırmamalı". Not/Alışkanlık/Randevu bu prop'u hiç
                 geçmiyor (undefined → aşağıdaki koşul her zaman true), o yüzden davranışları değişmiyor. */}
             {!(notTasarimi && sadeceAciklama) && (
-            <div style={{ order: notTasarimi ? 2 : 1 }}>
+            <div style={{ order: cokluVideo ? 1 : (notTasarimi ? 2 : 1) }}>
               {/* videoYok (Not) — kartta video alanı hiç yok, sadece resim (bkz. aşağıdaki resimAttachmentJsx)
                   kalıyor (kullanıcı isteği: bir yapışkan notta video gereksiz). */}
-              {videoYok ? null : tekVideo ? (
+              {videoYok ? null : cokluVideo ? (
+                // cokluVideo (Alışkanlık, 2026-09-16): video ekleme sayfa seviyesindeki "🎬 Video" düğmesinden
+                // (videoEkleTetik) tetiklenir, burada kendi ＋ tetikleyicisi YOK. 1+ video varken üstte sadece
+                // seçim şeridi + en sağda ⚙️ Ayarla (mevcut videoları düzenle/sil — bkz. aşağıdaki ayarAcik
+                // modali); embed her zaman açıklamanın ÜSTÜNDE (bkz. yukarıdaki order).
+                <div style={{ margin: '0 0 12px' }}>
+                  {videolar.length > 0 ? (
+                    <>
+                      <div style={{ margin: '0 0 8px', display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+                        {videolar.map((v, i) => (
+                          <span key={i} className={'chip' + (i === vidSec ? ' on' : '')} onClick={() => setVidSec(i)}>
+                            {v.baslik || ('Video ' + (i + 1))}{(v.bas != null || v.bit != null) ? ` ⏱${saniyeStr(v.bas) || '0'}–${v.bit != null ? saniyeStr(v.bit) : '…'}` : ''}
+                          </span>
+                        ))}
+                        {!readOnly && <span className="chip" style={{ borderStyle: 'dashed' }} onClick={() => setAyarAcik(true)} title="Videoları ayarla (sil, saniye…)">⚙️ Ayarla</span>}
+                      </div>
+                      {secili && <EmbedVideo url={secili.url} bas={secili.bas} bit={secili.bit} />}
+                      {secili?.ozelNot && (
+                        <div style={{ margin: '10px 0 0' }}>
+                          <div className="note" style={{ margin: '0 0 2px', fontWeight: 700 }}>🎬 Bu videoya özel</div>
+                          <div style={{ whiteSpace: 'pre-wrap' }}>{secili.ozelNot}</div>
+                        </div>
+                      )}
+                    </>
+                  ) : !readOnly && (
+                    <div className="note" style={{ marginTop: 0 }}>Video eklemek için aşağıdaki 🎬 Video düğmesini kullan.</div>
+                  )}
+                  {/* Ekleme/düzenleme modali (formuAc/formuKapat/videoKaydet) — dışarıdan (🎬 Video düğmesi,
+                      videoEkleTetik) VEYA aşağıdaki Ayarla modalinden açılır, ikisi de aynı vidFormMode'u
+                      paylaşır. */}
+                  {!readOnly && vidFormMode && (
+                    <div className="modal top2" onMouseDown={formuKapat}>
+                      <div className="sheet small" onMouseDown={(e) => e.stopPropagation()}>
+                        <button className="x" onClick={formuKapat}>×</button>
+                        <h3 style={{ marginBottom: 8 }}>🎬 {vidFormMode === 'edit' ? 'Videoyu düzenle' : 'Video ekle'}</h3>
+                        {vidFormAlanlarJsx}
+                        <div className="rowbtns" style={{ marginTop: 6 }}>
+                          <button className="btn sm" onClick={videoKaydet} disabled={!vUrl.trim()}>{vidFormMode === 'edit' ? 'Kaydet' : 'Ekle'}</button>
+                          <button className="btn ghost sm" onClick={formuKapat}>Vazgeç</button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {/* Ayarla modali: mevcut videoların düz listesi — satıra dokununca hemen altında (aynı
+                      formuAc/vidFormAlanlarJsx) düzenleme açılır, ayrı bir ✕ ile silinir. Yeni video eklemek
+                      buradan değil, her zaman sayfa seviyesindeki "🎬 Video" düğmesinden. */}
+                  {ayarAcik && (
+                    <div className="modal" onMouseDown={() => { setAyarAcik(false); formuKapat(); }}>
+                      <div className="sheet" onMouseDown={(e) => e.stopPropagation()}>
+                        <button className="x" onClick={() => { setAyarAcik(false); formuKapat(); }}>×</button>
+                        <h3 style={{ marginBottom: 8 }}>🎬 Videolar</h3>
+                        {videolar.length === 0 && <div className="note">Henüz video yok.</div>}
+                        {videolar.map((v, i) => (
+                          <div key={i}>
+                            <div
+                              onClick={() => (vidFormMode === 'edit' && vidSec === i ? formuKapat() : satirDuzenAc(i))}
+                              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', cursor: 'pointer', borderTop: i === 0 ? undefined : '1px solid var(--line)' }}
+                            >
+                              <span style={{ flex: 1, fontSize: 13 }}>{v.baslik || ('Video ' + (i + 1))}{(v.bas != null || v.bit != null) ? ` ⏱${saniyeStr(v.bas) || '0'}–${v.bit != null ? saniyeStr(v.bit) : '…'}` : ''}</span>
+                              <span style={{ fontSize: 11, color: 'var(--muted)', opacity: .6 }}>{(vidFormMode === 'edit' && vidSec === i) ? '▴' : '▾'}</span>
+                              <span style={{ opacity: 0.55 }} onClick={(e) => { e.stopPropagation(); videoSil(i); }}>✕</span>
+                            </div>
+                            {vidFormMode === 'edit' && vidSec === i && (
+                              <div style={{ padding: '7px 8px', borderRadius: 8, background: 'var(--card2,#f6f4ee)', margin: '2px 0 8px' }}>
+                                {vidFormAlanlarJsx}
+                                <div className="rowbtns" style={{ marginTop: 6 }}>
+                                  <button className="btn sm" onClick={videoKaydet} disabled={!vUrl.trim()}>Kaydet</button>
+                                  <button className="btn ghost sm" onClick={() => videoSil(i)}>Sil</button>
+                                  <button className="btn ghost sm" onClick={formuKapat}>Vazgeç</button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : tekVideo ? (
                 // "Kart" tipi — kullanıcı isteği: "sadece bir video linki girmesi yeterli, ismi zaten kartın
                 // adından belli olur, saniye ayarları ve videoya özel açıklama da olmasın". Liste/ekle-formu
                 // yerine tek satırlık link alanı; videolar[0] dışında hiçbir alan kullanılmıyor.
@@ -1266,6 +1353,12 @@ export default function Rite() {
   const [ekHata, setEkHata] = useState('');
   const [ekBuyuk, setEkBuyuk] = useState(false);
   const ekInputRef = useRef<HTMLInputElement>(null);
+  // Alışkanlık'ın "🎬 Video" tetikleyicisi — Bildirim/Ek şeridinde, Ek'in solunda (kullanıcı isteği, 2026-09-16:
+  // "çoklu video" akışı). Sayfa seviyesinde tek atımlık (one-shot) bir bayrak: true olunca BilgiKartEdit kendi
+  // video-ekle formunu açar ve hemen ardından onVideoEkleTetikKapat ile bu bayrağı false'a geri çeker — asıl
+  // video listesi (videolar) hep kart_config'te, BilgiKartEdit'in kendi state'inde kalıyor, burada sadece "aç"
+  // komutu taşınıyor.
+  const [videoEkleAcik, setVideoEkleAcik] = useState(false);
   const lastDetayAnahtarRef = useRef<string | null>(null);
   useEffect(() => {
     if (!detay) { lastDetayAnahtarRef.current = null; return; }
@@ -1292,6 +1385,7 @@ export default function Rite() {
       setEkYukleniyor(false);
       setEkHata('');
       setEkBuyuk(false);
+      setVideoEkleAcik(false);
     }
   }, [detay, taze]);
   const [grupEditOpen, setGrupEditOpen] = useState(false);
@@ -4026,7 +4120,7 @@ export default function Rite() {
                 böylece Ajandama eklemeden kart orada da (Havuz'da olduğu gibi) açılabiliyor. */}
             {kTip === 'bilgi' && (() => {
               const editable = !preview && (isRit ? o.kaynak === 'Kendi' : isDraft);
-              if (editable) return <BilgiKartEdit cfg={kCfg} onSave={bilgiKaydet} randevu={!!kCfg?.randevu} notTasarimi={isKisisel || isYeniKart} readOnly={isYeniKart ? yeniKartGorunumModu : kisiselGorunumModu} sadeceAciklama={isYeniKart && !dahaFazlaAcik} tekVideo={isYeniKart || (isKisisel && kisiselTur === 'aliskanlik')} videoYok={isKisisel && (kisiselTur === 'not' || kisiselTur === 'yapilacak')} ekAyri={isKisisel} />;
+              if (editable) return <BilgiKartEdit cfg={kCfg} onSave={bilgiKaydet} randevu={!!kCfg?.randevu} notTasarimi={isKisisel || isYeniKart} readOnly={isYeniKart ? yeniKartGorunumModu : kisiselGorunumModu} sadeceAciklama={isYeniKart && !dahaFazlaAcik} tekVideo={isYeniKart} cokluVideo={isKisisel && kisiselTur === 'aliskanlik'} videoEkleTetik={videoEkleAcik} onVideoEkleTetikKapat={() => setVideoEkleAcik(false)} videoYok={isKisisel && (kisiselTur === 'not' || kisiselTur === 'yapilacak')} ekAyri={isKisisel} />;
               if (!preview && isRit) return <BilgiKart cfg={kCfg} onSave={bilgiKaydet} />;
               return <BilgiKartEdit cfg={kCfg} onSave={() => {}} randevu={!!kCfg?.randevu} readOnly />;
             })()}
@@ -4121,6 +4215,14 @@ export default function Rite() {
                         </>
                       )}
                     </div>
+                    {/* "🎬 Video" — SADECE Alışkanlık, Ek'in hemen solunda (kullanıcı isteği, 2026-09-16: video
+                        ekleme artık açıklamanın altındaki tek satırlık link kutusundan değil, buradan — tıklayınca
+                        BilgiKartEdit'in kendi ekleme modalini açan tek atımlık videoEkleAcik bayrağı). İlk video
+                        da, ikinci/üçüncü video da hep bu düğmeden eklenir; videonun üstündeki şerit (bkz.
+                        BilgiKartEdit içindeki cokluVideo dalı) artık sadece video seçimi + ⚙️ Ayarla taşıyor. */}
+                    {!kisiselGorunumModu && kisiselTur === 'aliskanlik' && (
+                      <span className="chip" style={{ borderStyle: 'dashed', flex: '0 0 auto' }} onClick={() => setVideoEkleAcik(true)} title="Video ekle">🎬 Video</span>
+                    )}
                     {/* Ek (attachment) — Bildirim'le aynı satırda, tek dosya (kullanıcı isteği). Şimdilik yine
                         fotoğrafla sınırlı ("her türlü dosya"ya genişletmek ayrı bir backend adımı olarak
                         bırakıldı). Randevu'nun eski büyük foto ızgarasının (resimGridJsx) yerini de bu tek
