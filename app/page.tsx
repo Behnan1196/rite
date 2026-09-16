@@ -1392,8 +1392,12 @@ export default function Rite() {
   const [grupEditVal, setGrupEditVal] = useState('');
   const [grupEditAltVal, setGrupEditAltVal] = useState('');
   const [paylasOpen, setPaylasOpen] = useState(false);
+  // mezunModal: artık sadece bir onay adımı (puan almıyor — bkz. mezunEt). puanModal/puanDeger: YENİ, ayrı
+  // "Puanla" eylemi için (bkz. ritPuanla) — puanModal o an puanlanan rt'yi tutuyor, puanDeger seçilen yıldızın
+  // yerel arabelleği (mezunModal'ın eski mezunPuan'ıyla aynı desen).
   const [mezunModal, setMezunModal] = useState<any>(null);
-  const [mezunPuan, setMezunPuan] = useState(0);
+  const [puanModal, setPuanModal] = useState<any>(null);
+  const [puanDeger, setPuanDeger] = useState(0);
   const [remInput, setRemInput] = useState('');
   const [remTarihInput, setRemTarihInput] = useState('');
   // 🎓/🔔 ikonları artık Zamanlama formundaki checkbox/saat alanlarının yerini alıyor — dolu ikon zaten
@@ -1595,7 +1599,7 @@ export default function Rite() {
   }
 
   async function loadData(clientId: string) {
-    const r = await supabase.from('dog_rituals').select('id,ad,zaman,kategori,tip,kaynak,mezun,aktif,alan,rutin,rutin_ad,sira,baslangic,bitis,activity_id,hatirlatma_saat,blok_sira,faydalar,url,gunler,kart_tipi,kart_config,aliskanlik,aciklama,sablon_id,sablon_adim,kisisel_not').eq('client_id', clientId).order('zaman');
+    const r = await supabase.from('dog_rituals').select('id,ad,zaman,kategori,tip,kaynak,mezun,aktif,alan,rutin,rutin_ad,sira,baslangic,bitis,activity_id,hatirlatma_saat,blok_sira,faydalar,url,gunler,kart_tipi,kart_config,aliskanlik,aciklama,sablon_id,sablon_adim,kisisel_not,puan').eq('client_id', clientId).order('zaman');
     const lg = await supabase.from('dog_ritual_logs').select('id,ritual_id,tarih,yapildi').eq('client_id', clientId);
     let ritualRows: any[] = r.data || [];
     const logRows = lg.data || [];
@@ -1950,6 +1954,9 @@ export default function Rite() {
       zaman: o.zaman || 'gün', zamanlar: null, gunler: o.gunler || null,
       sure_gun: o.bitis ? sureGun(o) : null,
       kart_tipi: o.kart_tipi || null, kart_config: o.kart_config || null,
+      // puan: 2026-09-16 — ritüel Puanla ile zaten değerlendirilmişse (bkz. ritPuanla), Havuz'a kaydederken
+      // bu puan da otomatik taşınıyor, ayrıca yeniden değerlendirmeye gerek kalmıyor.
+      puan: o.puan || null,
       kaynak_etiket: 'Kendi', aktif: true,
     }).select().single();
     if (ins.error) { setKMsg('Havuza eklenemedi: ' + ins.error.message); setPaylasBusy(false); return; }
@@ -2587,23 +2594,28 @@ export default function Rite() {
     await Promise.all(ids.map((id, i) => supabase.from('dog_rituals').update({ rutin: null, rutin_ad: null, blok_sira: Date.now() + i }).eq('id', id)));
     loadData(client.id);
   }
-  async function emekli(id: string) {
+  // Mezun et (2026-09-16, Behnan kararı — puanlama ve Havuz'dan AYRIŞTIRILDI): artık SADECE ritüeli ajandadan
+  // kaldırıp Mezunlar arşivine taşıyor — ne puan alıyor ne de bir dog_activities kaydı zorunlu kılıyor. Önceki
+  // sürümde bu üçü tek bir eylemdi; Behnan'ın gözlemi doğruydu — süreli (bitis'i olan) bir alışkanlık zaten
+  // activeOn()'daki `if (r.bitis) return d <= r.bitis` sayesinde süresi dolunca Ajanda'dan kendiliğinden
+  // düşüyordu, mezun etmeye puanlamak için ihtiyaç yoktu. Puanlama artık ayrı bir eylem (bkz. ritPuanla),
+  // Havuz'a kaydetmek de zaten ayrı bir eylemdi (ritHavuzaAl) — üçü artık bağımsız, istediğini istediğin an
+  // yapabiliyorsun. (Eskiden kullanılmayan `emekli` fonksiyonu bununla birleştirildi, aynı işi yapıyordu.)
+  async function mezunEt(id: string) {
     if (!client) return;
     await supabase.from('dog_rituals').update({ mezun: true, aktif: false, bitis: today }).eq('id', id);
+    setMezunModal(null); closeDetay();
     loadData(client.id);
   }
-  // Mezun et: memnuniyet/yarar puanıyla havuza döner (aktivite kaydı) + ritüel mezun olur.
-  async function mezunEt(rt: any, puan: number) {
+  // Puanla (YENİ, 2026-09-16): bir alışkanlığa ne zaman istersen (bitirirken, süre dolunca, ya da devam ederken)
+  // 1-5 yıldız verebilmen için — mezun etmekten VE Havuz'a kaydetmekten tamamen bağımsız, doğrudan ritüelin
+  // kendi `puan` kolonuna yazılıyor (dog_rituals.puan — bu migration'la eklendi). Havuz'a daha sonra kaydedersen
+  // (ritHavuzaAl) puan oraya da otomatik taşınıyor.
+  async function ritPuanla(id: string, puan: number) {
     if (!client) return;
-    if (rt.activity_id) {
-      await supabase.from('dog_activities').update({ puan: puan || null }).eq('id', rt.activity_id);
-    } else {
-      const alan0 = rt.faydalar?.length ? (faydaMap[rt.faydalar[0]]?.alan || 'Kişisel') : 'Kişisel';
-      await supabase.from('dog_activities').insert({ client_id: client.id, tur: 'aktivite', ad: rt.ad, grup: alan0, faydalar: rt.faydalar || [], zaman: rt.zaman || 'gün', zamanlar: [rt.zaman || 'gün'], kart_tipi: rt.kart_tipi || null, kart_config: rt.kart_config || null, puan: puan || null, kaynak_etiket: 'Mezun', aktif: true, sablon_id: rt.sablon_id || null });
-    }
-    await supabase.from('dog_rituals').update({ mezun: true, aktif: false, bitis: today }).eq('id', rt.id);
-    setMezunModal(null); setMezunPuan(0); closeDetay();
-    loadActivities(); loadData(client.id);
+    await supabase.from('dog_rituals').update({ puan: puan || null }).eq('id', id);
+    setPuanModal(null);
+    loadData(client.id);
   }
   // Programın tüm (tarihli) adımlarının bitişini topluca ±gün kaydır.
   async function programSureDegis(pid: string, delta: number) {
@@ -2957,6 +2969,9 @@ export default function Rite() {
               {ritAreas(rt).map((a) => <span key={a} className="tagp p-alan">{a}</span>)}
               {cfg.dikey && DIKEY_LABEL[cfg.dikey] && <span className="tagp p-dikey">{DIKEY_LABEL[cfg.dikey]}</span>}
               {cfg.pilAlan && PIL_ALAN[cfg.pilAlan] && <span className="tagp p-dikey">🔋 {PIL_ALAN[cfg.pilAlan]}</span>}
+              {/* Puan rozeti (YENİ, 2026-09-16) — Havuz'un kendi "puanp" stiliyle aynı, kişinin kendi ritüeline
+                  verdiği yıldızı listede de görebilmesi için (bkz. ritPuanla). */}
+              {rt.puan ? <span className="puanp"> {'★'.repeat(rt.puan)}</span> : null}
             </div>
             {/* Yapılacak'ta ve Randevu'da "bitiş DD.MM" ibaresine gerek yok (kullanıcı isteği) — ikisinde de bitiş
                 zaten sadece başlangıçla aynı gün ya da (gecikince) null, ayrıca anlamlı bir bilgi taşımıyor;
@@ -3026,7 +3041,7 @@ export default function Rite() {
           );
         })()}
         {!rt.mezun && !rt.bitis && rt.aliskanlik && total >= 21 && (
-          <div className="retirebox">🎉 <div>&quot;{rt.ad}&quot; {total} kez yapıldı — artık otomatik. <b>Mezun edip</b> listeni sadeleştirelim mi?</div><button className="rb" onClick={() => { setMezunPuan(0); setMezunModal(rt); }}>Mezun et</button></div>
+          <div className="retirebox">🎉 <div>&quot;{rt.ad}&quot; {total} kez yapıldı — artık otomatik. <b>Mezun edip</b> listeni sadeleştirelim mi?</div><button className="rb" onClick={() => setMezunModal(rt)}>Mezun et</button></div>
         )}
       </div>
     );
@@ -4673,11 +4688,13 @@ export default function Rite() {
             <h3 style={{ marginBottom: 2 }}>🎓 {habitMenuFor.ad}</h3>
             <p className="note" style={{ marginTop: 0 }}>Bu bir alışkanlık — ne yapmak istersin?</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+              {/* Puanla (YENİ, 2026-09-16): mezun etmekten bağımsız, istediğin an — bkz. ritPuanla. */}
+              <button className="btn ghost sm" onClick={() => { setPuanDeger(habitMenuFor.puan || 0); setPuanModal(habitMenuFor); setHabitMenuFor(null); }}>⭐ Puanla{habitMenuFor.puan ? ' (' + habitMenuFor.puan + '★)' : ''}</button>
               <button className="btn ghost sm" onClick={() => { setRitAliskanlik(habitMenuFor.id, false); setHabitMenuFor(null); }}>↩️ Alışkanlıktan çıkar</button>
-              <button className="btn" onClick={() => { setMezunPuan(0); setMezunModal(habitMenuFor); setHabitMenuFor(null); }}>🎓 Mezun et</button>
+              <button className="btn" onClick={() => { setMezunModal(habitMenuFor); setHabitMenuFor(null); }}>🎓 Mezun et</button>
               <button className="btn ghost sm" onClick={() => setHabitMenuFor(null)}>Vazgeç</button>
             </div>
-            <div className="note" style={{ marginTop: 8 }}>Alışkanlıktan çıkarmak zararsız — istersen tekrar işaretlersin. Mezun et ise ritüeli ajandadan tamamen kaldırır.</div>
+            <div className="note" style={{ marginTop: 8 }}>Puanlamak bağımsız bir not, ajandadan hiçbir şeyi etkilemez. Alışkanlıktan çıkarmak zararsız — istersen tekrar işaretlersin. Mezun et ise ritüeli ajandadan tamamen kaldırır (süreli/bitişli alışkanlıklar zaten süresi dolunca kendiliğinden düşer, mezun etmene çoğu zaman gerek kalmaz).</div>
           </div>
         </div>
       )}
@@ -4706,20 +4723,39 @@ export default function Rite() {
         </div>
       )}
 
+      {/* Mezun et modali (2026-09-16, Behnan kararı ile sadeleşti): artık salt bir onay adımı — puan
+          almıyor, Havuz kaydı zorunlu kılmıyor (bkz. mezunEt/ritPuanla). */}
       {mezunModal && (
         <div className="modal top2" onMouseDown={() => setMezunModal(null)}>
           <div className="sheet small" onMouseDown={(e) => e.stopPropagation()}>
             <button className="x" onClick={() => setMezunModal(null)}>×</button>
             <h3 style={{ marginBottom: 2 }}>🎓 Mezun et</h3>
-            <p className="note" style={{ marginTop: 0 }}><b>{mezunModal.ad}</b> — bu alışkanlık ne kadar yararlı/tatmin ediciydi? Puanla, havuzuna bu bilgiyle dönsün.</p>
-            <div style={{ display: 'flex', gap: 4, justifyContent: 'center', margin: '8px 0' }}>
-              {[1, 2, 3, 4, 5].map((n) => <button key={n} className="starbtn" onClick={() => setMezunPuan(n)}>{n <= mezunPuan ? '★' : '☆'}</button>)}
-            </div>
+            <p className="note" style={{ marginTop: 0 }}><b>{mezunModal.ad}</b> — ajandadan kaldırılıp Mezunlar arşivine taşınacak. İstediğinde oradan yeniden başlatabilirsin.</p>
             <div className="rowbtns" style={{ marginTop: 8 }}>
-              <button className="btn" onClick={() => mezunEt(mezunModal, mezunPuan)}>Mezun et</button>
+              <button className="btn" onClick={() => mezunEt(mezunModal.id)}>Mezun et</button>
               <button className="btn ghost sm" onClick={() => setMezunModal(null)}>Vazgeç</button>
             </div>
-            <div className="note" style={{ marginTop: 4 }}>Puan opsiyonel — vermeden de mezun edebilirsin. Ritüel ajandadan kalkar, aktivite havuzda kalır.</div>
+          </div>
+        </div>
+      )}
+
+      {/* Puanla modali (YENİ, 2026-09-16 — Behnan kararı: puanlama mezun etmekten ve Havuz'a kaydetmekten
+          bağımsız). bkz. ritPuanla. */}
+      {puanModal && (
+        <div className="modal top2" onMouseDown={() => setPuanModal(null)}>
+          <div className="sheet small" onMouseDown={(e) => e.stopPropagation()}>
+            <button className="x" onClick={() => setPuanModal(null)}>×</button>
+            <h3 style={{ marginBottom: 2 }}>⭐ Puanla</h3>
+            <p className="note" style={{ marginTop: 0 }}><b>{puanModal.ad}</b> — bu alışkanlık ne kadar yararlı/tatmin ediciydi? Sonra tekrar yapmaya karar verirken işine yarar.</p>
+            <div style={{ display: 'flex', gap: 4, justifyContent: 'center', margin: '8px 0' }}>
+              {[1, 2, 3, 4, 5].map((n) => <button key={n} className="starbtn" onClick={() => setPuanDeger(n)}>{n <= puanDeger ? '★' : '☆'}</button>)}
+            </div>
+            <div className="rowbtns" style={{ marginTop: 8 }}>
+              <button className="btn" onClick={() => ritPuanla(puanModal.id, puanDeger)}>Kaydet</button>
+              {puanModal.puan ? <button className="btn ghost sm" onClick={() => ritPuanla(puanModal.id, 0)}>Puanı kaldır</button> : null}
+              <button className="btn ghost sm" onClick={() => setPuanModal(null)}>Vazgeç</button>
+            </div>
+            <div className="note" style={{ marginTop: 4 }}>Ajandadan hiçbir şeyi etkilemez, sadece kendi notun.</div>
           </div>
         </div>
       )}
