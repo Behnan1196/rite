@@ -1600,6 +1600,11 @@ export default function Rite() {
 
   async function loadData(clientId: string) {
     const r = await supabase.from('dog_rituals').select('id,ad,zaman,kategori,tip,kaynak,mezun,aktif,alan,rutin,rutin_ad,sira,baslangic,bitis,activity_id,hatirlatma_saat,blok_sira,faydalar,url,gunler,kart_tipi,kart_config,aliskanlik,aciklama,sablon_id,sablon_adim,kisisel_not,puan').eq('client_id', clientId).order('zaman');
+    // 2026-09-16 eklendi: bu sorgu daha önce hatayı sessizce yutup Ajanda'yı boş gösteriyordu (bkz. Behnan'ın
+    // "ajandada hiçbir şey görünmüyor" bildirimi — kök neden: select listesine yeni eklenen `puan` kolonu henüz
+    // migration'la (rite_ritual_puan_migration.sql) oluşturulmamıştı, PostgREST tüm sorguyu reddetti). Artık
+    // hata varsa görünür şekilde uyarıyoruz — sessizce boş Ajanda göstermek yerine.
+    if (r.error) { console.error('dog_rituals select hatası:', r.error); alert('Ritüeller yüklenemedi: ' + r.error.message); }
     const lg = await supabase.from('dog_ritual_logs').select('id,ritual_id,tarih,yapildi').eq('client_id', clientId);
     let ritualRows: any[] = r.data || [];
     const logRows = lg.data || [];
