@@ -1751,10 +1751,15 @@ export default function Rite() {
     setStudioOpen(true);
   }
   // Home'un bir alan Detay'ından "+ Aktivite ekle" ile açılırken: boş bir taslak, sadece o alanın anahtarıyla
-  // ve (varsa) adıyla önceden dolduruluyor — kaydedince studioKaydet zaten normal insert akışına giriyor.
+  // önceden dolduruluyor — kaydedince studioKaydet zaten normal insert akışına giriyor. Kütüphane grubu (kGrup)
+  // BİLEREK alan adına eşitlenmiyor (önceki davranış) — Kütüphane'nin kendi Kişisel grup listesi Meridyen'in
+  // alan ağacından tamamen ayrı bir yapı; aynı isimle yeni bir grup oluşturmak "bu Meridyen alanının bir
+  // parçasıymış" izlenimi veriyor ama değil, kafa karıştırıyordu (Behnan geri bildirimi, 2026-09-16). Aktivite
+  // zaten home_alanlar etiketiyle bu alanın "Aktivitelerin" listesinde görünüyor — Kütüphane grubu varsayılan
+  // 'Genel' kalıyor, kullanıcı isterse formda değiştirebilir.
   function openStudioForHomeAlan(alan: any) {
     studioReset();
-    setKGrup(alan.ad || 'Genel'); setKHomeAlanlar([alan.anahtar]);
+    setKHomeAlanlar([alan.anahtar]);
     setStudioOpen(true);
   }
   // Adım zamanlama özeti: "↳ ardından · M gün" / "başla +Ng · M gün"
@@ -4491,6 +4496,32 @@ export default function Rite() {
                   );
                 })()}
                 <span className="minlink" onClick={() => { setHomeDetay(null); openStudioForHomeAlan(a); }}>+ Aktivite ekle</span>
+              </div>
+              {/* Meridyen'den programlar (2026-09-16, Behnan sorusu üzerine): Rite Studio'da (app-meridyen/atama)
+                  bir Program/Kart bu alana etiketlenmişse (dog_activities.alan_anahtarlari, client_id null —
+                  kanonik kütüphane, "activities" state'i zaten TÜM aktif satırları taşıyor, ekstra sorgu yok)
+                  burada listelenir. Tıklayınca aynı openDetay akışı açılır — program tipi olduğu için Detay'da
+                  zaten var olan "Ajandama başlat" butonu (bkz. isProg/programBaslat) kendiliğinden çıkar, ayrı
+                  bir "ekle" mekanizması kurmaya gerek yok. Bu, alan atandığında programların "gitmesi" ihtiyacını
+                  push değil self-servis biçimde çözüyor — içerik hep kanonikten okunduğu için ayrıca senkron
+                  gerektirmiyor (bkz. proje belleği "Alanlar" mimarisi notu).*/}
+              <div style={{ marginTop: 10 }}>
+                <div className="k" style={{ marginBottom: 5 }}>Meridyen'den programlar</div>
+                {(() => {
+                  // Sadece tur='program' — 'kart' (master card) Rite Studio'da doğrudan atanmayan, programların
+                  // adımlarında kopyalanarak kullanılan bir yapı taşı; danışana tek başına "başlat"acak bir şey
+                  // sunmadığı için burada bilerek gösterilmiyor.
+                  const progKart = activities.filter((p: any) => !p.client_id && p.tur === 'program' && (p.alan_anahtarlari || []).includes(a.anahtar));
+                  return progKart.length > 0 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 6 }}>
+                      {progKart.map((p: any) => (
+                        <div key={p.id} className="chip" style={{ cursor: 'pointer', textAlign: 'left', display: 'block' }} onClick={() => { setHomeDetay(null); openDetay(p, 'aktivite'); }}>🎯 {p.ad}</div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="note" style={{ margin: '0 0 6px' }}>Bu alanla ilişkili bir program henüz yok.</div>
+                  );
+                })()}
               </div>
               {/* Değerlendirme (2026-09, Behnan kararı — geri döndü): toplu "Kendini değerlendir" formu (eski
                   homeEkleOpen, ＋'dan açılıyordu) kaldırıldı, değerlendirme yine kartın kendi Detay'ının sonunda
