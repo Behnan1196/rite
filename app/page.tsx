@@ -4124,20 +4124,17 @@ export default function Rite() {
               if (!preview && isRit) return <BilgiKart cfg={kCfg} onSave={bilgiKaydet} />;
               return <BilgiKartEdit cfg={kCfg} onSave={() => {}} randevu={!!kCfg?.randevu} readOnly />;
             })()}
-            {/* Alan pili etiketi (v1): Not'ta yok (hiç "yapıldı" kavramı taşımıyor), Alışkanlık/Yapılacak/Randevu'da
-                opsiyonel — Ajanda'nın gün görünümündeki alan pillerinin (bkz. PIL_ALAN) hangi kartlardan
-                besleneceğini belirliyor. Boş ("Yok") bırakılırsa o kart hiçbir pile katılmaz. */}
-            {isRit && isKisisel && kisiselTur !== 'not' && (
-              <div className="kv" style={{ margin: '0 0 8px' }}>
-                <div className="k">🔋 Alan</div>
-                <div>
-                  <span className={'chip' + (!kCfg?.pilAlan ? ' on' : '')} onClick={() => bilgiKaydet({ ...kCfg, pilAlan: null })}>Yok</span>
-                  {PIL_ALAN_SIRA.map((a) => (
-                    <span key={a} className={'chip' + (kCfg?.pilAlan === a ? ' on' : '')} onClick={() => bilgiKaydet({ ...kCfg, pilAlan: a })}>{PIL_ALAN[a]}</span>
-                  ))}
-                </div>
-              </div>
-            )}
+            {/* "🔋 Alan" etiketleme çipi KALDIRILDI (2026-09-16, Behnan kararı) — bu, sabit 4 değerli eski
+                "kişisel pil" sözlüğüydü (PIL_ALAN: hareket/beslenme/meşgale/sosyal), asıl amacı Ajanda'nın gün
+                görünümünde bir "alan pilleri" şeridi beslemekti; o şerit zaten daha önce kaldırılmıştı (bkz.
+                Gelişim sadeleştirme notu) — yani bu çip artık HİÇBİR aktif göstergeyi beslemiyordu, sadece liste
+                satırında kozmetik bir "🔋 etiket" rozetine (bkz. RitItem) dönüşüyordu. Ayrıca yeni Meridyen
+                "Alanlar" mimarisiyle (13+ büyüyebilen alan) karışmasın diye de ayrı tutulması gerekiyordu, ama
+                sabit 4 chip'lik bir seçici zaten o büyüklükte bir listeye uygun değildi. Veri tarafına
+                DOKUNULMADI: PIL_ALAN/PIL_ALAN_SIRA sabitleri ve RitItem'daki salt-okunur "🔋 etiket" rozeti
+                duruyor — daha önce etiketlenmiş kartlar rozetini kaybetmiyor, sadece yeni/değiştirme
+                girişi kalktı. İleride gerçekten gerekirse, chip yerine Meridyen'in kendi alan listesinden
+                beslenen bir seçici (arama/otomatik-tamamlama gibi) düşünülebilir. */}
             {/* Zamanlama + Bildirim şeritleri — Ad/Açıklama/Video'nun altında, tek düzenleme iskeletinin son iki
                 parçası (kullanıcı isteği: "altında zamanlama şeridi, onun altında bildirim şeridi olsun").
                 Randevu'nun kendi tarih/saati hâlâ yukarıdaki ayrı "Randevu ne zaman" bloğunda (henüz ele

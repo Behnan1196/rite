@@ -143,16 +143,23 @@ function YansitButton({ videoId, bas }: { videoId: string; bas?: number | null }
     setBusy(false);
   }
   if (!ready) return null;
-  return <button className="btn ghost sm" style={{ marginTop: 4 }} onClick={yansit} disabled={busy} title="Chromecast/Google TV'ye yansıt — aynı Wi-Fi ağında bir cihaz gerekir">📺 {busy ? 'Bağlanıyor…' : 'Yansıt'}</button>;
+  return <button className="btn ghost sm" onClick={yansit} disabled={busy} title="Chromecast/Google TV'ye yansıt — aynı Wi-Fi ağında bir cihaz gerekir">📺 {busy ? 'Bağlanıyor…' : 'Yansıt'}</button>;
 }
 // iframeRef verilirse YouTube oynatıcısına dışarıdan postMessage komutu (seekTo/playVideo/pauseVideo) gönderilebilir.
-function EmbedVideo({ url, bas, bit, iframeRef }: { url?: string | null; bas?: number | null; bit?: number | null; iframeRef?: { current: HTMLIFrameElement | null } }) {
+// extra: Yansıt düğmesiyle AYNI satıra eklenecek ek bir öğe (kullanıcı isteği, 2026-09-16 — "Yansıt için de bir
+// şeridimiz var, belki ayarlar o satırda olabilir") — ör. Alışkanlık'ın çoklu-video "⚙️ Ayarla" düğmesi. Yansıt
+// hazır değilse (SDK yüklenmedi/Safari-iOS) YansitButton null döner, satırda sadece extra kalır — satır yine de
+// yer kaplamaya devam eder, bu istenen bir durum (ayarlara erişim Yansıt'ın varlığına bağlı olmamalı).
+function EmbedVideo({ url, bas, bit, iframeRef, extra }: { url?: string | null; bas?: number | null; bit?: number | null; iframeRef?: { current: HTMLIFrameElement | null }; extra?: ReactNode }) {
   const info = embedInfo(url, bas, bit);
   if (!info) return url ? <a className="btn ghost sm" href={url} target="_blank" rel="noreferrer">▶ Aç</a> : null;
   if (info.tur === 'yt') return (
     <>
       <div className="ytwrap"><iframe ref={iframeRef} src={info.src} title="video" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen /></div>
-      <YansitButton videoId={info.id} bas={bas} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+        <YansitButton videoId={info.id} bas={bas} />
+        {extra}
+      </div>
     </>
   );
   return <iframe className="igframe" src={info.src} title="video" scrolling="no" allowFullScreen />;
