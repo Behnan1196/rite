@@ -1434,8 +1434,24 @@ export default function Rite() {
     const onVis = () => { if (document.visibilityState === 'visible') tazele(); };
     window.addEventListener('focus', tazele);
     document.addEventListener('visibilitychange', onVis);
-    return () => { window.removeEventListener('focus', tazele); document.removeEventListener('visibilitychange', onVis); };
+    // iOS'ta (özellikle ana ekrana eklenmiş/standalone PWA) sekmeler arası geçişte 'pageshow' bazen 'focus'tan
+    // daha güvenilir tetikleniyor (bfcache'ten geri dönüş) — ikisini birlikte dinlemek zarar vermiyor.
+    window.addEventListener('pageshow', tazele);
+    return () => { window.removeEventListener('focus', tazele); document.removeEventListener('visibilitychange', onVis); window.removeEventListener('pageshow', tazele); };
   }, [client]);
+
+  // Behnan geri bildirimi (2026-09): Meridyen'den yeni atanan bir alan telefonda hemen çıkmıyor, ancak uygulama
+  // tamamen kapatılıp yeniden açılınca geliyor — yukarıdaki focus/visibilitychange, iOS'ta özellikle standalone
+  // PWA'da arka plandan öne gelişte güvenilir tetiklenmeyebiliyor (bilinen bir platform kısıtı). Gerçek zamanlı
+  // yayın (Supabase Realtime) kurmak yerine mevcut "tazele" felsefesiyle tutarlı, daha ucuz iki ek önlem: (a) Home
+  // sekmesine her girişte gruplar hemen yenilenir, (b) Home'dayken 30 saniyede bir sessizce arka planda yenilenir.
+  // En kötü ihtimalle yeni atanan bir alan 30 saniye içinde, ya da kullanıcı sekmeye her dokunduğunda görünür.
+  useEffect(() => {
+    if (!client || screen !== 'home') return;
+    loadGruplar(client.id);
+    const t = setInterval(() => loadGruplar(client.id), 30000);
+    return () => clearInterval(t);
+  }, [client, screen]);
 
   async function loadInbox(cid: string) {
     const r = await supabase.from('dog_inbox').select('*').eq('client_id', cid).order('created_at', { ascending: false });
