@@ -2250,6 +2250,13 @@ export default function Rite() {
     if (!client || !detay || detay.obj.id) return;
     const o = detay.obj;
     if (detay.tur === 'ritual') {
+      // Kaydetmeden hemen önce son bir kez: gunler seçiliyse ve [baslangic,bitis] penceresi ona hiç denk
+      // gelmiyorsa (bkz. pencereyiGunlereUydur), pencereyi (süresini koruyarak) uydur — ara adımlarda kaçan
+      // herhangi bir uyumsuzluk burada, kalıcı satır oluşmadan hemen önce kesin olarak düzeltilir.
+      const gunlerIlk = o.gunler ?? null;
+      const basIlk = o.baslangic || day;
+      const bitIlk = o.bitis === undefined ? day : o.bitis;
+      const { baslangic: basSon, bitis: bitSon } = pencereyiGunlereUydur(basIlk, bitIlk, gunlerIlk);
       const ins = await supabase.from('dog_rituals').insert({
         client_id: client.id, ad: (o.ad || '').trim() || 'Yeni not', zaman: 'gün', kaynak: 'Kendi', tip: 'aliskanlik',
         kart_tipi: 'bilgi', kart_config: o.kart_config || { icerik: null, videolar: [] },
@@ -2259,7 +2266,7 @@ export default function Rite() {
         // türetmeye çalışmak (eski `o.aliskanlik ? null : (o.bitis ?? day)`) hataliydı: `??` null'ı da
         // "eksik" sayıp gün'e çeviriyordu, bu yüzden not/yapılacak sadece oluşturulduğu gün görünüyordu ve
         // alışkanlığın 21 günlük varsayılanı sessizce siliniyordu. undefined dışında taslaktaki değeri aynen koru.
-        baslangic: o.baslangic || day, bitis: o.bitis === undefined ? day : o.bitis, gunler: o.gunler ?? null,
+        baslangic: basSon, bitis: bitSon, gunler: gunlerIlk,
         hatirlatma_saat: o.hatirlatma_saat || null, kisisel_not: o.kisisel_not || null,
         blok_sira: Date.now(),
       }).select().single();
@@ -2325,7 +2332,13 @@ export default function Rite() {
   // güne sıkıştırıyordu (karışıklığın asıl kaynağı buydu).
   async function ritTasi(id: string, hedefBas: string) {
     if (!client || !hedefBas) return;
-    const rt = id ? rituals.find((r) => r.id === id) : detay?.obj;
+    // rt: taslak/düzenleme modundayken (duzenleModu) DB'ye henüz hiçbir şey yazılmadığı için, id dolu olsa bile
+    // (kayıtlı bir kartı düzenlerken id her zaman dolu) 'rituals' dizisi bu oturumdaki yerel değişiklikleri
+    // YANSITMAZ — donmuş, düzenleme oturumu başlamadan önceki hâlde kalır. O yüzden id'nin dolu/boş olmasına değil,
+    // aşağıdaki DB-yazma dalıyla (if (!id || duzenleModu)) BİREBİR aynı koşula göre seçim yapıyoruz; aksi hâlde
+    // örn. setRitSure/setRitGunler art arda çağrıldığında ikincisi birincinin henüz DB'ye yazılmamış sonucunu
+    // görmeyip eski (bazen alakasız) veriye göre "uyumlu" sanabiliyordu — bkz. setRitSure/setRitGunler'daki not.
+    const rt = (!id || duzenleModu) ? detay?.obj : rituals.find((r) => r.id === id);
     const oldBas = (rt && rt.baslangic) || today;
     const oldBit = rt && rt.bitis;
     let yeniBit: string | null = null;
@@ -2357,9 +2370,28 @@ export default function Rite() {
     for (let i = 0; i < 7; i++) { const ds = iso(d); if (gunler.includes(wday(ds))) return ds; d.setDate(d.getDate() + 1); }
     return baslangic;
   }
+  // Son-anda güvenlik ağı: setRitSure/setRitGunler'daki uyumluluk-kaydırma mantığıyla aynı hesabı, ama kartın
+  // GERÇEKTEN kalıcı hâle geldiği anda (taslakKaydet / kisiselDuzenleKaydet) bir kez daha, bağımsız olarak
+  // uyguluyor. Amaç: ara adımlardaki (tek tek Süre/Günler değişiklikleri) herhangi bir sıralama/zamanlama
+  // sorunu bu son kontrolü atlatsa bile ("bir 3 günlük alışkanlığı bugün(Perşembe) yarattım, Pzt-Çar işaretledim,
+  // hiç uyarı vermeden ulaşılamaz biçimde kaydetti" — Behnan'ın bulduğu bug), veritabanına ASLA haftanın
+  // seçili günleriyle hiç kesişmeyen bir [baslangic,bitis] penceresi yazılamasın. Günler kısıtlaması yoksa ya da
+  // bitiş yoksa (süregelen kart) dokunmadan aynen döner.
+  function pencereyiGunlereUydur(baslangic: string, bitis: string | null, gunler: number[] | null): { baslangic: string; bitis: string | null } {
+    if (!gunler || gunler.length === 0 || !bitis) return { baslangic, bitis };
+    let uyumlu = false; const d = parseD(baslangic);
+    while (iso(d) <= bitis) { if (gunler.includes(wday(iso(d)))) { uyumlu = true; break; } d.setDate(d.getDate() + 1); }
+    if (uyumlu) return { baslangic, bitis };
+    const uzunlukGun = Math.round((parseD(bitis).getTime() - parseD(baslangic).getTime()) / 86400000) + 1;
+    const yeniBas = ilkUygunGun(baslangic >= today ? baslangic : today, gunler);
+    const e = parseD(yeniBas); e.setDate(e.getDate() + uzunlukGun - 1);
+    return { baslangic: yeniBas, bitis: iso(e) };
+  }
   async function setRitSure(id: string, gun: number | null) {
     if (!client) return;
-    const rt = id ? rituals.find((r) => r.id === id) : detay?.obj;
+    // rt: bkz. ritTasi'deki not — duzenleModu'dayken 'rituals' değil, o oturumun yerel arabelleği (detay?.obj)
+    // okunmalı; asıl bulunan bug tam olarak buydu (id dolu ama rituals hâlâ eski/uyumsuz gunler taşıyordu).
+    const rt = (!id || duzenleModu) ? detay?.obj : rituals.find((r) => r.id === id);
     let patch: any;
     if (!gun) patch = { bitis: null };
     else {
@@ -2377,7 +2409,8 @@ export default function Rite() {
   async function setRitGunler(id: string, g: number[]) {
     if (!client) return;
     const arr = g.length === 0 || g.length === 7 ? null : g;
-    const rt = id ? rituals.find((r) => r.id === id) : detay?.obj;
+    // rt: bkz. ritTasi/setRitSure'deki not — aynı sebepten duzenleModu'dayken yerel arabellek okunuyor.
+    const rt = (!id || duzenleModu) ? detay?.obj : rituals.find((r) => r.id === id);
     let patch: any = { gunler: arr };
     // Kart zaten süreliyse (bitiş tarihi var) ve yeni seçilen günler mevcut pencereye hiç denk gelmiyorsa, aynı
     // sorunu burada da önlemek için pencereyi (süresini koruyarak) ilk uygun güne kaydırıyoruz.
@@ -2419,7 +2452,8 @@ export default function Rite() {
   // Tekrarla'yı tekrar açınca geri geliyor.
   async function setRitTekrarla(id: string | null, val: boolean) {
     if (!client) return;
-    const rt = id ? rituals.find((r) => r.id === id) : detay?.obj;
+    // rt: bkz. ritTasi/setRitSure/setRitGunler'daki not — aynı sebepten duzenleModu'dayken yerel arabellek okunuyor.
+    const rt = (!id || duzenleModu) ? detay?.obj : rituals.find((r) => r.id === id);
     const cfg = { ...(rt?.kart_config || {}) };
     const bas = rt?.baslangic || day;
     const patch: any = {
@@ -3998,12 +4032,18 @@ export default function Rite() {
         const kisiselDuzenleVazgec = () => { setZamanOpen(false); closeDetay(); };
         const kisiselDuzenleKaydet = async () => {
           if (!client || !o.id) { setZamanOpen(false); closeDetay(); return; }
+          // Kaydetmeden hemen önce son bir kez uyumluluk kontrolü — bkz. taslakKaydet'teki aynı satır ve
+          // pencereyiGunlereUydur'ün başındaki not. o.baslangic yoksa (teorik olarak olmamalı) dokunmadan geçiyoruz.
+          const gunlerSon = o.gunler || null;
+          const { baslangic: basSon, bitis: bitSon } = o.baslangic
+            ? pencereyiGunlereUydur(o.baslangic, o.bitis ?? null, gunlerSon)
+            : { baslangic: o.baslangic || null, bitis: o.bitis ?? null };
           await supabase.from('dog_rituals').update({
             ad: (o.ad || '').trim() || kisiselYeni,
             kart_config: o.kart_config || {},
-            baslangic: o.baslangic || null,
-            bitis: o.bitis ?? null,
-            gunler: o.gunler || null,
+            baslangic: basSon,
+            bitis: bitSon,
+            gunler: gunlerSon,
             hatirlatma_saat: o.hatirlatma_saat || null,
             son_bildirim: o.son_bildirim ?? null,
             aliskanlik: !!o.aliskanlik,
