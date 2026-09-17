@@ -13,7 +13,15 @@ function SortableRow({ id, disabled, children }: { id: string; disabled?: boolea
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled });
   const style: any = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.55 : 1 };
   if (disabled) return <div ref={setNodeRef} style={style}>{children}</div>;
-  return <div ref={setNodeRef} style={{ ...style, touchAction: 'none' }} {...attributes} {...listeners}>{children}</div>;
+  // touchAction:'none' (2026-09-17'ye kadar) telefonda bu satırın üzerinden BAŞLAYAN her dokunuşta tarayıcının
+  // doğal kaydırmasını tamamen devre dışı bırakıyordu — 300ms'lik activationConstraint gecikmesi hiç devreye
+  // girmeden, touchstart anında tarayıcı "bu elemanda hiçbir yerleşik dokunma davranışı yok" kararını veriyordu
+  // (Behnan: "aktivite kartlarının olmadığı bir yerden tutarak kaydırmam gerekiyor, notların üzerinde sorun
+  // olmuyor" — Notlar bu SortableRow/DndContext'e hiç girmiyor, o yüzden onlarda sorun yoktu). dnd-kit'in kendi
+  // önerdiği gecikmeli-basılı-tutma deseni: 'manipulation' (çift-dokunuş yakınlaştırmayı kapatır ama doğal
+  // kaydırmayı SERBEST bırakır) — 300ms+6px eşiği dolmadan parmak yukarı/aşağı kayarsa tarayıcı normal
+  // kaydırmayı üstleniyor, basılı tutma süresi dolarsa PointerSensor devreye girip sürüklemeyi başlatıyor.
+  return <div ref={setNodeRef} style={{ ...style, touchAction: 'manipulation' }} {...attributes} {...listeners}>{children}</div>;
 }
 
 type Client = { id: string; ad: string; share_code?: string; auth_id?: string | null; meridyen_bagli?: boolean; email?: string };
