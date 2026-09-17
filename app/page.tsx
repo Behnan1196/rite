@@ -1366,6 +1366,17 @@ export default function Rite() {
   // — ayrı bir "🔁 Tekrarla" anahtarına gerek kalmadı, gün sayısı 1'den büyüğe çıkınca kart kendiliğinden
   // tekrarlanan hâle geçiyor (bkz. aşağıdaki Süre şeridi ve title strip'ten kaldırılan 🔁 butonu).
   const [sureAcik, setSureAcik] = useState(false);
+  // Başlangıç tarihi vurgusu (2026-09-17, Behnan kararı — "Tarih + süreli" fikri): Süre satırındaki tarih artık
+  // SADECE mantık (setRitGunler'ın uyumluluk-kaydırması) kendiliğinden değiştirdiğinde kısa bir renk vurgusu
+  // alıyor — kullanıcının kendi elle seçtiği bir tarihte (📅 input'undan ya da Süre değiştirirken) HİÇ yanmıyor,
+  // sadece "sistem senin seçtiğin günlerle uyuşmadığı için tarihi kaydırdı" anını görünür kılmak için. Aşağıdaki
+  // useEffect birkaç saniye sonra otomatik söndürüyor (bir "flash", kalıcı bir durum değil).
+  const [basVurgu, setBasVurgu] = useState(false);
+  useEffect(() => {
+    if (!basVurgu) return;
+    const t = setTimeout(() => setBasVurgu(false), 2600);
+    return () => clearTimeout(t);
+  }, [basVurgu]);
   // Kişisel kartların (Not/Alışkanlık/Yapılacak/Randevu) ortak "ek" (attachment) satırı — Bildirim'le aynı
   // şeritte, tek dosya (kullanıcı isteği: "resim yüklemeyi attachment ikonuyla... bildirimle aynı satırda...
   // birden çok dosya yüklemeyi gerekirse tek dosyaya düşürebiliriz"). Randevu'nun eski büyük foto ızgarası da
@@ -1403,6 +1414,7 @@ export default function Rite() {
       setZamanOpen(false);
       setGunlerAcik(!!(o2.gunler && o2.gunler.length));
       setSureAcik(false);
+      setBasVurgu(false);
       setEkYukleniyor(false);
       setEkHata('');
       setEkBuyuk(false);
@@ -2355,6 +2367,9 @@ export default function Rite() {
       const e = parseD(hedefBas); e.setDate(e.getDate() + delta);
       yeniBit = iso(e);
     }
+    // Tarihi elle değiştirmek her zaman kullanıcının bilinçli seçimi — mantığın kendi kaydırdığı bir öncekinden
+    // farklı olduğu için basVurgu (varsa) burada söndürülüyor.
+    setBasVurgu(false);
     if (!id || duzenleModu) { patchDetay({ baslangic: hedefBas, bitis: yeniBit }); return; } // taslak / düzenleme modu
     await supabase.from('dog_rituals').update({ baslangic: hedefBas, bitis: yeniBit }).eq('id', id);
     patchDetay({ baslangic: hedefBas, bitis: yeniBit });
@@ -2395,11 +2410,14 @@ export default function Rite() {
     let patch: any;
     if (!gun) patch = { bitis: null };
     else {
-      // Süre penceresi seçili Günler'e hiç denk gelmezse kart bir daha asla görünmez (activeOn ikisini de AND
-      // ile arıyor) — bu yüzden başlangıç, ilk uygun güne kaydırılıyor, süre (gün sayısı) aynen korunuyor.
-      const bas0 = (rt && rt.baslangic && rt.baslangic >= today) ? rt.baslangic : today;
-      const bas = ilkUygunGun(bas0, rt?.gunler || null);
-      const e = parseD(bas); e.setDate(e.getDate() + gun - 1); patch = { baslangic: bas, bitis: iso(e) };
+      // "Tarih + süreli" tasarımı (2026-09-17, Behnan kararı — "Tarih + süreli fikrimi de uygulayalım"):
+      // başlangıç artık Süre şeridindeki kendi 📅 alanından ayrıca, açıkça yönetiliyor (bkz. aşağıdaki JSX) —
+      // Süre/gün sayısı SADECE bitişi hesaplayıp yazıyor, başlangıcı bir daha KAYDIRMIYOR (eskiden ilkUygunGun
+      // ile örtük olarak kaydırıyordu, bu da kullanıcının kendi seçtiği tarihi onaylamadan değiştirebiliyordu).
+      // Günlerle uyumluluk artık sadece iki yerde ele alınıyor: Günler bizzat değiştiğinde (setRitGunler, orada
+      // da bir vurgu/flash ile görünür kılınıyor) ve kayıt anındaki son güvenlik ağında (pencereyiGunlereUydur).
+      const bas = rt?.baslangic || today;
+      const e = parseD(bas); e.setDate(e.getDate() + gun - 1); patch = { bitis: iso(e) };
     }
     if (!id || duzenleModu) { patchDetay(patch); return; } // taslak / düzenleme modu
     await supabase.from('dog_rituals').update(patch).eq('id', id);
@@ -2422,6 +2440,10 @@ export default function Rite() {
         const yeniBas = ilkUygunGun(rt.baslangic >= today ? rt.baslangic : today, arr);
         const e = parseD(yeniBas); e.setDate(e.getDate() + uzunlukGun - 1);
         patch = { gunler: arr, baslangic: yeniBas, bitis: iso(e) };
+        // "Tarih + süreli" tasarımı: başlangıç burada MANTIK tarafından (kullanıcının kendi seçtiği günlerle
+        // uyuşmadığı için) kendiliğinden kaydırılıyor — bunu görünür kılmak için Süre şeridindeki tarih kısa
+        // süreliğine renk değiştiriyor (bkz. basVurgu state'i ve aşağıdaki useEffect).
+        setBasVurgu(true);
       }
     }
     if (!id || duzenleModu) { patchDetay(patch); return; } // taslak / düzenleme modu
@@ -4113,16 +4135,11 @@ export default function Rite() {
                       (kisiselTur='aliskanlik') — bkz. aşağısı, "🗓️ Süre" satırı, setRitTekrarla hâlâ aynı iki
                       alanı (aliskanlik + kart_config.gorev + bitis) tutarlı şekilde ayarlamak için kullanılıyor,
                       sadece artık tek bir buton yerine Süre alanının kendisinden tetikleniyor. */}
-                  {/* Alışkanlık/Aktivite'nin tarihini Zamanlama panosunun içinden değiştirmek pratik değildi
-                      (kullanıcı isteği: "başka bir yerden tarih seçimiyle daha pratik yapılmalı") — başlıkta
-                      doğrudan erişilebilir bir native tarih seçici eklendi. Ayrı bir 📅 ikonu kalktı (kullanıcı
-                      isteği: "önemli olan tarih seçen sağdaki, ilk ikon kalkabilir") — asıl işlevi gören zaten
-                      input'un kendisi. Zamanlama içindeki "Hangi güne taşı" satırı da duruyor (aynı ritTasi'yi
-                      çağırıyor), bu sadece daha hızlı bir kısayol. Tekrarla açık/kapalı iki hâlde de aynı davranış
-                      (ritTasi bitis:null'ı olduğu gibi koruyarak sadece başlangıcı kaydırıyor). */}
-                  {(kisiselTur === 'aliskanlik' || kisiselTur === 'yapilacak') && (
-                    <input type="date" value={o.baslangic || ''} onChange={(e) => e.target.value && ritTasi(o.id, e.target.value)} title="Tarih" style={{ width: 90, border: 'none', background: 'none', padding: 0, fontSize: 10.5, fontWeight: 700, color: 'var(--muted)' }} />
-                  )}
+                  {/* Alışkanlık/Aktivite'nin tarihi eskiden burada (başlık şeridinde) küçük bir native tarih
+                      seçiciydi — "Tarih + süreli" tasarımı sonrası (2026-09-17, Behnan kararı: "biz süre 1 gün
+                      satırı yerine, başlıktaki tarihi koysak") AŞAĞIDAKİ Süre şeridine taşındı (aynı ritTasi
+                      çağrısı, sadece Süre/gün sayısının hemen yanında — ikisi artık aynı satırda birlikte
+                      düzenleniyor). Burada ayrıca göstermek çift/ikinci bir tarih seçici olurdu, kaldırıldı. */}
                   {/* Not'ta tarih seçimi/rozeti YOK (bu bir yanlış anlamaydı — Not zaten tarihsiz, "silininceye
                       kadar duran" bir yapışkan not; kullanıcı isteği "tarih seçimi öyle mi konuşmuştuk"
                       sonrası kaldırıldı). baslangic hâlâ dahili olarak var (Ayraç mantığıyla "hangi günden
@@ -4307,8 +4324,27 @@ export default function Rite() {
                     basılırsa altında haftanın günleri açılıyor (gunlerAcik) — "2 satırda" tasarım budur. */}
                 {kisiselTur !== 'not' && (
                   <div style={{ padding: '7px 8px', borderRadius: 8, background: '#fff', border: '1px solid var(--line)', margin: '0 0 8px' }}>
-                    <div className="kv" style={{ marginTop: 0 }}><div className="k">🗓️ Süre</div>
+                    <div className="kv" style={{ marginTop: 0 }}><div className="k">🗓️ Tarih</div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                        {/* "Tarih + süreli" tasarımı (2026-09-17, Behnan kararı): başlangıç artık eski başlık
+                            şeridindeki küçük tarih seçicisi yerine doğrudan burada, Süre'nin hemen yanında —
+                            ikisi birlikte "ne zaman, ne kadar" sorusunu tek satırda cevaplıyor. Bu tarih SADECE
+                            kullanıcı elle değiştirince (ritTasi) yazılıyor; Süre/gün sayısı artık başlangıcı hiç
+                            kaydırmıyor, sadece bitişi hesaplıyor (bkz. setRitSure'daki not). Mantık kendiliğinden
+                            (Günler'le uyumsuzluk yüzünden) kaydırdığında ise basVurgu ile kısa süreliğine renk
+                            değiştiriyor — böylece "sistem senin yerine tarihi değiştirdi" anı gözden kaçmıyor. */}
+                        <input
+                          type="date" value={o.baslangic || ''}
+                          onChange={(e) => e.target.value && ritTasi(o.id, e.target.value)}
+                          title="Başlangıç tarihi"
+                          style={{
+                            width: 'auto', padding: '6px 7px', borderRadius: 6, fontWeight: basVurgu ? 800 : 600,
+                            border: basVurgu ? '1px solid #d98c00' : '1px solid var(--line)',
+                            background: basVurgu ? '#fdecc8' : 'transparent',
+                            color: basVurgu ? '#8a5300' : 'var(--ink)',
+                            transition: 'background .5s ease, border-color .5s ease, color .5s ease',
+                          }}
+                        />
                         {sureAcik ? (
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                             <input
@@ -4334,7 +4370,7 @@ export default function Rite() {
                         ) : (
                           <span className="chip" onClick={() => setSureAcik(true)}>{sureInput || '1'} gün</span>
                         )}
-                        <span className="note" style={{ marginTop: 0 }}>Başlangıç {kisaTarih(o.baslangic)}{o.bitis ? ' · bitiş ' + kisaTarih(o.bitis) : ''}</span>
+                        {o.bitis && <span className="note" style={{ marginTop: 0 }}>bitiş {kisaTarih(o.bitis)}</span>}
                         {kisiselTur === 'aliskanlik' && (
                           <span className={'chip' + ((!o.gunler || o.gunler.length === 0) ? ' on' : '')} style={{ marginLeft: 'auto' }} onClick={() => { setRitGunler(o.id, []); setGunlerAcik((v) => !v); }}>Her gün</span>
                         )}
