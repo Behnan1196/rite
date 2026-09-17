@@ -581,9 +581,7 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi, sadeceAcik
                         </div>
                       )}
                     </>
-                  ) : !readOnly && (
-                    <div className="note" style={{ marginTop: 0 }}>Video eklemek için aşağıdaki 🎬 Video düğmesini kullan.</div>
-                  )}
+                  ) : null}
                   {/* Ekleme/düzenleme modali (formuAc/formuKapat/videoKaydet) — dışarıdan (🎬 Video düğmesi,
                       videoEkleTetik) VEYA aşağıdaki Ayarla modalinden açılır, ikisi de aynı vidFormMode'u
                       paylaşır. */}
