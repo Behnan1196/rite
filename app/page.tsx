@@ -3183,9 +3183,21 @@ export default function Rite() {
           <div>
             <div className="ajhead">
               <h2>Ajanda</h2>
-              <div className="vswitch">
-                <div className={'vseg' + (ajView === 'gun' ? ' on' : '')} onClick={() => setAjView('gun')}>Gün</div>
-                <div className={'vseg' + (ajView === 'ay' ? ' on' : '')} onClick={() => setAjView('ay')}>📅 Ay</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div className="vswitch">
+                  <div className={'vseg' + (ajView === 'gun' ? ' on' : '')} onClick={() => setAjView('gun')}>Gün</div>
+                  <div className={'vseg' + (ajView === 'ay' ? ' on' : '')} onClick={() => setAjView('ay')}>📅 Ay</div>
+                </div>
+                {/* Ajanda'nın kendi ekleme girişi (2026-09, Behnan kararı — bottom_nav'ın genel ＋'sı kaldırıldı,
+                    bkz. nav'daki not) — "en üst sağa bir + koyup, oradan ekleyelim şimdilik", genel bir ekran
+                    tasarımı düzeltme oturumunda yeri/görünümü değişebilir. Aynı ekleMenuOpen modalini açıyor,
+                    davranış hiç değişmedi — sadece giriş noktası taşındı. */}
+                <button
+                  type="button"
+                  title="Ekle"
+                  onClick={() => setEkleMenuOpen(true)}
+                  style={{ background: 'var(--green)', color: '#fff', border: 'none', borderRadius: '50%', width: 30, height: 30, fontSize: 17, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: '0 0 auto', padding: 0 }}
+                >＋</button>
               </div>
             </div>
             <div className="datenav">
@@ -3799,27 +3811,18 @@ export default function Rite() {
         {[['home', '🏠', ''], ['ajanda', '🗓', 'Ajanda'], ['havuz', '⊕', 'Havuz']].map(([k, ic, l]) => (
           <button key={k} className={['ajanda', 'mezunlar'].includes(screen) && k === 'ajanda' ? 'on' : screen === k ? 'on' : ''} onClick={() => setScreen(k)}><span className="ic">{ic}</span>{l}</button>
         ))}
-        {/* ＋ tuşu artık her sekmede görünüyor (kullanıcı isteği — Ayarlar'da grileşip devre dışı kalmak,
-            hiç kaybolmaktan daha tutarlı). Ajanda'da tam menü, Havuz'da daraltılmış menü (bkz. ekleMenüsü).
-            2026-09 (Behnan kararı, WhatsApp-esinli sadeleştirme, kademeli — bottom_nav ＋'sinin sayfa-içi
-            girişlerle kademeli olarak değiştirilmesi planının ilk adımı): Home artık kendi Ölçümler şeridinden
-            ekliyor (bkz. yukarısı), bu yüzden Home'da da Ayarlar'daki gibi grileşip devre dışı kalıyor — aynı
-            "hiç kaybolmaktan daha tutarlı" ilkesi. Ajanda'nın ve Havuz'un ＋'sı için henüz bir karar yok
-            (Behnan: "Ajanda ve Havuz'da da + için bir yer bulursak, + bottom nav'dan kaldırılabilir" — henüz o
-            yer bulunmadı), o yüzden ikisi de aynen kalıyor. Gelişim sekmesi (ve onun ayrı Ölçüm-ekle dalı)
-            2026-09'da (aynı gün, Behnan kararı) tamamen kaldırıldı — Kapsama "Analiz", Ruh hali "Ölçümler"
-            bağlamsal ekranına taşındı, Koç notu Home'a taşındı; bu üçü de artık bottom_nav'da değil, Home'dan
-            erişiliyor, hiçbirinde eklenecek bir şey yok — Sohbet de aynı şekilde salt bir yer tutucu/Inbox
-            görünümü, eklenecek bir şey yok. Behnan'ın fark ettiği bug: Sohbet ekranı bu "dim" listesine hiç
-            alınmamıştı (Analiz/Ölçümler de aynı şekilde unutulmuştu) — ilk oluşturulduklarında dim listesine
-            eklenmesi atlanmış. Üçü de düzeltildi. Mezunlar (Ajanda'nın alt-ekranı, bu session'da dokunulmadı)
-            BİLEREK bu listeye eklenmedi — o zaten var olan, önceden beri böyle olan bir davranış. */}
-        <button
-          className={'plus' + (['bilgi', 'home', 'iletisim', 'analiz', 'olcumler'].includes(screen) ? ' dim' : '')}
-          disabled={['bilgi', 'home', 'iletisim', 'analiz', 'olcumler'].includes(screen)}
-          onClick={() => { if (!['bilgi', 'home', 'iletisim', 'analiz', 'olcumler'].includes(screen)) setEkleMenuOpen(true); }}
-          aria-label="Ekle"
-        >＋</button>
+        {/* bottom_nav'ın genel ＋ tuşu 2026-09'da (aynı gün, Behnan kararı — WhatsApp-esinli sadeleştirmenin
+            son adımı) TAMAMEN KALDIRILDI. Kademeli planın son durağıydı: Home kendi Ölçümler şeridinden
+            ekliyordu; Ajanda artık kendi başlık şeridindeki ＋'dan ekliyor (bkz. ajhead, aşağısı — Behnan:
+            "en üst sağa bir + koyup, oradan ekleyelim şimdilik"); Havuz'un eski Not/Alışkanlık girişi ise
+            KALDIRILDI (Behnan: "eski bir tarz, bizim aktivite kartımızı bilmiyor... bence kaldıralım ve
+            havuza bir şey eklemek için başka bir yöntem geliştiririz" — Havuz'a eklemenin yeni yöntemi henüz
+            YOK, bilinçli bir boşluk, ekleMenuOpen'daki screen==='havuz' dalları da bu yüzden temizlendi, bkz.
+            aşağısı); Gelişim/Analiz/Ölçümler/Sohbet/Ayarlar zaten hiç eklemiyordu. Global ＋ artık hiçbir
+            ekranda bir işlev görmediği için (her ekran kendi yerini buldu ya da bilinçli olarak boş bırakıldı)
+            eleman TAMAMEN kaldırıldı — sürekli gri/devre dışı bir buton bırakmak yerine (Behnan'ın önceki
+            turdaki sorusuna cevap: "+ bottom nav'dan kaldırılabilir"). ekleMenuOpen state'i ve modalı hâlâ var
+            (bkz. aşağısı), artık SADECE Ajanda'nın yeni yerel ＋'sından açılıyor. */}
         <button className={screen === 'bilgi' ? 'on' : ''} onClick={() => setScreen('bilgi')}><span className="ic">⚙</span>Ayarlar</button>
         {/* İletişim/Sohbet (2026-09, Behnan kararı — WhatsApp-esinli 3. madde): koçluk sohbet/görüntülü görüşme
             sekmesi için şimdilik yer tutucu — chat/video altyapısı (stream.io vb.) ayrı, daha büyük bir iş,
@@ -4817,29 +4820,27 @@ export default function Rite() {
           <div className="sheet" onMouseDown={(e) => e.stopPropagation()}>
             <div className="sheetgrip" onClick={() => setEkleMenuOpen(false)} />
             <h2>Ekle</h2>
-            {/* Havuz'da: Randevu tek bir tarihe bağlı, Havuz'a (tarihsiz şablon havuzu) uymuyor — Ayraç ve Rutin
-                da yalnız Ajanda kavramları — o yüzden Havuz'da sadece Not/Alışkanlık gösteriliyor, direkt
-                Havuz'a (mevcut açık gruba) taslak olarak eklenir (kullanıcı isteği). */}
+            {/* 2026-09 (Behnan kararı): bu menü artık SADECE Ajanda'nın kendi yerel ＋'sından açılıyor (bkz.
+                ajhead) — Havuz'un eski, ayrı Not/Alışkanlık girişi kaldırıldı (bkz. aşağısı), o yüzden burası
+                artık hep Ajanda bağlamında, dallanmaya gerek yok. */}
             <div className="ekleGrid">
               {/* Not: emoji yerine kartın kendi rengine (sarı yapışkan not) uyan küçük bir kare — kullanıcı
                   isteği "sarı sticker olursa güzel olur". Emoji fontlarında gerçek bir "sarı sticky note" glifi
                   olmadığı için (📝 sadece "not" anlamına geliyor, renk taşımıyor) rengi doğrudan CSS'le veriyoruz. */}
-              <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); (screen === 'havuz' ? yeniHavuzTaslakAc : yeniTaslakAc)('not'); }}><span className="ekic" style={{ display: 'inline-block', width: 22, height: 22, borderRadius: 4, background: '#f5d76e', border: '1px solid #d9b84a', boxShadow: '1px 1px 2px rgba(0,0,0,.15)' }} />Not</button>
+              <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); yeniTaslakAc('not'); }}><span className="ekic" style={{ display: 'inline-block', width: 22, height: 22, borderRadius: 4, background: '#f5d76e', border: '1px solid #d9b84a', boxShadow: '1px 1px 2px rgba(0,0,0,.15)' }} />Not</button>
               {/* Sıralama Not-Aktivite-Randevu (kullanıcı isteği, 2026-09-16: eski ayrı Yapılacak/Alışkanlık ＋
                   girişleri "Aktivite" adı altında birleşti — varsayılan "Bugün"/tek seferlik, kartın içindeki
-                  "🔁 Tekrarla" anahtarı sonradan Süre/Günler'i açar, bkz. setRitTekrarla). Aktivite — Randevu
-                  gibi baslangic/bitis'e dayanıyor, Havuz'un (dog_activities) bu kolonları yok, o yüzden sadece
-                  Ajanda'da; Havuz'un kendi "Alışkanlık" girişi (yeniHavuzTaslakAc) ayrı bir kavram (şablonun
-                  Günler'i olup olmayacağı) olduğu için dokunulmadı. */}
-              {screen !== 'havuz' && <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); yeniTaslakAc('yapilacak'); }}><span className="ekic">☑️</span>Aktivite</button>}
-              {screen === 'havuz' && <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); yeniHavuzTaslakAc('aliskanlik'); }}><span className="ekic">🎓</span>Alışkanlık</button>}
-              {screen !== 'havuz' && <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); yeniTaslakAc('randevu'); }}><span className="ekic">📅</span>Randevu</button>}
-              {screen !== 'havuz' && <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); setAyracAdVal(''); setAyracYeniOpen(true); }}><span className="ekic">➖</span>Ayraç</button>}
-              {screen !== 'havuz' && <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); setScreen('ajanda'); setAjView('gun'); startLink(); }}><span className="ekic">🔗</span>Rutin</button>}
+                  "🔁 Tekrarla" anahtarı sonradan Süre/Günler'i açar, bkz. setRitTekrarla).
+                  2026-09 (aynı gün, Behnan kararı): bu menü artık SADECE Ajanda'dan açılıyor (bkz. yukarısı,
+                  ajhead'deki yerel ＋) — Havuz'un eski "Alışkanlık" girişi (yeniHavuzTaslakAc ile, screen==='havuz'
+                  dalı) ve `screen !== 'havuz'` koruma koşulları buradan KALDIRILDI, çünkü artık hep doğruydular.
+                  yeniHavuzTaslakAc fonksiyonu SİLİNMEDİ — Havuz'a eklemenin "başka bir yöntemi" (Behnan) ileride
+                  onu yeniden kullanabilir, sadece bu menüden erişimi kaldırıldı. */}
+              <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); yeniTaslakAc('yapilacak'); }}><span className="ekic">☑️</span>Aktivite</button>
+              <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); yeniTaslakAc('randevu'); }}><span className="ekic">📅</span>Randevu</button>
+              <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); setAyracAdVal(''); setAyracYeniOpen(true); }}><span className="ekic">➖</span>Ayraç</button>
+              <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); setScreen('ajanda'); setAjView('gun'); startLink(); }}><span className="ekic">🔗</span>Rutin</button>
             </div>
-            {/* Ajanda tarafındaki "Not içine bağlantı eklersen otomatik video kartına döner." ibaresi kaldırıldı
-                (kullanıcı isteği: "gereksiz kaldı") — Havuz'daki bilgi notu aynen duruyor. */}
-            {screen === 'havuz' && <div className="note" style={{ textAlign: 'center', marginTop: 12 }}>"{actGroup}{actAltGroup ? ' › ' + actAltGroup : ''}" grubuna eklenecek — Havuza eklenen kart, Ajanda&apos;ya eklendiğinde gerçek bir tarih alır.</div>}
           </div>
         </div>
       )}
