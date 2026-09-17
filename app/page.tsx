@@ -3094,28 +3094,42 @@ export default function Rite() {
             mekanizma, alan içeriğiyle karıştırılmasın. */}
         {screen === 'home' && (
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}>
-              <div className="note" style={{ margin: 0 }}>Kendini bu alanlarda nasıl görüyorsun? (değerlendirmek için bir karta dokun)</div>
-              <span className="minlink" onClick={() => setHomeYonetOpen(true)}>⚙️ Alanları yönet</span>
-            </div>
+            {/* Sayfaya genel bir isim (2026-09-17, Behnan kararı: "dashboard benzeri olabilir") — Ajanda/Havuz
+                gibi diğer ekranlarla aynı üst başlık standardı. Eski "Kendini bu alanlarda nasıl görüyorsun?"
+                ipucu kaldırıldı (Behnan: "ibaresine gerek yok") — kartların kendisi zaten yeterince açık. */}
+            <h2 style={{ marginTop: 0, marginBottom: 12 }}>Panel</h2>
             {/* Koç notu (2026-09, Behnan kararı — Gelişim sekmesinin kaldırılması): eskiden Gelişim'in en
                 altında, artık Home'da doğrudan görünen bir kart — koç bir şey yazdıysa aranmadan görülsün diye
                 (Ruh hali/Kapsama'nın aksine bu bir "analiz" değil, doğrudan iletişim). Kod/koşul (cNot varsa
                 göster) aynen taşındı, sadece yeri değişti. */}
             {cNot && <div className="card" style={{ marginBottom: 12 }}><h3>Koç notu</h3><p style={{ fontSize: 12, color: '#4a565c', lineHeight: 1.55 }}>{cNot}</p></div>}
+            {/* Alanlar artık kendi başlıklı "penceresi" içinde (2026-09-17, Behnan kararı: "Alanları da bir
+                pencereye alalım") — Ölçümler/Havuz grup başlıklarıyla aynı şerit standardı, sağ uçta metinsiz
+                sadece ayar ikonu (eski "⚙️ Alanları yönet" metni kaldırıldı, ikon aynı işlevi görüyor). */}
+            <div
+              style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#efe8da', borderRadius: 10, padding: '10px 10px 10px 12px' }}
+            >
+              <span style={{ flex: 1, fontWeight: 700 }}>Odak Alanları</span>
+              <button
+                type="button"
+                title="Alanları yönet"
+                onClick={() => setHomeYonetOpen(true)}
+                style={{ background: 'none', border: 'none', padding: '0 2px', fontSize: 16, fontWeight: 700, color: '#8a8169', cursor: 'pointer', lineHeight: 1 }}
+              >⚙️</button>
+            </div>
             {/* 2026-09 (Behnan kararı — "Alanlar" mimarisi): artık her danışana otomatik tüm alanlar
                 tohumlanmıyor, Rite Studio'dan atanana kadar Home boş görünebilir — bu iki durumu ayrı ayrı
                 açıklıyoruz (hiç atanmamış vs hepsi gizlenmiş). */}
             {homeAlanlar.length === 0 ? (
-              <div className="note">Henüz sana atanmış bir alan yok — Meridyen tarafından atandığında burada görünecek.</div>
+              <div className="note" style={{ marginTop: 8 }}>Henüz sana atanmış bir alan yok — Meridyen tarafından atandığında burada görünecek.</div>
             ) : homeAlanlarGorunur.length === 0 ? (
-              <div className="note">Tüm alanları gizledin — "⚙️ Alanları yönet"den geri gösterebilirsin.</div>
+              <div className="note" style={{ marginTop: 8 }}>Tüm alanları gizledin — sağ üstteki ⚙️'den geri gösterebilirsin.</div>
             ) : (
             /* 2 sütunlu ızgara (kullanıcı isteği: "her satırda 2 kart olsun"). Gösterge artık 4 ayrı dilim değil,
                 dolan TEK bir pil (kullanıcı isteği) — dolu kısmın tamamı seviyeye göre tek bir renk: %25 koyu
                 kırmızı, %50 turuncu, %75 zeytin yeşili, %100 açık yeşil (bkz. HOME_SEVIYE_RENK, örnek renkler
                 kullanıcıdan). */
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 10 }}>
               {homeAlanlarGorunur.map((a) => {
                 const guncel = homeGuncelDeger(a.anahtar);
                 return (
