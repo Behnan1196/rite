@@ -2446,14 +2446,15 @@ export default function Rite() {
   // kontrolü yapıp gerekirse pencereyi kaydırır — aynı hesap pencereyiGunlereUydur ile paylaşılıyor. Basılmazsa
   // bile kayıt anındaki güvenlik ağı zaten aynı düzeltmeyi yapacak; bu sadece erken/görünür geri bildirim.
   function gunlerTamamla(id: string) {
+    // "✓ Tamam" sadece uyumluluk kontrolünü tetikliyor — Behnan'ın isteğiyle Günler paneli KAPANMIYOR artık,
+    // seçimi görmeye/değiştirmeye devam edebiliyor (eskiden setGunlerAcik(false) da çağrılıyordu, kaldırıldı).
     const rt = (!id || duzenleModu) ? detay?.obj : rituals.find((r) => r.id === id);
-    if (!rt || !rt.baslangic) { setGunlerAcik(false); return; }
+    if (!rt || !rt.baslangic) return;
     const { baslangic: basSon, bitis: bitSon } = pencereyiGunlereUydur(rt.baslangic, rt.bitis ?? null, rt.gunler || null);
     if (basSon !== rt.baslangic || bitSon !== rt.bitis) {
       patchDetay({ baslangic: basSon, bitis: bitSon });
       setBasVurgu(true);
     }
-    setGunlerAcik(false);
   }
   async function setRitAliskanlik(id: string, val: boolean) {
     if (!client) return;
@@ -4342,7 +4343,7 @@ export default function Rite() {
                           onChange={(e) => e.target.value && ritTasi(o.id, e.target.value)}
                           title="Başlangıç tarihi"
                           style={{
-                            width: 'auto', padding: '6px 7px', borderRadius: 6, fontWeight: basVurgu ? 800 : 600,
+                            width: 'auto', padding: '6px 7px', borderRadius: 6, fontWeight: 400,
                             border: basVurgu ? '1px solid #d98c00' : '1px solid var(--line)',
                             background: basVurgu ? '#fdecc8' : 'transparent',
                             color: basVurgu ? '#8a5300' : 'var(--ink)',
