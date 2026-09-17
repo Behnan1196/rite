@@ -3804,15 +3804,20 @@ export default function Rite() {
             2026-09 (Behnan kararı, WhatsApp-esinli sadeleştirme, kademeli — bottom_nav ＋'sinin sayfa-içi
             girişlerle kademeli olarak değiştirilmesi planının ilk adımı): Home artık kendi Ölçümler şeridinden
             ekliyor (bkz. yukarısı), bu yüzden Home'da da Ayarlar'daki gibi grileşip devre dışı kalıyor — aynı
-            "hiç kaybolmaktan daha tutarlı" ilkesi. Ajanda'nın ＋'sı için henüz bir karar yok, o yüzden Ajanda
-            aynen kalıyor. Gelişim sekmesi (ve onun ayrı Ölçüm-ekle dalı) 2026-09'da (aynı gün, Behnan kararı)
-            tamamen kaldırıldı — Kapsama "Analiz", Ruh hali "Ölçümler" bağlamsal ekranına taşındı (bkz. o
-            ekranlar), Koç notu Home'a taşındı; bu ekranların hiçbiri artık bottom_nav'da değil, Home'dan
-            erişiliyor. */}
+            "hiç kaybolmaktan daha tutarlı" ilkesi. Ajanda'nın ve Havuz'un ＋'sı için henüz bir karar yok
+            (Behnan: "Ajanda ve Havuz'da da + için bir yer bulursak, + bottom nav'dan kaldırılabilir" — henüz o
+            yer bulunmadı), o yüzden ikisi de aynen kalıyor. Gelişim sekmesi (ve onun ayrı Ölçüm-ekle dalı)
+            2026-09'da (aynı gün, Behnan kararı) tamamen kaldırıldı — Kapsama "Analiz", Ruh hali "Ölçümler"
+            bağlamsal ekranına taşındı, Koç notu Home'a taşındı; bu üçü de artık bottom_nav'da değil, Home'dan
+            erişiliyor, hiçbirinde eklenecek bir şey yok — Sohbet de aynı şekilde salt bir yer tutucu/Inbox
+            görünümü, eklenecek bir şey yok. Behnan'ın fark ettiği bug: Sohbet ekranı bu "dim" listesine hiç
+            alınmamıştı (Analiz/Ölçümler de aynı şekilde unutulmuştu) — ilk oluşturulduklarında dim listesine
+            eklenmesi atlanmış. Üçü de düzeltildi. Mezunlar (Ajanda'nın alt-ekranı, bu session'da dokunulmadı)
+            BİLEREK bu listeye eklenmedi — o zaten var olan, önceden beri böyle olan bir davranış. */}
         <button
-          className={'plus' + (screen === 'bilgi' || screen === 'home' ? ' dim' : '')}
-          disabled={screen === 'bilgi' || screen === 'home'}
-          onClick={() => { if (screen !== 'bilgi' && screen !== 'home') setEkleMenuOpen(true); }}
+          className={'plus' + (['bilgi', 'home', 'iletisim', 'analiz', 'olcumler'].includes(screen) ? ' dim' : '')}
+          disabled={['bilgi', 'home', 'iletisim', 'analiz', 'olcumler'].includes(screen)}
+          onClick={() => { if (!['bilgi', 'home', 'iletisim', 'analiz', 'olcumler'].includes(screen)) setEkleMenuOpen(true); }}
           aria-label="Ekle"
         >＋</button>
         <button className={screen === 'bilgi' ? 'on' : ''} onClick={() => setScreen('bilgi')}><span className="ic">⚙</span>Ayarlar</button>
