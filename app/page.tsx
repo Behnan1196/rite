@@ -1387,10 +1387,9 @@ export default function Rite() {
   const [grupEditVal, setGrupEditVal] = useState('');
   const [grupEditAltVal, setGrupEditAltVal] = useState('');
   const [paylasOpen, setPaylasOpen] = useState(false);
-  // mezunModal: artık sadece bir onay adımı (puan almıyor — bkz. mezunEt). puanModal/puanDeger: YENİ, ayrı
-  // "Puanla" eylemi için (bkz. ritPuanla) — puanModal o an puanlanan rt'yi tutuyor, puanDeger seçilen yıldızın
-  // yerel arabelleği (mezunModal'ın eski mezunPuan'ıyla aynı desen).
-  const [mezunModal, setMezunModal] = useState<any>(null);
+  // "Mezun et" kavramı 2026-09-17'de (Behnan kararı) TAMAMEN kaldırıldı — mezunModal/mezunEt/Mezunlar ekranı
+  // silindi (bkz. o değişikliklerin yanındaki notlar). puanModal/puanDeger: "Puanla" eylemi için (bkz.
+  // ritPuanla) — puanModal o an puanlanan rt'yi tutuyor, puanDeger seçilen yıldızın yerel arabelleği.
   const [puanModal, setPuanModal] = useState<any>(null);
   const [puanDeger, setPuanDeger] = useState(0);
   const [remInput, setRemInput] = useState('');
@@ -2606,19 +2605,6 @@ export default function Rite() {
     await Promise.all(ids.map((id, i) => supabase.from('dog_rituals').update({ rutin: null, rutin_ad: null, blok_sira: Date.now() + i }).eq('id', id)));
     loadData(client.id);
   }
-  // Mezun et (2026-09-16, Behnan kararı — puanlama ve Havuz'dan AYRIŞTIRILDI): artık SADECE ritüeli ajandadan
-  // kaldırıp Mezunlar arşivine taşıyor — ne puan alıyor ne de bir dog_activities kaydı zorunlu kılıyor. Önceki
-  // sürümde bu üçü tek bir eylemdi; Behnan'ın gözlemi doğruydu — süreli (bitis'i olan) bir alışkanlık zaten
-  // activeOn()'daki `if (r.bitis) return d <= r.bitis` sayesinde süresi dolunca Ajanda'dan kendiliğinden
-  // düşüyordu, mezun etmeye puanlamak için ihtiyaç yoktu. Puanlama artık ayrı bir eylem (bkz. ritPuanla),
-  // Havuz'a kaydetmek de zaten ayrı bir eylemdi (ritHavuzaAl) — üçü artık bağımsız, istediğini istediğin an
-  // yapabiliyorsun. (Eskiden kullanılmayan `emekli` fonksiyonu bununla birleştirildi, aynı işi yapıyordu.)
-  async function mezunEt(id: string) {
-    if (!client) return;
-    await supabase.from('dog_rituals').update({ mezun: true, aktif: false, bitis: today }).eq('id', id);
-    setMezunModal(null); closeDetay();
-    loadData(client.id);
-  }
   // Puanla (YENİ, 2026-09-16): bir alışkanlığa ne zaman istersen (bitirirken, süre dolunca, ya da devam ederken)
   // 1-5 yıldız verebilmen için — mezun etmekten VE Havuz'a kaydetmekten tamamen bağımsız, doğrudan ritüelin
   // kendi `puan` kolonuna yazılıyor (dog_rituals.puan — bu migration'la eklendi). Havuz'a daha sonra kaydedersen
@@ -2699,12 +2685,6 @@ export default function Rite() {
     await supabase.from('dog_rituals').delete().eq('client_id', client.id).eq('program', pid);
     loadData(client.id);
   }
-  async function yenidenBasla(id: string) {
-    if (!client) return;
-    await supabase.from('dog_rituals').update({ mezun: false, aktif: true, baslangic: today, bitis: null }).eq('id', id);
-    loadData(client.id);
-  }
-
   async function inboxSil(id: string) {
     await supabase.from('dog_inbox').delete().eq('id', id);
     if (client) loadInbox(client.id);
@@ -2882,7 +2862,6 @@ export default function Rite() {
   // Notlar: güne bağlı değil, mezun olmamış tüm kişisel Not'lar — Ajanda'nın altında, hangi gün seçili olursa
   // olsun hep aynı şekilde görünen ayrı bir şerit (kullanıcı isteği).
   const notlar = rituals.filter((r) => !r.mezun && isNotKart(r));
-  const mezunlar = rituals.filter((r) => r.mezun);
   // Çalışan programlar: program kimliğine göre grupla (ilerleme + süre kontrolü için).
   const programGruplari = Object.values(rituals.filter((r) => r.program && !r.mezun).reduce((acc: any, r: any) => {
     const g = acc[r.program] || (acc[r.program] = { pid: r.program, ad: r.program_ad || 'Program', bas: r.baslangic || today, bit: r.bitis || null, n: 0 });
@@ -3052,9 +3031,12 @@ export default function Rite() {
             </div>
           );
         })()}
-        {!rt.mezun && !rt.bitis && rt.aliskanlik && total >= 21 && (
-          <div className="retirebox">🎉 <div>&quot;{rt.ad}&quot; {total} kez yapıldı — artık otomatik. <b>Mezun edip</b> listeni sadeleştirelim mi?</div><button className="rb" onClick={() => setMezunModal(rt)}>Mezun et</button></div>
-        )}
+        {/* "🎉 ... Mezun et" kutucuğu (retirebox) 2026-09-17'de (Behnan kararı) KALDIRILDI — "mezun" kavramı
+            artık anlamsız bulunuyor. Tekrarlanan bir Aktivite'yi bitirmek artık doğrudan kartın kendi Süre
+            panelinden bitiş tarihini ayarlamakla oluyor (var olan mekanizma, activeOn()'daki `if (r.bitis)
+            return d <= r.bitis` sayesinde süresi dolunca Ajanda'dan kendiliğinden düşüyor) — Puanla ve Havuza
+            kaydet (ritPuanla/ritHavuzaAl) zaten bağımsız eylemler olarak kalıyor. Süre panelinde ayrıca bir
+            "bitir" kısayolu eklemek Behnan'ın ayrı, ileride düşündüğü bir sadeleştirme çalışmasına bırakıldı. */}
       </div>
     );
   }
@@ -3672,20 +3654,8 @@ export default function Rite() {
           </div>
         )}
 
-        {/* ---------- MEZUNLAR ---------- */}
-        {screen === 'mezunlar' && (
-          <div>
-            <button className="linkbtn" onClick={() => setScreen('ajanda')}>‹ Ajanda</button>
-            <h2 style={{ marginTop: 6 }}>🎓 Mezunlar</h2>
-            <p className="sub">Otomatikleşip emekli ettiğin ritüeller. İstediğinde yeniden başlat.</p>
-            {mezunlar.length === 0 ? <div className="empty">Henüz mezun ritüel yok.</div> : mezunlar.map((rt) => (
-              <div key={rt.id} className="card" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ flex: 1 }}><div style={{ fontSize: 13, fontWeight: 700 }}>{rt.ad}</div><div className="m">Mezun · {ritTotal(rt.id)} kez</div></div>
-                <button className="btn ghost sm" onClick={() => yenidenBasla(rt.id)}>Yeniden başlat</button>
-              </div>
-            ))}
-          </div>
-        )}
+        {/* Mezunlar arşiv ekranı 2026-09-17'de (Behnan kararı, "mezun et tamamen kalksın") TAMAMEN kaldırıldı —
+            zaten UI'da ona giden aktif bir link kalmamıştı (bkz. bir önceki turun notu). */}
 
         {/* ---------- İLETİŞİM / SOHBET (2026-09 Behnan kararı) ---------- */}
         {/* Koçluk chat + görüntülü görüşme için ayrılmış sekme — henüz sadece yer tutucu, hiçbir backend/chat
@@ -3809,7 +3779,7 @@ export default function Rite() {
             görünürde hiç yazmıyor). Diğer sekmelerin aksine tek kelimelik bir etiketi olmadığı için dizi
             girdisindeki üçüncü eleman (etiket) boş string. */}
         {[['home', '🏠', ''], ['ajanda', '🗓', 'Ajanda'], ['havuz', '⊕', 'Havuz']].map(([k, ic, l]) => (
-          <button key={k} className={['ajanda', 'mezunlar'].includes(screen) && k === 'ajanda' ? 'on' : screen === k ? 'on' : ''} onClick={() => setScreen(k)}><span className="ic">{ic}</span>{l}</button>
+          <button key={k} className={screen === k ? 'on' : ''} onClick={() => setScreen(k)}><span className="ic">{ic}</span>{l}</button>
         ))}
         {/* bottom_nav'ın genel ＋ tuşu 2026-09'da (aynı gün, Behnan kararı — WhatsApp-esinli sadeleştirmenin
             son adımı) TAMAMEN KALDIRILDI. Kademeli planın son durağıydı: Home kendi Ölçümler şeridinden
@@ -4636,13 +4606,13 @@ export default function Rite() {
             <h3 style={{ marginBottom: 2 }}>🎓 {habitMenuFor.ad}</h3>
             <p className="note" style={{ marginTop: 0 }}>Bu bir alışkanlık — ne yapmak istersin?</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
-              {/* Puanla (YENİ, 2026-09-16): mezun etmekten bağımsız, istediğin an — bkz. ritPuanla. */}
+              {/* Puanla — bkz. ritPuanla. "🎓 Mezun et" 2026-09-17'de (Behnan kararı) buradan da kaldırıldı;
+                  tekrarlanan bir Aktivite'yi bitirmek artık Süre panelindeki bitiş tarihini ayarlamakla oluyor. */}
               <button className="btn ghost sm" onClick={() => { setPuanDeger(habitMenuFor.puan || 0); setPuanModal(habitMenuFor); setHabitMenuFor(null); }}>⭐ Puanla{habitMenuFor.puan ? ' (' + habitMenuFor.puan + '★)' : ''}</button>
               <button className="btn ghost sm" onClick={() => { setRitAliskanlik(habitMenuFor.id, false); setHabitMenuFor(null); }}>↩️ Alışkanlıktan çıkar</button>
-              <button className="btn" onClick={() => { setMezunModal(habitMenuFor); setHabitMenuFor(null); }}>🎓 Mezun et</button>
               <button className="btn ghost sm" onClick={() => setHabitMenuFor(null)}>Vazgeç</button>
             </div>
-            <div className="note" style={{ marginTop: 8 }}>Puanlamak bağımsız bir not, ajandadan hiçbir şeyi etkilemez. Alışkanlıktan çıkarmak zararsız — istersen tekrar işaretlersin. Mezun et ise ritüeli ajandadan tamamen kaldırır (süreli/bitişli alışkanlıklar zaten süresi dolunca kendiliğinden düşer, mezun etmene çoğu zaman gerek kalmaz).</div>
+            <div className="note" style={{ marginTop: 8 }}>Puanlamak bağımsız bir not, ajandadan hiçbir şeyi etkilemez. Alışkanlıktan çıkarmak zararsız — istersen tekrar işaretlersin.</div>
           </div>
         </div>
       )}
@@ -4666,22 +4636,6 @@ export default function Rite() {
               >Kaydet</button>
               {remMenuFor.hatirlatma_saat && <button className="btn ghost sm" onClick={() => { setRitReminder(remMenuFor.id, ''); setRemMenuFor(null); }}>Bildirimi kapat</button>}
               <button className="btn ghost sm" onClick={() => setRemMenuFor(null)}>Vazgeç</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Mezun et modali (2026-09-16, Behnan kararı ile sadeleşti): artık salt bir onay adımı — puan
-          almıyor, Havuz kaydı zorunlu kılmıyor (bkz. mezunEt/ritPuanla). */}
-      {mezunModal && (
-        <div className="modal top2" onMouseDown={() => setMezunModal(null)}>
-          <div className="sheet small" onMouseDown={(e) => e.stopPropagation()}>
-            <button className="x" onClick={() => setMezunModal(null)}>×</button>
-            <h3 style={{ marginBottom: 2 }}>🎓 Mezun et</h3>
-            <p className="note" style={{ marginTop: 0 }}><b>{mezunModal.ad}</b> — ajandadan kaldırılıp Mezunlar arşivine taşınacak. İstediğinde oradan yeniden başlatabilirsin.</p>
-            <div className="rowbtns" style={{ marginTop: 8 }}>
-              <button className="btn" onClick={() => mezunEt(mezunModal.id)}>Mezun et</button>
-              <button className="btn ghost sm" onClick={() => setMezunModal(null)}>Vazgeç</button>
             </div>
           </div>
         </div>
