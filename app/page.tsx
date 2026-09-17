@@ -4276,12 +4276,19 @@ export default function Rite() {
                               onChange={(e) => setSureInput(e.target.value)}
                               onBlur={() => {
                                 const n = Math.max(1, parseInt(sureInput) || 1);
-                                setSureInput(String(n));
+                                // setRitTekrarla kendi içinde sureInput'u ('21'/'1') SENKRONLUYOR (bkz. o
+                                // fonksiyondaki not — eskiden ayrı 🔁 butonuna basılınca görüntüyü güncel
+                                // tutmak içindi). Burada onu bir yardımcı olarak çağırdığımız için, girilen
+                                // gerçek sayı (n) yerine o senkron '21' kalabiliyordu (Behnan'ın bulduğu bug:
+                                // "4 dedim, 21 gösterdi") — setSureInput(n) bu yüzden setRitTekrarla/setRitSure
+                                // çağrılarından SONRA, en son adım olarak yapılıyor ki her zaman son söz gerçek
+                                // girilen sayıda kalsın.
                                 if (n <= 1) { if (kisiselTur === 'aliskanlik') setRitTekrarla(o.id, false); }
                                 else { if (kisiselTur === 'yapilacak') setRitTekrarla(o.id, true); setRitSure(o.id, n); }
+                                setSureInput(String(n));
                                 setSureAcik(false);
                               }}
-                              style={{ width: 46, padding: '7px 8px' }}
+                              style={{ width: 58, padding: '7px 8px' }}
                             /> gün
                           </span>
                         ) : (
