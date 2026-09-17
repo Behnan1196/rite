@@ -195,7 +195,7 @@ async function resimKucult(file: File, maxDim = 1600, quality = 0.82): Promise<B
   const blob: Blob | null = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
   return blob || file;
 }
-function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi, sadeceAciklama, tekVideo, cokluVideo, videoEkleTetik, onVideoEkleTetikKapat, videoYok, ekAyri }: { cfg: any; onSave: (cfg: any) => void; randevu?: boolean; readOnly?: boolean; notTasarimi?: boolean; sadeceAciklama?: boolean; tekVideo?: boolean; cokluVideo?: boolean; videoEkleTetik?: boolean; onVideoEkleTetikKapat?: () => void; videoYok?: boolean; ekAyri?: boolean }) {
+function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi, sadeceAciklama, tekVideo, cokluVideo, videoEkleTetik, onVideoEkleTetikKapat, videoYok, ekAyri, icerikBaslikTuret, onIcerikBaslikTuret }: { cfg: any; onSave: (cfg: any) => void; randevu?: boolean; readOnly?: boolean; notTasarimi?: boolean; sadeceAciklama?: boolean; tekVideo?: boolean; cokluVideo?: boolean; videoEkleTetik?: boolean; onVideoEkleTetikKapat?: () => void; videoYok?: boolean; ekAyri?: boolean; icerikBaslikTuret?: boolean; onIcerikBaslikTuret?: (ilkSatir: string) => void }) {
   const videolar: { baslik?: string; url: string; bas?: number; bit?: number; ozelNot?: string }[] = cfg?.videolar || [];
   const [vidSec, setVidSec] = useState(0);
   // cokluVideo (Alışkanlık, 2026-09-16 — "çoklu video" tasarımı): video ekleme artık sayfa seviyesindeki
@@ -295,6 +295,13 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi, sadeceAcik
   function icerikKaydet() {
     setIcerikEdit(false);
     if (icerikVal.trim() !== (cfg?.icerik || '')) onSave({ ...cfg, icerik: icerikVal.trim() || null });
+    // icerikBaslikTuret (Not, 2026-09-17 — "başlık ve açıklamanın teke düşmesi", Apple Notes esintili): Not'ta
+    // artık ayrı bir Ad alanı yok, kart adı içeriğin ilk (boş olmayan) satırından türetiliyor. Boş satır/tamamen
+    // boş içerikte önceki başlık (ör. "Yeni not") olduğu gibi kalıyor — hiçbir zaman boş bir başlığa düşmüyor.
+    if (icerikBaslikTuret) {
+      const ilkSatir = icerikVal.split('\n').map((s) => s.trim()).find((s) => s) || '';
+      if (ilkSatir) onIcerikBaslikTuret?.(ilkSatir.length > 80 ? ilkSatir.slice(0, 80).trim() + '…' : ilkSatir);
+    }
   }
   // Dosyadan resim yükle (Hostinger'a, bkz. app/api/upload) — resim kutucuklarından birine tıklanınca
   // (boşsa yeni ekler, doluysa üzerindeki ✎ değiştirir) açılır; ayrı, görünür bir link kutusu yok.
@@ -4007,7 +4014,11 @@ export default function Rite() {
               // yerel taslağı (patchDetay) güncelliyor, taslakKaydet basılınca gerçek satıra yazılıyor.
               <input className="detbaslik" value={adInput} autoFocus onFocus={(e) => e.target.select()} onChange={(e) => setAdInput(e.target.value)} onBlur={() => { if (adInput.trim() && adInput.trim() !== (o.ad || '')) patchDetay({ ad: adInput.trim() }); }} style={{ width: '100%' }} />
             ) : <h2 style={{ paddingRight: 34 }}>{o.ad}</h2>}
-            {isKisisel && (
+            {/* Not'ta artık ayrı bir Ad alanı yok (kullanıcı isteği, 2026-09-17: "başlık ve açıklamanın teke
+                düşmesi") — kart adı, aşağıdaki içerik kutusunun ilk satırından otomatik türetiliyor (bkz.
+                BilgiKartEdit içindeki icerikBaslikTuret). Aktivite/Randevu şimdilik eski ayrı Ad alanını
+                kullanmaya devam ediyor. */}
+            {isKisisel && kisiselTur !== 'not' && (
               kisiselGorunumModu ? (
                 // Görüntüleme modu: Ad artık bir giriş alanı değil, düz metin — input'la aynı boyut/boşluk.
                 <div style={{ width: '100%', margin: '10px 0 14px', fontSize: 21, fontWeight: 700 }}>{o.ad}</div>
@@ -4131,9 +4142,11 @@ export default function Rite() {
                 böylece Ajandama eklemeden kart orada da (Havuz'da olduğu gibi) açılabiliyor. */}
             {kTip === 'bilgi' && (() => {
               const editable = !preview && (isRit ? o.kaynak === 'Kendi' : isDraft);
-              // cokluVideo artık Aktivite'nin her iki hâlinde de (Bugün/Tekrarla, yani 'yapilacak'/'aliskanlik')
-              // açık — Not zaten kendi tekli video mekanizmasını notTasarimi dalından kullanıyor (bkz. videoYok).
-              if (editable) return <BilgiKartEdit cfg={kCfg} onSave={bilgiKaydet} randevu={!!kCfg?.randevu} notTasarimi={isKisisel} readOnly={kisiselGorunumModu} cokluVideo={isKisisel && (kisiselTur === 'aliskanlik' || kisiselTur === 'yapilacak')} videoEkleTetik={videoEkleAcik} onVideoEkleTetikKapat={() => setVideoEkleAcik(false)} videoYok={false} ekAyri={isKisisel} />;
+              // cokluVideo artık Not'ta da Aktivite'nin her iki hâlinde de (Bugün/Tekrarla, yani
+              // 'yapilacak'/'aliskanlik') açık — Not'un kendi ayrı tekli video mekanizması kaldırıldı, hepsi
+              // aynı çoklu-video şeridini + sayfa seviyesindeki "🎬 Video" tetikleyicisini paylaşıyor
+              // (kullanıcı isteği, 2026-09-17: "önce not'u aktivite de olduğu şekilde video eklenecek hale getirelim").
+              if (editable) return <BilgiKartEdit cfg={kCfg} onSave={bilgiKaydet} randevu={!!kCfg?.randevu} notTasarimi={isKisisel} readOnly={kisiselGorunumModu} cokluVideo={isKisisel && (kisiselTur === 'aliskanlik' || kisiselTur === 'yapilacak' || kisiselTur === 'not')} videoEkleTetik={videoEkleAcik} onVideoEkleTetikKapat={() => setVideoEkleAcik(false)} videoYok={false} ekAyri={isKisisel} icerikBaslikTuret={isKisisel && kisiselTur === 'not'} onIcerikBaslikTuret={(ilkSatir) => setRitAd(o.id, ilkSatir)} />;
               if (!preview && isRit) return <BilgiKart cfg={kCfg} onSave={bilgiKaydet} />;
               return <BilgiKartEdit cfg={kCfg} onSave={() => {}} randevu={!!kCfg?.randevu} readOnly />;
             })()}
@@ -4225,13 +4238,14 @@ export default function Rite() {
                         </>
                       )}
                     </div>
-                    {/* "🎬 Video" — Aktivite'nin her iki hâlinde de (Bugün/Tekrarla), Ek'in hemen solunda
-                        (kullanıcı isteği, 2026-09-16: video ekleme artık açıklamanın altındaki tek satırlık link
-                        kutusundan değil, buradan — tıklayınca BilgiKartEdit'in kendi ekleme modalini açan tek
-                        atımlık videoEkleAcik bayrağı). İlk video da, ikinci/üçüncü video da hep bu düğmeden
-                        eklenir; videonun üstündeki şerit (bkz. BilgiKartEdit içindeki cokluVideo dalı) artık
-                        sadece video seçimi + ⚙️ Ayarla taşıyor. */}
-                    {!kisiselGorunumModu && (kisiselTur === 'aliskanlik' || kisiselTur === 'yapilacak') && (
+                    {/* "🎬 Video" — Aktivite'nin her iki hâlinde de (Bugün/Tekrarla) VE Not'ta, Ek'in hemen
+                        solunda (kullanıcı isteği, 2026-09-16: video ekleme artık açıklamanın altındaki tek
+                        satırlık link kutusundan değil, buradan — tıklayınca BilgiKartEdit'in kendi ekleme
+                        modalini açan tek atımlık videoEkleAcik bayrağı; 2026-09-17: Not da aynı mekanizmaya
+                        katıldı). İlk video da, ikinci/üçüncü video da hep bu düğmeden eklenir; videonun üstündeki
+                        şerit (bkz. BilgiKartEdit içindeki cokluVideo dalı) artık sadece video seçimi + ⚙️ Ayarla
+                        taşıyor. */}
+                    {!kisiselGorunumModu && (kisiselTur === 'aliskanlik' || kisiselTur === 'yapilacak' || kisiselTur === 'not') && (
                       <span className="chip" style={{ borderStyle: 'dashed', flex: '0 0 auto' }} onClick={() => setVideoEkleAcik(true)} title="Video ekle">🎬 Video</span>
                     )}
                     {/* Ek (attachment) — Bildirim'le aynı satırda, tek dosya (kullanıcı isteği). Şimdilik yine
