@@ -2427,29 +2427,33 @@ export default function Rite() {
   async function setRitGunler(id: string, g: number[]) {
     if (!client) return;
     const arr = g.length === 0 || g.length === 7 ? null : g;
-    // rt: bkz. ritTasi/setRitSure'deki not — aynı sebepten duzenleModu'dayken yerel arabellek okunuyor.
-    const rt = (!id || duzenleModu) ? detay?.obj : rituals.find((r) => r.id === id);
-    let patch: any = { gunler: arr };
-    // Kart zaten süreliyse (bitiş tarihi var) ve yeni seçilen günler mevcut pencereye hiç denk gelmiyorsa, aynı
-    // sorunu burada da önlemek için pencereyi (süresini koruyarak) ilk uygun güne kaydırıyoruz.
-    if (arr && rt?.bitis) {
-      let uyumlu = false; const d = parseD(rt.baslangic);
-      while (iso(d) <= rt.bitis) { if (arr.includes(wday(iso(d)))) { uyumlu = true; break; } d.setDate(d.getDate() + 1); }
-      if (!uyumlu) {
-        const uzunlukGun = Math.round((parseD(rt.bitis).getTime() - parseD(rt.baslangic).getTime()) / 86400000) + 1;
-        const yeniBas = ilkUygunGun(rt.baslangic >= today ? rt.baslangic : today, arr);
-        const e = parseD(yeniBas); e.setDate(e.getDate() + uzunlukGun - 1);
-        patch = { gunler: arr, baslangic: yeniBas, bitis: iso(e) };
-        // "Tarih + süreli" tasarımı: başlangıç burada MANTIK tarafından (kullanıcının kendi seçtiği günlerle
-        // uyuşmadığı için) kendiliğinden kaydırılıyor — bunu görünür kılmak için Süre şeridindeki tarih kısa
-        // süreliğine renk değiştiriyor (bkz. basVurgu state'i ve aşağıdaki useEffect).
-        setBasVurgu(true);
-      }
-    }
+    // 2026-09-17 (Behnan'ın bulduğu ikinci bug — "Pazartesiyi seçtiğimde hemen hesaplama yapıp tarihi
+    // kaydırıyor, diğer günleri seçsem de artık oradan başlıyor"): burası eskiden HER tek tık'ta (ör. önce
+    // sadece Pzt işaretlenince) uyumluluk kontrolü yapıp pencereyi hemen kaydırıyordu — ama kullanıcı genelde
+    // birden fazla günü ARDIŞIK tıklayarak seçiyor (ör. Pzt, Çrş, Cuma), ve ilk tıktaki kısmi/eksik seçime göre
+    // yapılan erken kaydırma, sonraki tıklardaki asıl tam seçimle alakasız kalıyordu (kartı istemeden 5 gün
+    // ileri fırlatıyordu). Düzeltme: artık burası SADECE gunler'i yazıyor, baslangic/bitis'e hiç dokunmuyor —
+    // uyumluluk denetimi kullanıcı seçimini bitirdiğinde (aşağıdaki gunlerTamamla, "✓ Tamam" çipi) VE her
+    // hâlükârda kayıt anında (pencereyiGunlereUydur güvenlik ağı, taslakKaydet/kisiselDuzenleKaydet) çalışıyor.
+    const patch: any = { gunler: arr };
     if (!id || duzenleModu) { patchDetay(patch); return; } // taslak / düzenleme modu
     await supabase.from('dog_rituals').update(patch).eq('id', id);
     patchDetay(patch);
     loadData(client.id);
+  }
+  // Günler seçimini "bitirdim" anı — kullanıcı birden fazla gün işaretledikten sonra bilinçli olarak tetikler
+  // (✓ Tamam çipi), tek seferde (ara adımlardaki kısmi seçimlere göre değil, seçimin TAMAMINA göre) uyumluluk
+  // kontrolü yapıp gerekirse pencereyi kaydırır — aynı hesap pencereyiGunlereUydur ile paylaşılıyor. Basılmazsa
+  // bile kayıt anındaki güvenlik ağı zaten aynı düzeltmeyi yapacak; bu sadece erken/görünür geri bildirim.
+  function gunlerTamamla(id: string) {
+    const rt = (!id || duzenleModu) ? detay?.obj : rituals.find((r) => r.id === id);
+    if (!rt || !rt.baslangic) { setGunlerAcik(false); return; }
+    const { baslangic: basSon, bitis: bitSon } = pencereyiGunlereUydur(rt.baslangic, rt.bitis ?? null, rt.gunler || null);
+    if (basSon !== rt.baslangic || bitSon !== rt.bitis) {
+      patchDetay({ baslangic: basSon, bitis: bitSon });
+      setBasVurgu(true);
+    }
+    setGunlerAcik(false);
   }
   async function setRitAliskanlik(id: string, val: boolean) {
     if (!client) return;
@@ -4370,7 +4374,9 @@ export default function Rite() {
                         ) : (
                           <span className="chip" onClick={() => setSureAcik(true)}>{sureInput || '1'} gün</span>
                         )}
-                        {o.bitis && <span className="note" style={{ marginTop: 0 }}>bitiş {kisaTarih(o.bitis)}</span>}
+                        {/* Tek günlük kartta (bitis===baslangic) ayrı bir "bitiş" notu göstermek gereksiz —
+                            tarih zaten solda tek başına görünüyor (Behnan isteği: "tek günse bitişi yazmasın"). */}
+                        {o.bitis && o.bitis !== o.baslangic && <span className="note" style={{ marginTop: 0 }}>bitiş {kisaTarih(o.bitis)}</span>}
                         {kisiselTur === 'aliskanlik' && (
                           <span className={'chip' + ((!o.gunler || o.gunler.length === 0) ? ' on' : '')} style={{ marginLeft: 'auto' }} onClick={() => { setRitGunler(o.id, []); setGunlerAcik((v) => !v); }}>Her gün</span>
                         )}
@@ -4383,6 +4389,11 @@ export default function Rite() {
                             const sel = !!(o.gunler && o.gunler.includes(n));
                             return <span key={n} className={'chip' + (sel ? ' on' : '')} onClick={() => { const cur: number[] = o.gunler ? [...o.gunler] : []; const nx = cur.includes(n) ? cur.filter((x) => x !== n) : [...cur, n]; setRitGunler(o.id, nx); }}>{l}</span>;
                           })}
+                          {/* Birden fazla günü ardışık işaretlerken her tık'ta erken/kısmi bir kaydırma
+                              olmasın diye (bkz. setRitGunler'daki not) uyumluluk kontrolü artık burada, seçimi
+                              bitirince bilinçli olarak tetikleniyor. Basılmazsa da Kaydet anındaki güvenlik ağı
+                              zaten aynı düzeltmeyi tek seferde yapıyor — bu sadece erken/görünür geri bildirim. */}
+                          <span className="chip" style={{ fontWeight: 700 }} onClick={() => gunlerTamamla(o.id)}>✓ Tamam</span>
                         </div>
                       </div>
                     )}
