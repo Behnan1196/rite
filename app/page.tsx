@@ -1262,7 +1262,9 @@ function urlB64ToUint8(base64String: string) {
 export default function Rite() {
   const [client, setClient] = useState<Client | null>(null);
   const [screen, setScreen] = useState('home');
-  const [inboxOpen, setInboxOpen] = useState(false);
+  // inboxOpen (eski üst header'daki 📥 modalının aç/kapa durumu) 2026-09 (Behnan kararı, WhatsApp-esinli
+  // sadeleştirme) KALDIRILDI — Inbox artık ayrı bir modal değil, "Sohbet" sekmesinin (screen==='iletisim')
+  // sayfa içi bir parçası, o yüzden ayrı bir aç/kapa state'ine gerek kalmadı.
   const [ibGrupSec, setIbGrupSec] = useState<string | null>(null); // havuza eklerken grup seçimi açık olan inbox öğesi
   const [ibGrupVal, setIbGrupVal] = useState('Genel');
   const [ajView, setAjView] = useState<'gun' | 'ay'>('gun');
@@ -3059,11 +3061,8 @@ export default function Rite() {
 
   return (
     <div className="app">
-      <div className="hd">
-        <div className="b">Rite <span>· {client.ad}</span></div>
-        <button className="ibtn" onClick={() => { setInboxOpen(true); if (client) loadInbox(client.id); }}>📥{ibBadge > 0 && <span className="bdg">{ibBadge}</span>}</button>
-      </div>
-
+      {/* Üst header (app adı + Inbox butonu) 2026-09 (Behnan kararı, WhatsApp-esinli sadeleştirme) KALDIRILDI —
+          Inbox artık "Sohbet" sekmesine taşındı (bkz. screen==='iletisim'), bir kart gibi sayfa içinde. */}
       <div className="main">
         {/* ---------- HOME (v1) ---------- */}
         {/* Uygulamayı ilk açtığında görülen ekran — Ajanda/Havuz gibi "teknik" ekranlara hiç girmeden de kişinin
@@ -3607,14 +3606,68 @@ export default function Rite() {
           </div>
         )}
 
-        {/* ---------- INBOX ---------- */}
-        {inboxOpen && (
-          <div className="modal top" onMouseDown={() => setInboxOpen(false)}>
+        {ibDetay && (
+          <div className="modal top" onMouseDown={() => setIbDetay(null)}>
           <div className="sheet topsheet" onMouseDown={(e) => e.stopPropagation()}>
-            <button className="x" onClick={() => setInboxOpen(false)}>×</button>
-            <h2 style={{ marginTop: 2 }}>📥 Inbox</h2>
-            <div className="note" style={{ marginTop: 0 }}>Başkalarının seninle paylaştığı kartlar burada birikir. <button className="btn ghost sm" style={{ marginLeft: 6 }} onClick={() => client && loadInbox(client.id)}>🔄 Yenile</button></div>
-            {inbox.length === 0 && <div className="note" style={{ textAlign: 'center', marginTop: 10 }}>Inbox boş. Sana bir şey paylaşıldığında burada göreceksin. Kendi notunu/randevunu eklemek için alttaki ＋ butonunu kullan.</div>}
+            <button className="x" onClick={() => setIbDetay(null)}>×</button>
+            <input className="detbaslik" value={ibdAd} onChange={(e) => setIbdAd(e.target.value)} onBlur={ibKaydet} placeholder="Başlık" />
+            {ibDetay.payload?.resim && <img src={ibDetay.payload.resim} alt="" style={{ maxWidth: '100%', borderRadius: 8, margin: '4px 0', display: 'block' }} />}
+            {ibdUrl.trim() && /^https?:\/\//i.test(ibdUrl.trim()) && <div style={{ margin: '4px 0' }}><EmbedVideo url={ibdUrl.trim()} /></div>}
+            <label className="fldlbl">Açıklama</label>
+            <textarea value={ibdAcik} onChange={(e) => setIbdAcik(e.target.value)} onBlur={ibKaydet} placeholder="Açıklama / not…" style={{ width: '100%', minHeight: 44 }} />
+            <label className="fldlbl">Video linki (ops.)</label>
+            <input value={ibdUrl} onChange={(e) => setIbdUrl(e.target.value)} onBlur={ibKaydet} placeholder="https://youtube.com/… (girince video kartı olur)" />
+            <div style={{ borderTop: '1px solid var(--line)', marginTop: 12, paddingTop: 10 }}>
+              <label className="fldlbl" style={{ marginTop: 0 }}>Ne zaman?</label>
+              <div className="rowbtns">
+                <button className="btn ghost sm" onClick={() => ibPlanla(today)}>→ Bugüne</button>
+                <button className="btn ghost sm" onClick={() => { const d = parseD(today); d.setDate(d.getDate() + 1); ibPlanla(iso(d)); }}>→ Yarına</button>
+              </div>
+              <div className="rowbtns" style={{ marginTop: 6, alignItems: 'center' }}>
+                <span style={{ fontSize: 13 }}>📅</span>
+                <input type="date" min={today} value={ibdTarih} onChange={(e) => setIbdTarih(e.target.value)} style={{ width: 'auto' }} />
+                <button className="btn sm" disabled={!ibdTarih} onClick={() => ibPlanla(ibdTarih)}>Randevu (o güne)</button>
+              </div>
+              <div className="note">Tarihsizken Inbox'ta kalır. Bir gün seçince ajandaya taşınır.</div>
+            </div>
+            <div style={{ textAlign: 'center', marginTop: 10 }}><button className="btn ghost sm" style={{ color: 'var(--red)', borderColor: '#e6c4bd' }} onClick={() => { inboxSil(ibDetay.id); setIbDetay(null); }}>Sil</button></div>
+          </div>
+          </div>
+        )}
+
+        {/* ---------- MEZUNLAR ---------- */}
+        {screen === 'mezunlar' && (
+          <div>
+            <button className="linkbtn" onClick={() => setScreen('ajanda')}>‹ Ajanda</button>
+            <h2 style={{ marginTop: 6 }}>🎓 Mezunlar</h2>
+            <p className="sub">Otomatikleşip emekli ettiğin ritüeller. İstediğinde yeniden başlat.</p>
+            {mezunlar.length === 0 ? <div className="empty">Henüz mezun ritüel yok.</div> : mezunlar.map((rt) => (
+              <div key={rt.id} className="card" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ flex: 1 }}><div style={{ fontSize: 13, fontWeight: 700 }}>{rt.ad}</div><div className="m">Mezun · {ritTotal(rt.id)} kez</div></div>
+                <button className="btn ghost sm" onClick={() => yenidenBasla(rt.id)}>Yeniden başlat</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ---------- İLETİŞİM / SOHBET (2026-09 Behnan kararı) ---------- */}
+        {/* Koçluk chat + görüntülü görüşme için ayrılmış sekme — henüz sadece yer tutucu, hiçbir backend/chat
+            mantığı yok (gerçek entegrasyon, ör. stream.io, ayrı bir iş). Inbox (bkz. eskiden üst header'daki
+            📥 butonu/modalı) buraya, sayfa içi bir kart olarak taşındı — "inbox'ı sohbet içinde aynen bir kart
+            gibi taşıyabilirsin" (Behnan kararı) — üst header de bununla birlikte tamamen kaldırıldı. */}
+        {screen === 'iletisim' && (
+          <div>
+            <h2>💬 Sohbet</h2>
+            <div className="empty" style={{ marginTop: 10 }}>Yakında — koçunla sohbet ve görüntülü görüşme burada olacak.</div>
+
+            <div className="card" style={{ marginTop: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+                <h3 style={{ margin: 0 }}>📥 Inbox</h3>
+                <button className="btn ghost sm" onClick={() => client && loadInbox(client.id)}>🔄 Yenile</button>
+              </div>
+              <div className="note" style={{ marginTop: 4 }}>Başkalarının seninle paylaştığı kartlar burada birikir.</div>
+            </div>
+            {inbox.length === 0 && <div className="note" style={{ textAlign: 'center', marginTop: 10 }}>Inbox boş. Sana bir şey paylaşıldığında burada göreceksin. Kendi notunu/randevunu eklemek için Ajanda'daki ＋ butonunu kullan.</div>}
             {inbox.map((v) => v.tur !== 'aktivite' ? (
               <InboxNot key={v.id} v={v} onOpen={() => openIbDetay(v)} />
             ) : (
@@ -3665,61 +3718,6 @@ export default function Rite() {
                 )}
               </div>
             ))}
-          </div>
-          </div>
-        )}
-
-        {ibDetay && (
-          <div className="modal top" onMouseDown={() => setIbDetay(null)}>
-          <div className="sheet topsheet" onMouseDown={(e) => e.stopPropagation()}>
-            <button className="x" onClick={() => setIbDetay(null)}>×</button>
-            <input className="detbaslik" value={ibdAd} onChange={(e) => setIbdAd(e.target.value)} onBlur={ibKaydet} placeholder="Başlık" />
-            {ibDetay.payload?.resim && <img src={ibDetay.payload.resim} alt="" style={{ maxWidth: '100%', borderRadius: 8, margin: '4px 0', display: 'block' }} />}
-            {ibdUrl.trim() && /^https?:\/\//i.test(ibdUrl.trim()) && <div style={{ margin: '4px 0' }}><EmbedVideo url={ibdUrl.trim()} /></div>}
-            <label className="fldlbl">Açıklama</label>
-            <textarea value={ibdAcik} onChange={(e) => setIbdAcik(e.target.value)} onBlur={ibKaydet} placeholder="Açıklama / not…" style={{ width: '100%', minHeight: 44 }} />
-            <label className="fldlbl">Video linki (ops.)</label>
-            <input value={ibdUrl} onChange={(e) => setIbdUrl(e.target.value)} onBlur={ibKaydet} placeholder="https://youtube.com/… (girince video kartı olur)" />
-            <div style={{ borderTop: '1px solid var(--line)', marginTop: 12, paddingTop: 10 }}>
-              <label className="fldlbl" style={{ marginTop: 0 }}>Ne zaman?</label>
-              <div className="rowbtns">
-                <button className="btn ghost sm" onClick={() => ibPlanla(today)}>→ Bugüne</button>
-                <button className="btn ghost sm" onClick={() => { const d = parseD(today); d.setDate(d.getDate() + 1); ibPlanla(iso(d)); }}>→ Yarına</button>
-              </div>
-              <div className="rowbtns" style={{ marginTop: 6, alignItems: 'center' }}>
-                <span style={{ fontSize: 13 }}>📅</span>
-                <input type="date" min={today} value={ibdTarih} onChange={(e) => setIbdTarih(e.target.value)} style={{ width: 'auto' }} />
-                <button className="btn sm" disabled={!ibdTarih} onClick={() => ibPlanla(ibdTarih)}>Randevu (o güne)</button>
-              </div>
-              <div className="note">Tarihsizken Inbox'ta kalır. Bir gün seçince ajandaya taşınır.</div>
-            </div>
-            <div style={{ textAlign: 'center', marginTop: 10 }}><button className="btn ghost sm" style={{ color: 'var(--red)', borderColor: '#e6c4bd' }} onClick={() => { inboxSil(ibDetay.id); setIbDetay(null); }}>Sil</button></div>
-          </div>
-          </div>
-        )}
-
-        {/* ---------- MEZUNLAR ---------- */}
-        {screen === 'mezunlar' && (
-          <div>
-            <button className="linkbtn" onClick={() => setScreen('ajanda')}>‹ Ajanda</button>
-            <h2 style={{ marginTop: 6 }}>🎓 Mezunlar</h2>
-            <p className="sub">Otomatikleşip emekli ettiğin ritüeller. İstediğinde yeniden başlat.</p>
-            {mezunlar.length === 0 ? <div className="empty">Henüz mezun ritüel yok.</div> : mezunlar.map((rt) => (
-              <div key={rt.id} className="card" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ flex: 1 }}><div style={{ fontSize: 13, fontWeight: 700 }}>{rt.ad}</div><div className="m">Mezun · {ritTotal(rt.id)} kez</div></div>
-                <button className="btn ghost sm" onClick={() => yenidenBasla(rt.id)}>Yeniden başlat</button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* ---------- İLETİŞİM (yer tutucu, 2026-09 Behnan kararı) ---------- */}
-        {/* Koçluk chat + görüntülü görüşme için ayrılmış sekme — henüz sadece yer tutucu, hiçbir backend/chat
-            mantığı yok. Gerçek entegrasyon (stream.io vb.) ve Inbox'ın buraya taşınması ayrı, sonraki adımlar. */}
-        {screen === 'iletisim' && (
-          <div>
-            <h2>💬 Sohbet</h2>
-            <div className="empty" style={{ marginTop: 10 }}>Yakında — koçunla sohbet ve görüntülü görüşme burada olacak.</div>
           </div>
         )}
 
@@ -3799,9 +3797,12 @@ export default function Rite() {
         ))}
         {/* İletişim/Sohbet (2026-09, Behnan kararı — WhatsApp-esinli 3. madde): koçluk sohbet/görüntülü görüşme
             sekmesi için şimdilik yer tutucu — chat/video altyapısı (stream.io vb.) ayrı, daha büyük bir iş,
-            henüz ele alınmadı. Inbox'ın üst header'dan kaldırılınca yeni yeri burası olacak (Behnan kararı,
-            henüz uygulanmadı — bkz. İLETİŞİM ekranındaki not). */}
-        <button key="iletisim" className={screen === 'iletisim' ? 'on' : ''} onClick={() => setScreen('iletisim')}><span className="ic">💬</span>Sohbet</button>
+            henüz ele alınmadı. Inbox de (eski üst header'daki 📥 butonu/modalı) artık burada, sayfa içi bir kart
+            olarak (bkz. İLETİŞİM ekranı) — rozet (ibBadge) de header'daki ibtn'den buraya taşındı. */}
+        <button key="iletisim" className={screen === 'iletisim' ? 'on' : ''} style={{ position: 'relative' }} onClick={() => { setScreen('iletisim'); if (client) loadInbox(client.id); }}>
+          <span className="ic">💬</span>Sohbet
+          {ibBadge > 0 && <span className="bdg" style={{ top: 3, right: '22%' }}>{ibBadge}</span>}
+        </button>
       </div>
 
       {detay && (() => {
