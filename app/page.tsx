@@ -1272,7 +1272,14 @@ export default function Rite() {
   // sayfa içi bir parçası, o yüzden ayrı bir aç/kapa state'ine gerek kalmadı.
   const [ibGrupSec, setIbGrupSec] = useState<string | null>(null); // havuza eklerken grup seçimi açık olan inbox öğesi
   const [ibGrupVal, setIbGrupVal] = useState('Genel');
-  const [ajView, setAjView] = useState<'gun' | 'ay'>('gun');
+  // Ay görünümü artık ayrı bir sayfa değil, takvim ikonuyla açılan bir overlay/popup (2026-09-17, Behnan kararı:
+  // "sadece bir takvim ikonu bile yeterli, çıkan aylık seçim ve navigasyon popup'ın ... dışarıda bir şeye
+  // dokunduğumuzda kapanır"). ayPopupOpen açık/kapalı durumu tutar; ayCursor ise popup içinde GEZİNİLEN ay —
+  // `day`'den (Gün görünümünün asıl seçili günü) bilerek AYRI tutulur, çünkü ay içinde ileri/geri gezinmek
+  // (henüz bir güne dokunmadan) Ajanda'nın asıl konumunu değiştirmemeli; sadece bir güne dokununca (ya da
+  // "bugüne dön" gibi) gerçek seçim (setSelDate) yapılır ve popup kapanır.
+  const [ayPopupOpen, setAyPopupOpen] = useState(false);
+  const [ayCursor, setAyCursor] = useState<string | null>(null);
   const [selDate, setSelDate] = useState('');
   const [activities, setActivities] = useState<any[]>([]);
   // actGroup/actAltGroup artık bir "seçili sekme" değil, en son açtığın (dokunduğun) Grup/Alt grup — yeni bir
@@ -1493,10 +1500,12 @@ export default function Rite() {
     dt.setDate(dt.getDate() + delta);
     setSelDate(iso(dt));
   }
-  function shiftMonth(delta: number) {
-    const dt = parseD(selDate || today);
+  // Ay popup'ı içindeki ay gezinmesi — bilerek setSelDate DEĞİL, setAyCursor kullanıyor (bkz. ayCursor tanımı):
+  // popup'ta ileri/geri aylara bakmak, bir güne dokunmadan Ajanda'nın asıl seçili gününü değiştirmemeli.
+  function shiftAyCursor(delta: number) {
+    const dt = parseD(ayCursor || day);
     dt.setDate(1); dt.setMonth(dt.getMonth() + delta);
-    setSelDate(iso(dt));
+    setAyCursor(iso(dt));
   }
   const ayLabel = (d: string) => { const dt = parseD(d); return MONTHS[dt.getMonth()] + ' ' + dt.getFullYear(); };
   function weekDays(d: string) {
@@ -2180,29 +2189,31 @@ export default function Rite() {
   // ＋'dan hep 'yapilacak' hâliyle (varsayılan "Bugün", tek seferlik) açılır — kartın içindeki "🔁 Tekrarla"
   // anahtarı (bkz. setRitTekrarla) tur'u sonradan 'aliskanlik'e çevirir. Eski "Kart" (deneysel 4. tip,
   // kart_config.genel) tamamen kaldırıldı (bkz. eski isYeniKart/yeniKartTaslakAc, artık yok).
-  function yeniTaslakAc(tur: 'not' | 'randevu' | 'aliskanlik' | 'yapilacak') {
+  // 2026-09-17 (Randevu birleşmesi, Behnan kararı): 'randevu' ayrı bir tür olarak ＋ menüsünden kalktı — bir
+  // randevu artık sadece 'yapilacak' bir Aktivite, "Cuma saat 15 diş randevusu" gibi detaylar içeriğe serbest
+  // metin olarak yazılıyor.
+  function yeniTaslakAc(tur: 'not' | 'aliskanlik' | 'yapilacak') {
     const cfg: any = { icerik: null, videolar: [] };
-    if (tur === 'randevu') cfg.randevu = true;
     // Yapılacak (Aktivite'nin "Bugün" hâli): kart_config.gorev — bitissiz (yapıncaya kadar her gün görünür),
     // işaretlenince kalıcı kapanır (bkz. kartYapildiToggle).
     if (tur === 'yapilacak') cfg.gorev = true;
     openRit({
       id: null,
-      ad: tur === 'randevu' ? 'Yeni randevu' : (tur === 'aliskanlik' || tur === 'yapilacak') ? 'Yeni aktivite' : 'Yeni not',
+      ad: (tur === 'aliskanlik' || tur === 'yapilacak') ? 'Yeni aktivite' : 'Yeni not',
       kaynak: 'Kendi', tip: 'aliskanlik', kart_tipi: 'bilgi', kart_config: cfg,
       aliskanlik: tur === 'aliskanlik', aktif: true, mezun: false,
-      // Not artık Randevu gibi tek günlük değil — bir yapışkan not gibi, silininceye kadar her gün duruyor
-      // (Ayraç'takiyle aynı mantık: bitis=null, gunler boş → her gün). Kullanıcı isteği: "tarihi yok, silene
-      // kadar durur" — teknik olarak baslangic hâlâ var (📅 rozetinden taşınabilir) ama bitiş asla set edilmiyor.
+      // Not artık tek günlük değil — bir yapışkan not gibi, silininceye kadar her gün duruyor (Ayraç'takiyle
+      // aynı mantık: bitis=null, gunler boş → her gün). Kullanıcı isteği: "tarihi yok, silene kadar durur" —
+      // teknik olarak baslangic hâlâ var (📅 rozetinden taşınabilir) ama bitiş asla set edilmiyor.
       // Aktivite "Tekrarla" açık geldiğinde (kisiselTur==='aliskanlik') varsayılan olarak Süreli, 21 gün
       // (kullanıcı isteği: "default olarak süreli gelip gün sayısı da yine default 21 gün olsa") — setRitSure'daki
       // "+gun-1" ile birebir aynı hesap; setRitTekrarla de aynı hesabı kullanıyor.
       // Aktivite varsayılan olarak "Bugün" (tek seferlik) geliyor (kullanıcı isteği: "başlangıç tarihi olan
       // süresiz bir task yerine default olarak 1 gün süreli gelmesi daha mantıklı"). Günü geçtiğinde
       // yapılmamışsa ne olacağı (otomatik ertesi güne taşınması vb.) ayrı bir konu — henüz karara bağlanmadı,
-      // şimdilik o gün geçince aynı Randevu gibi bir daha görünmüyor. Kapanış hâlâ bitis=day'e geçişle oluyor
-      // (kartYapildiToggle), o kısım değişmedi.
-      baslangic: day, bitis: (tur === 'randevu' || tur === 'yapilacak') ? day : tur === 'aliskanlik' ? (() => { const e = parseD(day); e.setDate(e.getDate() + 20); return iso(e); })() : null,
+      // şimdilik o gün geçince bir daha görünmüyor. Kapanış hâlâ bitis=day'e geçişle oluyor (kartYapildiToggle),
+      // o kısım değişmedi.
+      baslangic: day, bitis: tur === 'yapilacak' ? day : tur === 'aliskanlik' ? (() => { const e = parseD(day); e.setDate(e.getDate() + 20); return iso(e); })() : null,
       hatirlatma_saat: null, kisisel_not: null, gunler: null, faydalar: [],
     });
   }
@@ -2454,21 +2465,22 @@ export default function Rite() {
     }
     loadData(client.id);
   }
-  // Not → Yapılacak/Alışkanlık/Randevu (kullanıcı isteği): Not artık günlere bağlı değil (bkz. habits'in
-  // isNotKart hariç tutması ve aşağıdaki Notlar şeridi), o yüzden onu ajandaya "taşımak" sürükleyip bırakmak
-  // yerine ⋯ menüsünden bir tür seçmek şeklinde — seçilen tür ne olursa olsun hedef gün, o an Ajanda'da
-  // görüntülenen gün (day). Süre/bitiş mantığı yeniTaslakAc ile birebir aynı (Yapılacak/Randevu tek günlük,
-  // Alışkanlık 20 gün varsayılan) ki farklı bir yerden oluşturulmuş gibi davransın.
-  async function notuTasi(id: string, tur: 'yapilacak' | 'aliskanlik' | 'randevu') {
+  // Not → Ajandaya koy (kullanıcı isteği, 2026-09-17, Randevu birleşmesi): Not artık günlere bağlı değil (bkz.
+  // habits'in isNotKart hariç tutması ve aşağıdaki Notlar şeridi), o yüzden onu ajandaya "taşımak" sürükleyip
+  // bırakmak yerine ⋯ menüsündeki tek "Ajandaya koy" ile — hedef gün her zaman o an Ajanda'da görüntülenen gün
+  // (day). Süre/bitiş mantığı yeniTaslakAc ile birebir aynı (Yapılacak tek günlük, Alışkanlık 20 gün varsayılan)
+  // ki farklı bir yerden oluşturulmuş gibi davransın. Eskiden ayrı bir 'randevu' türü de vardı, artık yok —
+  // randevu detayı ("Cuma saat 15…") içeriğe serbest metin olarak yazılıyor.
+  async function notuTasi(id: string, tur: 'yapilacak' | 'aliskanlik') {
     if (!client) return;
     const rt = rituals.find((r) => r.id === id);
     const cfg = { ...(rt?.kart_config || {}) };
     const patch: any = {
       baslangic: day,
-      bitis: (tur === 'yapilacak' || tur === 'randevu') ? day : (() => { const e = parseD(day); e.setDate(e.getDate() + 20); return iso(e); })(),
+      bitis: tur === 'yapilacak' ? day : (() => { const e = parseD(day); e.setDate(e.getDate() + 20); return iso(e); })(),
       gunler: null,
       aliskanlik: tur === 'aliskanlik',
-      kart_config: { ...cfg, gorev: tur === 'yapilacak', randevu: tur === 'randevu' },
+      kart_config: { ...cfg, gorev: tur === 'yapilacak' },
     };
     await supabase.from('dog_rituals').update(patch).eq('id', id);
     loadData(client.id);
@@ -3171,10 +3183,15 @@ export default function Rite() {
             <div className="ajhead">
               <h2>Ajanda</h2>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div className="vswitch">
-                  <div className={'vseg' + (ajView === 'gun' ? ' on' : '')} onClick={() => setAjView('gun')}>Gün</div>
-                  <div className={'vseg' + (ajView === 'ay' ? ' on' : '')} onClick={() => setAjView('ay')}>📅 Ay</div>
-                </div>
+                {/* Gün/Ay vswitch kaldırıldı (2026-09-17, Behnan kararı: "Gün, Ay butonları yerine sadece bir
+                    takvim ikonu bile yeterli") — Ay artık ayrı bir sayfa değil, bu ikonla açılan bir overlay/popup
+                    (bkz. aşağısı, ayPopupOpen). Ajanda'nın asıl gövdesi artık hep "Gün" görünümü. */}
+                <button
+                  type="button"
+                  title="Takvim"
+                  onClick={() => { setAyCursor(day); setAyPopupOpen(true); }}
+                  style={{ background: 'none', border: '1px solid var(--line)', borderRadius: '50%', width: 30, height: 30, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: '0 0 auto', padding: 0 }}
+                >📅</button>
                 {/* Ajanda'nın kendi ekleme girişi (2026-09, Behnan kararı — bottom_nav'ın genel ＋'sı kaldırıldı,
                     bkz. nav'daki not) — "en üst sağa bir + koyup, oradan ekleyelim şimdilik", genel bir ekran
                     tasarımı düzeltme oturumunda yeri/görünümü değişebilir. Aynı ekleMenuOpen modalini açıyor,
@@ -3188,27 +3205,25 @@ export default function Rite() {
               </div>
             </div>
             <div className="datenav">
-              <button className="arrow" onClick={() => (ajView === 'ay' ? shiftMonth(-1) : shiftDay(-1))}>‹</button>
+              <button className="arrow" onClick={() => shiftDay(-1)}>‹</button>
               <div className="dlabel" onClick={() => setSelDate(today)}>
-                {ajView === 'ay' ? ayLabel(day) : dayLabel(day)}
+                {dayLabel(day)}
                 {day !== today && <div className="totoday">↺ bugüne dön</div>}
               </div>
-              <button className="arrow" onClick={() => (ajView === 'ay' ? shiftMonth(1) : shiftDay(1))}>›</button>
+              <button className="arrow" onClick={() => shiftDay(1)}>›</button>
             </div>
 
-            {ajView === 'gun' && (
-              <div className="weekstrip">
-                {weekDays(day).map((d) => {
-                  const dt = parseD(d);
-                  return (
-                    <div key={d} className={'wday' + (d === day ? ' on' : '') + (d === today ? ' today' : '')} onClick={() => setSelDate(d)}>
-                      <div className="wl">{WD[wday(d)]}</div>
-                      <div className="wn">{dt.getDate()}</div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            <div className="weekstrip">
+              {weekDays(day).map((d) => {
+                const dt = parseD(d);
+                return (
+                  <div key={d} className={'wday' + (d === day ? ' on' : '') + (d === today ? ' today' : '')} onClick={() => setSelDate(d)}>
+                    <div className="wl">{WD[wday(d)]}</div>
+                    <div className="wn">{dt.getDate()}</div>
+                  </div>
+                );
+              })}
+            </div>
 
             {programGruplari.length > 0 && <div style={{ marginBottom: 4 }}>{programGruplari.map((g) => {
               const gunNo = Math.max(1, Math.round((parseD(today).getTime() - parseD(g.bas).getTime()) / 86400000) + 1);
@@ -3231,7 +3246,7 @@ export default function Rite() {
               );
             })}</div>}
 
-            {ajView === 'gun' && (linkMode ? (
+            {(linkMode ? (
               <div className="card">
                 <h3>Rutin oluştur</h3>
                 <input value={linkName} onChange={(e) => setLinkName(e.target.value)} placeholder="Rutin adı (ops. — ör. Sabah rutini)" style={{ marginBottom: 8 }} />
@@ -3391,7 +3406,7 @@ export default function Rite() {
                 yer almıyor (kullanıcı isteği). ⋯ menüsünden bir tür seçilip "taşınınca" (bkz. notuTasi) o an
                 Ajanda'da görüntülenen güne (day) Yapılacak/Alışkanlık/Randevu olarak düşüyor ve doğal olarak bu
                 listeden kalkıp yukarıdaki normal gün listesine katılıyor. */}
-            {ajView === 'gun' && !linkMode && notlar.length > 0 && (
+            {!linkMode && notlar.length > 0 && (
               <div style={{ marginTop: 4 }}>
                 <div className="timediv"><span className="tl">Notlar</span><span className="ln" /></div>
                 {notlar.map((rt) => (
@@ -3402,53 +3417,69 @@ export default function Rite() {
               </div>
             )}
 
-            {ajView === 'ay' && (() => {
-              const base = parseD(day); const y = base.getFullYear(), mo = base.getMonth();
+            {/* Ay takvimi + Yaklaşan aktiviteler artık ayrı bir "Ay" sayfası değil, takvim ikonuyla açılan bir
+                popup/overlay (2026-09-17, Behnan kararı — bkz. ayPopupOpen/ayCursor tanımı, yukarısı). Popup
+                kendi ay gezinmesini (ayCursor) kullanır, bir güne dokununca gerçek seçim (setSelDate) yapılıp
+                kapanır; dışarı dokununca da (hiçbir seçim yapmadan) kapanır. */}
+            {ayPopupOpen && (() => {
+              const cursor = ayCursor || day;
+              const base = parseD(cursor); const y = base.getFullYear(), mo = base.getMonth();
               const startDow = (new Date(y, mo, 1).getDay() + 6) % 7; // Pzt=0
               const gunSay = new Date(y, mo + 1, 0).getDate();
               const cells: (string | null)[] = [];
               for (let i = 0; i < startDow; i++) cells.push(null);
               for (let d = 1; d <= gunSay; d++) cells.push(iso(new Date(y, mo, d)));
               while (cells.length % 7) cells.push(null);
+              // "Yaklaşan randevular" → "Yaklaşan aktiviteler" (2026-09-17, Randevu birleşmesi, Behnan kararı:
+              // "neyin önemli olduğu bilgisi artık yok o yüzden her aktiviteyi listeleyecektir") — eskiden sadece
+              // kart_tipi==='randevu' (Meridyen görüşmesi) ya da kart_config.randevu (eski kişisel Randevu
+              // bayrağı) taşıyanlar listeleniyordu; artık tek-günlük (baslangic===bitis), gelecekteki, Not
+              // olmayan HER ritüel (Aktivite dahil) burada — ayrım kalmadığı için filtre yok.
+              const yaklasanlar = rituals.filter((r) => !r.mezun && !isNotKart(r) && r.baslangic && r.baslangic === r.bitis && r.baslangic >= today).sort((a, b) => (a.baslangic < b.baslangic ? -1 : 1));
               return (
-                <div className="card">
-                  <div className="calhead">{['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'].map((w) => <span key={w}>{w}</span>)}</div>
-                  <div className="calgrid">
-                    {cells.map((ds, i) => {
-                      if (!ds) return <div key={i} className="calcell empty" />;
-                      // Sayıma yalnız "yapılabilir" (done'lanabilir) ritüeller: mesaj tipi video (done:false), ayraçlar ve
-                      // Not (sticky note — checkbox'ı/tamamlanma kavramı yok, Ayraç gibi bir görev değil) hariç.
-                      const gunRit = rituals.filter((r) => !r.mezun && activeOn(r, ds) && r.kart_tipi !== 'ayrac' && !isNotKart(r) && !(r.kart_tipi === 'video' && r.kart_config && r.kart_config.done === false));
-                      const n = gunRit.length;
-                      const done = gunRit.filter((r) => logs.some((l) => l.ritual_id === r.id && l.tarih === ds && l.yapildi)).length;
-                      return (
-                        <button key={i} className={'calcell' + (ds === today ? ' today' : '') + (ds === day ? ' sel' : '')} onClick={() => { setSelDate(ds); setAjView('gun'); }}>
-                          <span className="calnum">{parseD(ds).getDate()}</span>
-                          {n > 0 && <span className={'calcount' + (done >= n ? ' full' : '')}>{done}/{n}</span>}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div className="note" style={{ marginTop: 6 }}>Her günde yapılan/planlanan task. Bir güne dokun → o güne git.</div>
-                </div>
-              );
-            })()}
-
-            {ajView === 'ay' && (() => {
-              const randevular = rituals.filter((r) => !r.mezun && r.baslangic && r.baslangic === r.bitis && r.baslangic >= today && (r.kart_tipi === 'randevu' || r.kart_config?.randevu === true)).sort((a, b) => (a.baslangic < b.baslangic ? -1 : 1));
-              if (randevular.length === 0) return null;
-              return (
-                <div style={{ marginTop: 10 }}>
-                  <div className="tod">📅 Yaklaşan randevular</div>
-                  {randevular.map((r) => (
-                    <div key={r.id} className="actcard" onClick={() => openRit(r)}>
-                      <div style={{ flex: 1 }}>
-                        <div className="n">{kartIkon(r.kart_tipi) || '📅'} {r.ad}</div>
-                        <div className="o">{dayLabel(r.baslangic)}{r.hatirlatma_saat ? ' · 🔔 ' + r.hatirlatma_saat : ''}</div>
-                      </div>
-                      <span className="go">›</span>
+                <div className="modal" onMouseDown={() => setAyPopupOpen(false)}>
+                  <div className="sheet small" onMouseDown={(e) => e.stopPropagation()}>
+                    <button className="x" onClick={() => setAyPopupOpen(false)}>×</button>
+                    <div className="datenav" style={{ margin: '0 0 8px' }}>
+                      <button className="arrow" onClick={() => shiftAyCursor(-1)}>‹</button>
+                      <div className="dlabel">{ayLabel(cursor)}</div>
+                      <button className="arrow" onClick={() => shiftAyCursor(1)}>›</button>
                     </div>
-                  ))}
+                    <div className="card">
+                      <div className="calhead">{['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'].map((w) => <span key={w}>{w}</span>)}</div>
+                      <div className="calgrid">
+                        {cells.map((ds, i) => {
+                          if (!ds) return <div key={i} className="calcell empty" />;
+                          // Sayıma yalnız "yapılabilir" (done'lanabilir) ritüeller: mesaj tipi video (done:false), ayraçlar ve
+                          // Not (sticky note — checkbox'ı/tamamlanma kavramı yok, Ayraç gibi bir görev değil) hariç.
+                          const gunRit = rituals.filter((r) => !r.mezun && activeOn(r, ds) && r.kart_tipi !== 'ayrac' && !isNotKart(r) && !(r.kart_tipi === 'video' && r.kart_config && r.kart_config.done === false));
+                          const n = gunRit.length;
+                          const done = gunRit.filter((r) => logs.some((l) => l.ritual_id === r.id && l.tarih === ds && l.yapildi)).length;
+                          return (
+                            <button key={i} className={'calcell' + (ds === today ? ' today' : '') + (ds === day ? ' sel' : '')} onClick={() => { setSelDate(ds); setAyPopupOpen(false); }}>
+                              <span className="calnum">{parseD(ds).getDate()}</span>
+                              {n > 0 && <span className={'calcount' + (done >= n ? ' full' : '')}>{done}/{n}</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div className="note" style={{ marginTop: 6 }}>Her günde yapılan/planlanan task. Bir güne dokun → o güne git.</div>
+                    </div>
+                    {yaklasanlar.length > 0 && (
+                      <div style={{ marginTop: 10 }}>
+                        <div className="tod">📅 Yaklaşan aktiviteler</div>
+                        {yaklasanlar.map((r) => (
+                          <div key={r.id} className="actcard" onClick={() => { setAyPopupOpen(false); openRit(r); }}>
+                            <div style={{ flex: 1 }}>
+                              <div className="n">{kartIkon(r.kart_tipi) || '📅'} {r.ad}</div>
+                              <div className="o">{dayLabel(r.baslangic)}{r.hatirlatma_saat ? ' · 🔔 ' + r.hatirlatma_saat : ''}</div>
+                            </div>
+                            <span className="go">›</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               );
             })()}
@@ -3892,9 +3923,15 @@ export default function Rite() {
         // geliyor — geçiş kartın içindeki "🔁 Tekrarla" anahtarından (bkz. setRitTekrarla). Eski deneysel "Kart"
         // tipi (kart_config.genel, isYeniKart) tamamen kaldırıldı — isKisisel artık onu da (varsa eski kayıtlar)
         // kapsıyor, kart_config.genel bayrağının kendisi kullanılmıyor.
-        const kisiselTur: 'not' | 'randevu' | 'aliskanlik' | 'yapilacak' = kCfg?.randevu ? 'randevu' : (o.aliskanlik ? 'aliskanlik' : (kCfg?.gorev ? 'yapilacak' : 'not'));
-        const kisiselEtiket = kisiselTur === 'randevu' ? 'Randevu' : (kisiselTur === 'aliskanlik' || kisiselTur === 'yapilacak') ? 'Aktivite' : 'Not';
-        const kisiselYeni = kisiselTur === 'randevu' ? 'Yeni randevu' : (kisiselTur === 'aliskanlik' || kisiselTur === 'yapilacak') ? 'Yeni aktivite' : 'Yeni not';
+        // "Randevu" ayrı bir tür olmaktan çıktı (2026-09-17, Behnan kararı — Randevu/Aktivite/Not tartışması):
+        // artık bir randevu da sadece bir Aktivite — "Cuma 15:00 diş randevusu" gibi bilgiler serbest metin
+        // (içerik) olarak yazılıyor, kartın günü (baslangic) yine yapılandırılmış kalıyor ama saat ayrı bir alan
+        // değil. Eski kart_config.randevu bayrağı geriye dönük uyumluluk için 'yapilacak' ile birlikte okunuyor
+        // (bkz. aşağısı) — eski randevu kayıtları otomatik olarak birer Aktivite gibi davranıyor, veri
+        // migration'ı gerekmedi.
+        const kisiselTur: 'not' | 'aliskanlik' | 'yapilacak' = o.aliskanlik ? 'aliskanlik' : ((kCfg?.gorev || kCfg?.randevu) ? 'yapilacak' : 'not');
+        const kisiselEtiket = (kisiselTur === 'aliskanlik' || kisiselTur === 'yapilacak') ? 'Aktivite' : 'Not';
+        const kisiselYeni = (kisiselTur === 'aliskanlik' || kisiselTur === 'yapilacak') ? 'Yeni aktivite' : 'Yeni not';
         // Kart daha bu an ＋ menüsünden oluşturulduysa (taze) ya da hâlâ taslaksa, "zaten var olan bir kart"
         // için anlamlı mezun et / paylaş seçenekleri gizli kalır (kullanıcı isteği) — hem aşağıdaki genel
         // zamanlama şeridinde hem de kişisel kartın kendi ince başlık şeridinde kullanılıyor.
@@ -3993,13 +4030,9 @@ export default function Rite() {
                       kadar duran" bir yapışkan not; kullanıcı isteği "tarih seçimi öyle mi konuşmuştuk"
                       sonrası kaldırıldı). baslangic hâlâ dahili olarak var (Ayraç mantığıyla "hangi günden
                       itibaren görünsün" için) ama kullanıcıya hiç gösterilmiyor/değiştirilmiyor. */}
-                  {/* Not'ta ve Aktivite'de Paylaş yok artık (kullanıcı isteği — çoklu video/zengin içerik
-                      olmadığı için paylaşımın pek bir anlamı kalmıyor; sadece ailece kullanılan Randevu'da
-                      kalıyor). */}
-                  {kisiselTur === 'randevu' && !paylasilamaz && !isTaze && <button type="button" onClick={() => { setPaylasOpen(true); setKMsg(''); }} title="Paylaş" style={{ background: 'none', border: 'none', padding: 0, fontSize: 16, cursor: 'pointer', opacity: .55 }}>↪️</button>}
-                  {/* Randevu'nun 🔔'ü artık burada değil — diğer kartlarla aynı yerde, gövdedeki standart
-                      Bildirim şeridinde (kullanıcı isteği: "bildirimin yerini standart yapacağız, randevuda
-                      da aynen gövdede olacak"). */}
+                  {/* Bu şeritteki ayrı ↪️ Paylaş ikonu kaldırıldı (2026-09-17, Randevu birleşmesi) — eskiden
+                      sadece Randevu'da vardı, Randevu tür olarak kalkınca gereksizleşti; Paylaş zaten liste
+                      satırının "⋯" menüsünde (ritMenuFor) tüm kişisel kartlarda duruyor. */}
                 </div>
               ) : (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -4095,20 +4128,14 @@ export default function Rite() {
               </div>
               );
             })()}
-            {/* Not eklerken/düzenlerken "bu bir randevu" seçme kutusu artık yok — Randevu, alttaki ＋ menüsünden
-                kendi başına oluşturuluyor. Randevunun kendi tarihi/saati burada (kart_config.saat, baslangic);
-                bildirimin ne zaman geleceği ayrı — 🔔'den, farklı bir tarih/saat olarak ayarlanabilir (kullanıcı isteği).
-                Not ve Alışkanlık artık aynı işi kendi Zamanlama şeritlerinden yapıyor (bkz. aşağısı) — Randevu
-                henüz ele alınmadı, o yüzden bu blok sadece Randevu'da kalıyor. */}
-            {isRit && isKisisel && kisiselTur === 'randevu' && (
-              <div className="kv" style={{ margin: '4px 0 10px' }}>
-                <div className="k">📅 Randevu ne zaman</div>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <input type="date" value={o.baslangic || ''} onChange={(e) => e.target.value && ritTasi(o.id, e.target.value)} style={{ width: 'auto' }} />
-                  <input type="time" value={kCfg?.saat || ''} onChange={(e) => bilgiKaydet({ ...kCfg, saat: e.target.value || null })} style={{ width: 'auto' }} />
-                </div>
-              </div>
-            )}
+            {/* Ayrı "Randevu ne zaman" (tarih+saat) bloğu kaldırıldı (2026-09-17, Randevu birleşmesi, Behnan
+                kararı: "randevu diye bir şey yok, o da aktivite... saat 15 diş randevu diye açıklama yazdım,
+                bildirimimi de ayrı bir saate ayarladım"). Kartın günü (baslangic) hâlâ yapılandırılmış — yukarıdaki
+                ince başlık şeridindeki tarih seçiciyle (Aktivite'de zaten var) yönetiliyor; saat artık ayrı bir
+                alan değil, içeriğe serbest metin olarak yazılıyor ("Cuma saat 15…"). Bildirim (ne zaman haber
+                verileceği) tamamen ayrı ve bağımsız — aşağıdaki standart Bildirim şeridinden (🔔) ayarlanıyor,
+                tarihi de saati de kartın kendi gününden bağımsız seçilebiliyor (bkz. aşağısı, kisiselTur==='yapilacak'
+                dalı) — tam da bu ihtiyacı zaten karşılıyordu, ek bir şey gerekmedi. */}
             {/* Inbox önizlemesinde randevu tarihi/saati salt okunur gösterilir — kayıt henüz yok, düzenlenemez.
                 Havuz'da bu alan yok (Havuz aktivitelerinde baslangic/bitis kavramı hiç yok), o yüzden preview'a özel. */}
             {preview && kTip === 'bilgi' && !!kCfg?.randevu && (o.baslangic || kCfg?.saat) && (
@@ -4144,9 +4171,11 @@ export default function Rite() {
               // 'yapilacak'/'aliskanlik') açık — Not'un kendi ayrı tekli video mekanizması kaldırıldı, hepsi
               // aynı çoklu-video şeridini + sayfa seviyesindeki "🎬 Video" tetikleyicisini paylaşıyor
               // (kullanıcı isteği, 2026-09-17: "önce not'u aktivite de olduğu şekilde video eklenecek hale getirelim").
-              if (editable) return <BilgiKartEdit cfg={kCfg} onSave={bilgiKaydet} randevu={!!kCfg?.randevu} notTasarimi={isKisisel} readOnly={kisiselGorunumModu} cokluVideo={isKisisel && (kisiselTur === 'aliskanlik' || kisiselTur === 'yapilacak' || kisiselTur === 'not')} videoEkleTetik={videoEkleAcik} onVideoEkleTetikKapat={() => setVideoEkleAcik(false)} videoYok={false} ekAyri={isKisisel} icerikBaslikTuret={isKisisel && kisiselTur === 'not'} onIcerikBaslikTuret={(ilkSatir) => setRitAd(o.id, ilkSatir)} />;
+              // randevu prop'u artık hiç geçilmiyor (Randevu birleşmesi) — eski randevu-bayraklı kayıtlar da dahil
+              // hepsi standart içerik/video tasarımından geçiyor, ayrı "yer" alanı yok.
+              if (editable) return <BilgiKartEdit cfg={kCfg} onSave={bilgiKaydet} notTasarimi={isKisisel} readOnly={kisiselGorunumModu} cokluVideo={isKisisel && (kisiselTur === 'aliskanlik' || kisiselTur === 'yapilacak' || kisiselTur === 'not')} videoEkleTetik={videoEkleAcik} onVideoEkleTetikKapat={() => setVideoEkleAcik(false)} videoYok={false} ekAyri={isKisisel} icerikBaslikTuret={isKisisel && kisiselTur === 'not'} onIcerikBaslikTuret={(ilkSatir) => setRitAd(o.id, ilkSatir)} />;
               if (!preview && isRit) return <BilgiKart cfg={kCfg} onSave={bilgiKaydet} />;
-              return <BilgiKartEdit cfg={kCfg} onSave={() => {}} randevu={!!kCfg?.randevu} readOnly />;
+              return <BilgiKartEdit cfg={kCfg} onSave={() => {}} readOnly />;
             })()}
             {/* "🔋 Alan" etiketleme çipi KALDIRILDI (2026-09-16, Behnan kararı) — bu, sabit 4 değerli eski
                 "kişisel pil" sözlüğüydü (PIL_ALAN: hareket/beslenme/meşgale/sosyal), asıl amacı Ajanda'nın gün
@@ -4168,10 +4197,10 @@ export default function Rite() {
                 Zamanlama panosunu açan bir özet satırı — bkz. yukarısı "Hangi güne taşı" notu. */}
             {isRit && isKisisel && (
               <div style={{ margin: '0 0 8px' }}>
-                {/* Yapılacak'ta ve Randevu'da da Süre/Günler yok — Randevu'nun kendi tarihi zaten yukarıdaki
-                    ayrı bloktan yönetiliyor, Süregelen/Süreli/Günler kavramı hiç yok (kullanıcı isteği
-                    doğrultusunda, tablodaki "İşaretleyip tamamlayana kadar her gün görünür" Yapılacak için). */}
-                {(kisiselTur === 'not' || kisiselTur === 'yapilacak' || kisiselTur === 'randevu') ? null : (
+                {/* Yapılacak'ta (eski Randevu dahil, artık aynı tür) Süre/Günler yok — Süregelen/Süreli/Günler
+                    kavramı hiç yok (kullanıcı isteği doğrultusunda, tablodaki "İşaretleyip tamamlayana kadar
+                    her gün görünür" Yapılacak için). */}
+                {(kisiselTur === 'not' || kisiselTur === 'yapilacak') ? null : (
                   // Alışkanlık: Süre/Günler artık açılıp kapanan bir panel değil — dokununca açılan bir şerit
                   // yerine doğrudan görünüyor (kullanıcı isteği: "şeride basıp açılmasına gerek yok artık").
                   // "Süregelen" seçeneği de kalktı, Süre hep bir gün sayısı (varsayılan 21) — "Uygula" butonu
@@ -4213,17 +4242,17 @@ export default function Rite() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
                       {/* Alışkanlık/Not: bildirim günlük tekrarlayan — sadece saat, tarih kavramı yok (kullanıcı
                           isteği: "Alışkanlık için bu hatırlatma şekli doğru", "Not için ... yine alışkanlıkta
-                          olduğu gibi"). Yapılacak/Randevu: bildirim o tarih+saatte BİR KERE gelmeli (kullanıcı
-                          isteği: "bir tarih alanı koymak ve o tarih ve saatte bir kere bildirim göndermesini
-                          sağlamalıyız") — bunun için kart_config.hatirlatma_tarih zaten vardı (cron bunu görünce
-                          günlük pencere yerine sadece o günü kullanıyor, bkz. app/api/cron/reminders/route.ts),
-                          sadece arayüzden kaldırılmıştı; setRandevuBildirim (saat+tarihi birlikte yazan, Meridyen
-                          kartlarının kendi 🔔 menüsünde hâlâ kullanılan fonksiyon) burada yeniden devreye giriyor.
-                          Tarih alanı varsayılan olarak kartın kendi tarihini (o.baslangic) alıyor, isterseniz
-                          değiştirebilirsiniz (ör. randevudan bir gün önce hatırlat). */}
+                          olduğu gibi"). Yapılacak (eski Randevu dahil): bildirim o tarih+saatte BİR KERE gelmeli
+                          (kullanıcı isteği: "bir tarih alanı koymak ve o tarih ve saatte bir kere bildirim
+                          göndermesini sağlamalıyız") — bunun için kart_config.hatirlatma_tarih zaten vardı (cron
+                          bunu görünce günlük pencere yerine sadece o günü kullanıyor, bkz.
+                          app/api/cron/reminders/route.ts). Tarih alanı varsayılan olarak kartın kendi tarihini
+                          (o.baslangic) alıyor, isterseniz değiştirebilirsiniz — Randevu birleşmesiyle (2026-09-17)
+                          bu zaten "içeriğe 'Cuma 15:00' yaz, bildirimi ayrı bir saate/güne kur" ihtiyacını tam
+                          karşılıyor, ek bir şey gerekmedi. */}
                       {kisiselGorunumModu ? (
                         <span style={{ fontSize: 13, color: 'var(--muted)' }}>{o.hatirlatma_saat}</span>
-                      ) : (kisiselTur === 'yapilacak' || kisiselTur === 'randevu') ? (
+                      ) : kisiselTur === 'yapilacak' ? (
                         <>
                           <input type="time" value={o.hatirlatma_saat || ''} onChange={(e) => setRandevuBildirim(o.id, e.target.value, o.kart_config?.hatirlatma_tarih || o.baslangic || '')} style={{ width: 'auto', fontSize: 13 }} />
                           {o.hatirlatma_saat && <input type="date" min={today} value={o.kart_config?.hatirlatma_tarih || o.baslangic || ''} onChange={(e) => setRandevuBildirim(o.id, o.hatirlatma_saat, e.target.value)} title="Bildirim tarihi" style={{ width: 'auto', fontSize: 13 }} />}
@@ -4451,9 +4480,7 @@ export default function Rite() {
           var olan Paylaş modalini (detay ekranının içinde, "📥 Kendi Havuzuma al" da dahil) kullandığı için
           önce openRit ile detayı açıp üstüne paylasOpen'ı tetikliyor. */}
       {ritMenuFor && (() => {
-        const rmCfg = ritMenuFor.kart_config || {};
         const rmKisisel = ritMenuFor.kart_tipi === 'bilgi' && ritMenuFor.kaynak === 'Kendi';
-        const rmTur: 'not' | 'randevu' | 'aliskanlik' | 'yapilacak' = rmCfg.randevu ? 'randevu' : (ritMenuFor.aliskanlik ? 'aliskanlik' : (rmCfg.gorev ? 'yapilacak' : 'not'));
         return (
         <div className="modal top2" onMouseDown={() => setRitMenuFor(null)}>
           <div className="sheet small" onMouseDown={(e) => e.stopPropagation()}>
@@ -4461,20 +4488,19 @@ export default function Rite() {
             <h3 style={{ marginBottom: 8 }}>{ritMenuFor.ad}</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {/* Not'u ajandaya taşı (kullanıcı isteği: sürüklemek yerine tür seçerek) — hedef gün her zaman o an
-                  Ajanda'da görüntülenen gün (day). Sadece Not'larda görünür. Tek "Aktivite yap" seçeneği (2026-09-16:
-                  eski ayrı Yapılacak/Alışkanlık dönüştürme butonları Aktivite birleşmesiyle tek butona indi —
-                  varsayılan "Bugün", kartın içindeki 🔁 Tekrarla ile sonradan tekrarlanan yapılabilir). */}
+                  Ajanda'da görüntülenen gün (day, ör. takvimden önceden bir gün seçildiyse o gün). Sadece
+                  Not'larda görünür. Tek "Ajandaya koy" seçeneği (2026-09-17, Randevu birleşmesi — Behnan kararı:
+                  eski ayrı "Aktivite yap"/"Randevu yap" butonları Randevu tür olmaktan çıkınca tek butona indi;
+                  hedefin türü hep 'yapilacak' — varsayılan "Bugün", kartın içindeki 🔁 Tekrarla ile sonradan
+                  tekrarlanan yapılabilir, randevu detayı içeriğe serbest metin olarak yazılır). */}
               {isNotKart(ritMenuFor) && (
-                <>
-                  <button className="btn ghost sm" onClick={() => { const id = ritMenuFor.id; setRitMenuFor(null); notuTasi(id, 'yapilacak'); }}>☑️ Aktivite yap ({kisaTarih(day)})</button>
-                  <button className="btn ghost sm" onClick={() => { const id = ritMenuFor.id; setRitMenuFor(null); notuTasi(id, 'randevu'); }}>📅 Randevu yap ({kisaTarih(day)})</button>
-                </>
+                <button className="btn ghost sm" onClick={() => { const id = ritMenuFor.id; setRitMenuFor(null); notuTasi(id, 'yapilacak'); }}>🗓️ Ajandaya koy ({kisaTarih(day)})</button>
               )}
-              {rmKisisel && rmTur !== 'randevu' && (
+              {rmKisisel && (
                 <button className="btn ghost sm" onClick={() => { setPuanDeger(ritMenuFor.puan || 0); setPuanModal(ritMenuFor); setRitMenuFor(null); }}>⭐ Puanla{ritMenuFor.puan ? ' (' + ritMenuFor.puan + '★)' : ''}</button>
               )}
               {rmKisisel && !ritMenuFor.sablon_id && (
-                <button className="btn ghost sm" onClick={() => { const r = ritMenuFor; setRitMenuFor(null); openRit(r); setPaylasOpen(true); setKMsg(''); }}>↪️ Paylaş{rmTur !== 'randevu' ? ' / Havuza kaydet' : ''}</button>
+                <button className="btn ghost sm" onClick={() => { const r = ritMenuFor; setRitMenuFor(null); openRit(r); setPaylasOpen(true); setKMsg(''); }}>↪️ Paylaş / Havuza kaydet</button>
               )}
               <button className="btn ghost sm" onClick={() => { const id = ritMenuFor.id; setRitMenuFor(null); ritSil(id); }}>🗑️ Sil</button>
               <button className="btn ghost sm" onClick={() => setRitMenuFor(null)}>Vazgeç</button>
@@ -4794,18 +4820,19 @@ export default function Rite() {
                   isteği "sarı sticker olursa güzel olur". Emoji fontlarında gerçek bir "sarı sticky note" glifi
                   olmadığı için (📝 sadece "not" anlamına geliyor, renk taşımıyor) rengi doğrudan CSS'le veriyoruz. */}
               <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); yeniTaslakAc('not'); }}><span className="ekic" style={{ display: 'inline-block', width: 22, height: 22, borderRadius: 4, background: '#f5d76e', border: '1px solid #d9b84a', boxShadow: '1px 1px 2px rgba(0,0,0,.15)' }} />Not</button>
-              {/* Sıralama Not-Aktivite-Randevu (kullanıcı isteği, 2026-09-16: eski ayrı Yapılacak/Alışkanlık ＋
+              {/* Sıralama Not-Aktivite (kullanıcı isteği, 2026-09-16: eski ayrı Yapılacak/Alışkanlık ＋
                   girişleri "Aktivite" adı altında birleşti — varsayılan "Bugün"/tek seferlik, kartın içindeki
                   "🔁 Tekrarla" anahtarı sonradan Süre/Günler'i açar, bkz. setRitTekrarla).
                   2026-09 (aynı gün, Behnan kararı): bu menü artık SADECE Ajanda'dan açılıyor (bkz. yukarısı,
                   ajhead'deki yerel ＋) — Havuz'un eski "Alışkanlık" girişi (yeniHavuzTaslakAc ile, screen==='havuz'
                   dalı) ve `screen !== 'havuz'` koruma koşulları buradan KALDIRILDI, çünkü artık hep doğruydular.
                   yeniHavuzTaslakAc fonksiyonu SİLİNMEDİ — Havuz'a eklemenin "başka bir yöntemi" (Behnan) ileride
-                  onu yeniden kullanabilir, sadece bu menüden erişimi kaldırıldı. */}
+                  onu yeniden kullanabilir, sadece bu menüden erişimi kaldırıldı.
+                  2026-09-17 (Randevu birleşmesi): ayrı "📅 Randevu" girişi kalktı — bir randevu artık sadece bir
+                  Aktivite, detayı içeriğe yazılıyor. */}
               <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); yeniTaslakAc('yapilacak'); }}><span className="ekic">☑️</span>Aktivite</button>
-              <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); yeniTaslakAc('randevu'); }}><span className="ekic">📅</span>Randevu</button>
               <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); setAyracAdVal(''); setAyracYeniOpen(true); }}><span className="ekic">➖</span>Ayraç</button>
-              <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); setScreen('ajanda'); setAjView('gun'); startLink(); }}><span className="ekic">🔗</span>Rutin</button>
+              <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); setScreen('ajanda'); startLink(); }}><span className="ekic">🔗</span>Rutin</button>
             </div>
           </div>
         </div>
