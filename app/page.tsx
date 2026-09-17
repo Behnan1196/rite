@@ -3194,6 +3194,12 @@ export default function Rite() {
         {/* ---------- AJANDA ---------- */}
         {screen === 'ajanda' && (
           <div>
+            {/* Başlık + tarih satırı sabitlendi (2026-09-17, Behnan kararı: "çok aktivite/not olunca aşağı
+                kaydırınca + için tekrar yukarı kaydırmam gerekiyor") — ekranın kendi kaydırma alanı yok, sayfa
+                (viewport) kaydığı için sticky burada doğrudan viewport'un üstüne yapışıyor; .main'in kendi
+                padding'ini (14px) negatif margin ile iptal edip kendi padding'iyle geri veriyoruz ki yapışınca
+                kenarlardan boşluk kaybolmasın/alttaki içerik arkadan görünmesin (opak --bg arka planı var). */}
+            <div style={{ position: 'sticky', top: 0, zIndex: 5, background: 'var(--bg)', margin: '-14px -14px 0', padding: '14px 14px 0' }}>
             <div className="ajhead">
               <h2>Ajanda</h2>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -3225,6 +3231,7 @@ export default function Rite() {
                 {day !== today && <div className="totoday">↺ bugüne dön</div>}
               </div>
               <button className="arrow" onClick={() => shiftDay(1)}>›</button>
+            </div>
             </div>
 
             <div className="weekstrip">
