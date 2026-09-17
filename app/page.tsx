@@ -4050,9 +4050,17 @@ export default function Rite() {
                       alışkanlıktaki gibi günlük bir kayıt değil (kullanıcı isteği: "done kutucuklu olan"). */}
                   {!isDraft && kisiselTur !== 'not' && kisiselTur !== 'aliskanlik' && <div className={'chk' + (ritDone(o.id) ? ' on' : '')} onClick={() => (kisiselTur === 'yapilacak' ? kartYapildiToggle(o) : toggleRit(o.id))} title="Yaptım">{ritDone(o.id) ? '✓' : ''}</div>}
                   <div style={{ flex: 1, fontSize: 11.5, fontWeight: 800, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.4px' }}>{isDraft ? kisiselYeni : (duzenleModu ? kisiselEtiket + ' Düzenle' : kisiselEtiket)}</div>
-                  {kisiselTur === 'aliskanlik' && !preview && !isTaze && !o.mezun && (
-                    <button type="button" onClick={() => setHabitMenuFor(o)} title="Alışkanlık seçenekleri" aria-label="Alışkanlık seçenekleri" style={{ background: 'none', border: 'none', padding: 0, fontSize: 16, cursor: 'pointer', opacity: .55 }}>🎓</button>
-                  )}
+                  {/* Kişisel Aktivite'deki "🎓 Alışkanlık seçenekleri" başlık ikonu (2026-09-17, Behnan kararı)
+                      TAMAMEN KALDIRILDI — hem gereksizdi hem hatalıydı. Gereksiz: menüdeki "⭐ Puanla" zaten
+                      kart listesindeki "⋯" (ritMenuFor) menüsünde her kişisel kart için var; "🔁 Tekrarla"nın
+                      kendisi zaten tekrarı kapatmanın doğru yolu. Hatalı: menüdeki "↩️ Alışkanlıktan çıkar"
+                      (setRitAliskanlik(id,false)) sadece aliskanlik:false yazıyor, kart_config.gorev/bitis'e HİÇ
+                      dokunmuyordu — Tekrarla'nın kapatma yolunun aksine (setRitTekrarla: gorev:true+bitis=
+                      baslangic) — sonuç: kisiselTur türetmesinde (aliskanlik? 'aliskanlik' : (gorev? 'yapilacak'
+                      : 'not')) hem aliskanlik hem gorev false kalınca kart SESSİZCE 'not'a dönüşüyordu. habitMenuFor
+                      modalinin kendisi VE bu ikonun kişisel-OLMAYAN (Meridyen/program kaynaklı ritüel, isKisisel
+                      false) eşleniği (bkz. aşağısı, isRit && !isKisisel bloğu) BİLEREK dokunulmadı — o ayrı bir
+                      bağlam, orada Tekrarla kavramı hiç yok, 🎓 hâlâ tek alışkanlık-aç/kapa + Puanla erişimi. */}
                   {/* "🔁 Tekrarla" (2026-09-16, Behnan kararı): Aktivite'nin (eski Yapılacak/Alışkanlık) tek-seferlik
                       ("Bugün") mi tekrarlanan mı olduğunu kartın içinden değiştiren anahtar — bkz. setRitTekrarla.
                       Açıkken (kisiselTur==='aliskanlik') dolu/vurgulu, kapalıyken (kisiselTur==='yapilacak') soluk. */}
