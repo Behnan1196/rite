@@ -2421,6 +2421,13 @@ export default function Rite() {
       kart_config: { ...cfg, gorev: !val },
       bitis: val ? (() => { const e = parseD(bas); e.setDate(e.getDate() + 20); return iso(e); })() : bas,
     };
+    // Süre input'unun kendi state'i (sureInput) SADECE kart açılırken (openDetay) senkronlanıyordu — Tekrarla
+    // burada bitis'i (dolayısıyla gerçek süreyi) 1 günden 21 güne değiştirdiği hâlde sureInput'a hiç dokunmuyordu.
+    // Sonuç (Behnan'ın bulduğu bug): Süre kutusu hâlâ eski "1"i gösteriyordu, kullanıcı ona dokunmadan Kaydet'e
+    // basınca DB'ye gerçek (21 günlük) bitis yazılıyordu — görünen değerle kaydedilen değer UYUŞMUYORDU. Kutuya
+    // yeni bir sayı yazılınca (ör. "2") sorun görünmüyordu çünkü o zaman onBlur zaten gerçek değeri güncelliyordu.
+    // Burada da aynı hesabı (21/1 gün) sureInput'a yansıtarak kutunun her zaman gerçek süreyi göstermesi sağlandı.
+    setSureInput(val ? '21' : '1');
     if (!id || duzenleModu) { patchDetay(patch); return; } // taslak / düzenleme modu
     await supabase.from('dog_rituals').update(patch).eq('id', id);
     patchDetay(patch);
@@ -2885,8 +2892,12 @@ export default function Rite() {
   // gösterimi aşağıdaki `notlar` listesi ve Ajanda'nın altındaki "Notlar" şeridi (bkz. rowbody JSX'i).
   const habits = rituals.filter((r) => !r.mezun && !isNotKart(r) && activeOn(r, day));
   // Notlar: güne bağlı değil, mezun olmamış tüm kişisel Not'lar — Ajanda'nın altında, hangi gün seçili olursa
-  // olsun hep aynı şekilde görünen ayrı bir şerit (kullanıcı isteği).
-  const notlar = rituals.filter((r) => !r.mezun && isNotKart(r));
+  // olsun hep aynı şekilde görünen ayrı bir şerit (kullanıcı isteği). Notlar SortableRow/DndContext'e hiç
+  // girmediği için elle sürükle-sıralama yok (Behnan: "sıralayamıyoruz, gerek de yok gibi, bir an önce karar
+  // verip tasnif etsin") — bunun yerine otomatik olarak en yeni not en üstte (blok_sira, Aktivite listesindeki
+  // blokSira ile aynı "oluşturulma anı" alanı — taslakKaydet'te Date.now() olarak yazılıyor), aksi hâlde DB
+  // sorgusu sadece 'zaman'a göre sıralandığı için (tüm Not'larda zaman='gün' sabit) sıra keyfi kalıyordu.
+  const notlar = rituals.filter((r) => !r.mezun && isNotKart(r)).sort((a, b) => (Number(b.blok_sira) || 0) - (Number(a.blok_sira) || 0));
   // Çalışan programlar: program kimliğine göre grupla (ilerleme + süre kontrolü için).
   const programGruplari = Object.values(rituals.filter((r) => r.program && !r.mezun).reduce((acc: any, r: any) => {
     const g = acc[r.program] || (acc[r.program] = { pid: r.program, ad: r.program_ad || 'Program', bas: r.baslangic || today, bit: r.bitis || null, n: 0 });
