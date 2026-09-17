@@ -1361,6 +1361,11 @@ export default function Rite() {
   // altında açılıp özel gün seçimine izin veriyor. Kart zaten özel günlerle geldiyse (gunler doluysa) baştan
   // açık başlıyor ki kullanıcı mevcut seçimini görsün — bkz. aşağıdaki useEffect.
   const [gunlerAcik, setGunlerAcik] = useState(false);
+  // Süre satırının kompakt/düzenlenebilir hâli (2026-09-17, Behnan kararı — "Tekrarla'nın yeri" tartışması):
+  // Süre artık her zaman görünen tek bir alan ("Süre 1 gün" ↔ "Süre 21 gün"), dokununca sayı kutusuna açılıyor
+  // — ayrı bir "🔁 Tekrarla" anahtarına gerek kalmadı, gün sayısı 1'den büyüğe çıkınca kart kendiliğinden
+  // tekrarlanan hâle geçiyor (bkz. aşağıdaki Süre şeridi ve title strip'ten kaldırılan 🔁 butonu).
+  const [sureAcik, setSureAcik] = useState(false);
   // Kişisel kartların (Not/Alışkanlık/Yapılacak/Randevu) ortak "ek" (attachment) satırı — Bildirim'le aynı
   // şeritte, tek dosya (kullanıcı isteği: "resim yüklemeyi attachment ikonuyla... bildirimle aynı satırda...
   // birden çok dosya yüklemeyi gerekirse tek dosyaya düşürebiliriz"). Randevu'nun eski büyük foto ızgarası da
@@ -1397,6 +1402,7 @@ export default function Rite() {
       setDuzenleOrijinal(null);
       setZamanOpen(false);
       setGunlerAcik(!!(o2.gunler && o2.gunler.length));
+      setSureAcik(false);
       setEkYukleniyor(false);
       setEkHata('');
       setEkBuyuk(false);
@@ -4061,12 +4067,12 @@ export default function Rite() {
                       modalinin kendisi VE bu ikonun kişisel-OLMAYAN (Meridyen/program kaynaklı ritüel, isKisisel
                       false) eşleniği (bkz. aşağısı, isRit && !isKisisel bloğu) BİLEREK dokunulmadı — o ayrı bir
                       bağlam, orada Tekrarla kavramı hiç yok, 🎓 hâlâ tek alışkanlık-aç/kapa + Puanla erişimi. */}
-                  {/* "🔁 Tekrarla" (2026-09-16, Behnan kararı): Aktivite'nin (eski Yapılacak/Alışkanlık) tek-seferlik
-                      ("Bugün") mi tekrarlanan mı olduğunu kartın içinden değiştiren anahtar — bkz. setRitTekrarla.
-                      Açıkken (kisiselTur==='aliskanlik') dolu/vurgulu, kapalıyken (kisiselTur==='yapilacak') soluk. */}
-                  {(kisiselTur === 'aliskanlik' || kisiselTur === 'yapilacak') && (
-                    <button type="button" onClick={() => setRitTekrarla(o.id, kisiselTur !== 'aliskanlik')} title={kisiselTur === 'aliskanlik' ? 'Tekrarlamayı kapat (Bugün)' : 'Tekrarla'} aria-label="Tekrarla" style={{ background: 'none', border: 'none', padding: 0, fontSize: 16, cursor: 'pointer', opacity: kisiselTur === 'aliskanlik' ? 1 : .4 }}>🔁</button>
-                  )}
+                  {/* "🔁 Tekrarla" başlık ikonu KALDIRILDI (2026-09-17, Behnan kararı — "Tekrarla'nın yeri"):
+                      aynı işlev artık aşağıdaki Süre şeridine taşındı — Süre "1 gün" iken kart Bugün/tek seferlik
+                      (kisiselTur='yapilacak'), sayı 1'den büyüğe çıkınca kart kendiliğinden tekrarlanan hâle geçiyor
+                      (kisiselTur='aliskanlik') — bkz. aşağısı, "🗓️ Süre" satırı, setRitTekrarla hâlâ aynı iki
+                      alanı (aliskanlik + kart_config.gorev + bitis) tutarlı şekilde ayarlamak için kullanılıyor,
+                      sadece artık tek bir buton yerine Süre alanının kendisinden tetikleniyor. */}
                   {/* Alışkanlık/Aktivite'nin tarihini Zamanlama panosunun içinden değiştirmek pratik değildi
                       (kullanıcı isteği: "başka bir yerden tarih seçimiyle daha pratik yapılmalı") — başlıkta
                       doğrudan erişilebilir bir native tarih seçici eklendi. Ayrı bir 📅 ikonu kalktı (kullanıcı
@@ -4248,38 +4254,55 @@ export default function Rite() {
                 Zamanlama panosunu açan bir özet satırı — bkz. yukarısı "Hangi güne taşı" notu. */}
             {isRit && isKisisel && (
               <div style={{ margin: '0 0 8px' }}>
-                {/* Yapılacak'ta (eski Randevu dahil, artık aynı tür) Süre/Günler yok — Süregelen/Süreli/Günler
-                    kavramı hiç yok (kullanıcı isteği doğrultusunda, tablodaki "İşaretleyip tamamlayana kadar
-                    her gün görünür" Yapılacak için). */}
-                {(kisiselTur === 'not' || kisiselTur === 'yapilacak') ? null : (
-                  // Alışkanlık: Süre/Günler artık açılıp kapanan bir panel değil — dokununca açılan bir şerit
-                  // yerine doğrudan görünüyor (kullanıcı isteği: "şeride basıp açılmasına gerek yok artık").
-                  // "Süregelen" seçeneği de kalktı, Süre hep bir gün sayısı (varsayılan 21) — "Uygula" butonu
-                  // da kalktı, gün sayısı değiştirilince yerel arabelleğe (buffer) yazılıyor, asıl kaydetme
-                  // yine kartın kendi Kaydet'inde (kullanıcı isteği: "kaydetle uygulayacak").
+                {/* Not'ta Süre/Günler yok (tarihsiz, silininceye kadar duran bir yapışkan not). Yapılacak/
+                    Alışkanlık'ta artık İKİSİ DE Süre'yi gösteriyor (2026-09-17, Behnan kararı — "Tekrarla'nın
+                    yeri"): Süre TEK BAŞINA hem gün sayısını hem tekrarlanıp tekrarlanmadığını belirliyor, ayrı
+                    bir "🔁 Tekrarla" anahtarına gerek kalmadı (title strip'ten kaldırıldı, bkz. yukarısı). Süre
+                    kompakt bir çip olarak duruyor ("Süre 1 gün"), dokununca sayı kutusuna açılıyor (sureAcik);
+                    kutudan çıkınca (onBlur) sayı 1'e düşürülürse setRitTekrarla(false) ile Bugün/tek-seferlik
+                    hâline (gorev:true, bitis=baslangic), 1'in üzerine çıkarılırsa setRitTekrarla(true) (varsayılan
+                    21 günlük pencereyi kurup aliskanlik:true/gorev:false yapıyor) ARDINDAN setRitSure ile o anki
+                    (girilenin kendisi) gün sayısına inceltiliyor. Günler/"Her gün" çipi SADECE fiilen tekrarlıyken
+                    (kisiselTur==='aliskanlik') anlamlı, o yüzden Süre satırının sağında sadece o zaman görünüyor;
+                    basılırsa altında haftanın günleri açılıyor (gunlerAcik) — "2 satırda" tasarım budur. */}
+                {kisiselTur !== 'not' && (
                   <div style={{ padding: '7px 8px', borderRadius: 8, background: '#fff', border: '1px solid var(--line)', margin: '0 0 8px' }}>
-                    {/* Gün sayısı + başlangıç/bitiş artık aynı satırda (kullanıcı isteği: "3 satırı kaplıyor,
-                        gün sayısı alanı biraz küçülebilir ve başlangıç-bitiş sağında gösterilebilir"). */}
                     <div className="kv" style={{ marginTop: 0 }}><div className="k">🗓️ Süre</div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                          <input type="number" min={1} value={sureInput} onChange={(e) => setSureInput(e.target.value)} onBlur={() => setRitSure(o.id, parseInt(sureInput) || 21)} style={{ width: 46, padding: '7px 8px' }} /> gün
-                        </span>
+                        {sureAcik ? (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            <input
+                              type="number" min={1} autoFocus value={sureInput}
+                              onChange={(e) => setSureInput(e.target.value)}
+                              onBlur={() => {
+                                const n = Math.max(1, parseInt(sureInput) || 1);
+                                setSureInput(String(n));
+                                if (n <= 1) { if (kisiselTur === 'aliskanlik') setRitTekrarla(o.id, false); }
+                                else { if (kisiselTur === 'yapilacak') setRitTekrarla(o.id, true); setRitSure(o.id, n); }
+                                setSureAcik(false);
+                              }}
+                              style={{ width: 46, padding: '7px 8px' }}
+                            /> gün
+                          </span>
+                        ) : (
+                          <span className="chip" onClick={() => setSureAcik(true)}>{sureInput || '1'} gün</span>
+                        )}
                         <span className="note" style={{ marginTop: 0 }}>Başlangıç {kisaTarih(o.baslangic)}{o.bitis ? ' · bitiş ' + kisaTarih(o.bitis) : ''}</span>
+                        {kisiselTur === 'aliskanlik' && (
+                          <span className={'chip' + ((!o.gunler || o.gunler.length === 0) ? ' on' : '')} style={{ marginLeft: 'auto' }} onClick={() => { setRitGunler(o.id, []); setGunlerAcik((v) => !v); }}>Her gün</span>
+                        )}
                       </div>
                     </div>
-                    <div className="kv"><div className="k">Günler</div>
-                      <div>
-                        {/* "Her gün" varsayılan seçili gelir; basınca (kullanıcı isteği) altındaki haftanın
-                            günleri açılıp kapanıyor — aynı dokunuş hem "her gün"e sıfırlıyor hem özelleştirme
-                            listesini gösteriyor. */}
-                        <span className={'chip' + ((!o.gunler || o.gunler.length === 0) ? ' on' : '')} onClick={() => { setRitGunler(o.id, []); setGunlerAcik((v) => !v); }}>Her gün</span>
-                        {gunlerAcik && GUNLER.map(([n, l]) => {
-                          const sel = !!(o.gunler && o.gunler.includes(n));
-                          return <span key={n} className={'chip' + (sel ? ' on' : '')} onClick={() => { const cur: number[] = o.gunler ? [...o.gunler] : []; const nx = cur.includes(n) ? cur.filter((x) => x !== n) : [...cur, n]; setRitGunler(o.id, nx); }}>{l}</span>;
-                        })}
+                    {kisiselTur === 'aliskanlik' && gunlerAcik && (
+                      <div className="kv"><div className="k">Günler</div>
+                        <div>
+                          {GUNLER.map(([n, l]) => {
+                            const sel = !!(o.gunler && o.gunler.includes(n));
+                            return <span key={n} className={'chip' + (sel ? ' on' : '')} onClick={() => { const cur: number[] = o.gunler ? [...o.gunler] : []; const nx = cur.includes(n) ? cur.filter((x) => x !== n) : [...cur, n]; setRitGunler(o.id, nx); }}>{l}</span>;
+                          })}
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                 )}
                 {/* Bildirim şeridi: düzenleme modunda artık ayrı bir modal AÇMIYOR, hatta ayrı bir "aç/kapa"
