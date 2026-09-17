@@ -3134,15 +3134,31 @@ export default function Rite() {
             {/* Son ölçümler (2026-09, Behnan kararı): Gelişim'in eski "Ölçümler" kartının yerini alıyor —
                 "home'a yerleştirsek güzel olur, son ölçümleri orada alırız". Alan/dikey gruplaması yok, sadece
                 her ölçümün en son değeri (bkz. sonOlcumler) — Meridyen'in 13 alanıyla eski fayda-kaynaklı alan
-                sözlüğü arasında bir eşleme gerektirmiyor. Yeni ölçüm girişi hâlâ Gelişim'in ＋'sından. */}
-            {sonOlcumler.length > 0 && (
-              <div className="card" style={{ marginTop: 10 }}>
-                <h3>Son ölçümler</h3>
-                {sonOlcumler.map((o) => (
-                  <div key={o.k} className="mrow"><span>{o.etiket}</span><b>{o.deger} {o.birim}</b></div>
-                ))}
+                sözlüğü arasında bir eşleme gerektirmiyor.
+                2026-09 (Behnan kararı, WhatsApp-esinli sadeleştirme): Home'da ölçüm eklemek artık bottom_nav'ın
+                genel ＋'sından değil, buradaki başlık şeridinden — Havuz'daki Grup şeridiyle aynı görsel
+                standart (bkz. aktKart üstündeki grup başlığı). Boşken de bu şerit tek başına görünüyor. */}
+            <div style={{ marginTop: 10 }}>
+              <div
+                style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', background: '#efe8da', borderRadius: 10, padding: '10px 10px 10px 12px' }}
+                onClick={() => { setOlcumSecAnahtar(null); setOlcumOzelAd(''); setOlcumDeger(''); setOlcumBirim(''); setOlcumEkleOpen(true); }}
+              >
+                <span style={{ flex: 1, fontWeight: 700 }}>Ölçümler</span>
+                <button
+                  type="button"
+                  title="Ölçüm ekle"
+                  onClick={(e) => { e.stopPropagation(); setOlcumSecAnahtar(null); setOlcumOzelAd(''); setOlcumDeger(''); setOlcumBirim(''); setOlcumEkleOpen(true); }}
+                  style={{ background: 'none', border: 'none', padding: '0 2px', fontSize: 16, fontWeight: 700, color: '#8a8169', cursor: 'pointer', lineHeight: 1 }}
+                >＋</button>
               </div>
-            )}
+              {sonOlcumler.length > 0 && (
+                <div className="card" style={{ marginTop: 8 }}>
+                  {sonOlcumler.map((o) => (
+                    <div key={o.k} className="mrow"><span>{o.etiket}</span><b>{o.deger} {o.birim}</b></div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -3697,6 +3713,16 @@ export default function Rite() {
           </div>
         )}
 
+        {/* ---------- İLETİŞİM (yer tutucu, 2026-09 Behnan kararı) ---------- */}
+        {/* Koçluk chat + görüntülü görüşme için ayrılmış sekme — henüz sadece yer tutucu, hiçbir backend/chat
+            mantığı yok. Gerçek entegrasyon (stream.io vb.) ve Inbox'ın buraya taşınması ayrı, sonraki adımlar. */}
+        {screen === 'iletisim' && (
+          <div>
+            <h2>💬 Sohbet</h2>
+            <div className="empty" style={{ marginTop: 10 }}>Yakında — koçunla sohbet ve görüntülü görüşme burada olacak.</div>
+          </div>
+        )}
+
         {/* ---------- BİLGİ ---------- */}
         {screen === 'bilgi' && (
           <div>
@@ -3753,22 +3779,29 @@ export default function Rite() {
         {/* ＋ tuşu artık her sekmede görünüyor (kullanıcı isteği — Ayarlar'da grileşip devre dışı kalmak,
             hiç kaybolmaktan daha tutarlı). Ajanda'da tam menü, Havuz'da daraltılmış menü (bkz. ekleMenüsü);
             Gelişim'de kart eklemek yerine hızlı bir Ölçüm girişi açıyor (kullanıcı fikri) — böylece Gelişim'deki
-            ＋ de gerçekten işe yarıyor. Home'da da (2026-09, Behnan kararı) aynı Ölçüm ekle formu açılıyor — eski
-            toplu "Kendini değerlendir" formu (homeEkleOpen) kaldırıldı, kendini değerlendirme artık kartın kendi
-            Detay'ının sonunda ("kartların detayının sonunda daha mantıklıydı" — kullanıcı isteği). Sadece
-            Ayarlar'da yapılacak bir "ekleme"/"değerlendirme" yok. */}
+            ＋ de gerçekten işe yarıyor.
+            2026-09 (Behnan kararı, WhatsApp-esinli sadeleştirme, kademeli — bottom_nav ＋'sinin sayfa-içi
+            girişlerle kademeli olarak değiştirilmesi planının ilk adımı): Home artık kendi Ölçümler şeridinden
+            ekliyor (bkz. yukarısı), bu yüzden Home'da da Ayarlar'daki gibi grileşip devre dışı kalıyor — aynı
+            "hiç kaybolmaktan daha tutarlı" ilkesi. Ajanda'nın ＋'sı için henüz bir karar yok, o yüzden Ajanda
+            aynen kalıyor. */}
         <button
-          className={'plus' + (screen === 'bilgi' ? ' dim' : '')}
-          disabled={screen === 'bilgi'}
+          className={'plus' + (screen === 'bilgi' || screen === 'home' ? ' dim' : '')}
+          disabled={screen === 'bilgi' || screen === 'home'}
           onClick={() => {
-            if (screen === 'gelisim' || screen === 'home') { setOlcumSecAnahtar(null); setOlcumOzelAd(''); setOlcumDeger(''); setOlcumBirim(''); setOlcumEkleOpen(true); }
-            else if (screen !== 'bilgi') setEkleMenuOpen(true);
+            if (screen === 'gelisim') { setOlcumSecAnahtar(null); setOlcumOzelAd(''); setOlcumDeger(''); setOlcumBirim(''); setOlcumEkleOpen(true); }
+            else if (screen !== 'bilgi' && screen !== 'home') setEkleMenuOpen(true);
           }}
-          aria-label={screen === 'gelisim' || screen === 'home' ? 'Ölçüm ekle' : 'Ekle'}
+          aria-label={screen === 'gelisim' ? 'Ölçüm ekle' : 'Ekle'}
         >＋</button>
         {[['gelisim', '📈', 'Gelişim'], ['bilgi', '⚙', 'Ayarlar']].map(([k, ic, l]) => (
           <button key={k} className={screen === k ? 'on' : ''} onClick={() => setScreen(k)}><span className="ic">{ic}</span>{l}</button>
         ))}
+        {/* İletişim/Sohbet (2026-09, Behnan kararı — WhatsApp-esinli 3. madde): koçluk sohbet/görüntülü görüşme
+            sekmesi için şimdilik yer tutucu — chat/video altyapısı (stream.io vb.) ayrı, daha büyük bir iş,
+            henüz ele alınmadı. Inbox'ın üst header'dan kaldırılınca yeni yeri burası olacak (Behnan kararı,
+            henüz uygulanmadı — bkz. İLETİŞİM ekranındaki not). */}
+        <button key="iletisim" className={screen === 'iletisim' ? 'on' : ''} onClick={() => setScreen('iletisim')}><span className="ic">💬</span>Sohbet</button>
       </div>
 
       {detay && (() => {
