@@ -3439,7 +3439,6 @@ export default function Rite() {
               return (
                 <div className="modal" onMouseDown={() => setAyPopupOpen(false)}>
                   <div className="sheet small" onMouseDown={(e) => e.stopPropagation()}>
-                    <button className="x" onClick={() => setAyPopupOpen(false)}>×</button>
                     <div className="datenav" style={{ margin: '0 0 8px' }}>
                       <button className="arrow" onClick={() => shiftAyCursor(-1)}>‹</button>
                       <div className="dlabel">{ayLabel(cursor)}</div>
@@ -3829,15 +3828,19 @@ export default function Rite() {
             eleman TAMAMEN kaldırıldı — sürekli gri/devre dışı bir buton bırakmak yerine (Behnan'ın önceki
             turdaki sorusuna cevap: "+ bottom nav'dan kaldırılabilir"). ekleMenuOpen state'i ve modalı hâlâ var
             (bkz. aşağısı), artık SADECE Ajanda'nın yeni yerel ＋'sından açılıyor. */}
-        <button className={screen === 'bilgi' ? 'on' : ''} onClick={() => setScreen('bilgi')}><span className="ic">⚙</span>Ayarlar</button>
         {/* İletişim/Sohbet (2026-09, Behnan kararı — WhatsApp-esinli 3. madde): koçluk sohbet/görüntülü görüşme
             sekmesi için şimdilik yer tutucu — chat/video altyapısı (stream.io vb.) ayrı, daha büyük bir iş,
             henüz ele alınmadı. Inbox de (eski üst header'daki 📥 butonu/modalı) artık burada, sayfa içi bir kart
-            olarak (bkz. İLETİŞİM ekranı) — rozet (ibBadge) de header'daki ibtn'den buraya taşındı. */}
+            olarak (bkz. İLETİŞİM ekranı) — rozet (ibBadge) de header'daki ibtn'den buraya taşındı. Sohbet/Ayarlar
+            sırası (2026-09, Behnan kararı) yer değiştirildi — Sohbet artık Ayarlar'dan önce. Rozet span'i eskiden
+            "bdg" class'ına güveniyordu ama o CSS kuralı (.ibtn .bdg) sadece .ibtn atası içinde geçerliydi; burada
+            öyle bir ata yok, o yüzden position:absolute hiç uygulanmıyordu ve rakam "Sohbet1" gibi satır içine
+            akıyordu — konumlandırma artık doğrudan inline style ile veriliyor. */}
         <button key="iletisim" className={screen === 'iletisim' ? 'on' : ''} style={{ position: 'relative' }} onClick={() => { setScreen('iletisim'); if (client) loadInbox(client.id); }}>
           <span className="ic">💬</span>Sohbet
-          {ibBadge > 0 && <span className="bdg" style={{ top: 3, right: '22%' }}>{ibBadge}</span>}
+          {ibBadge > 0 && <span style={{ position: 'absolute', top: 3, right: '22%', background: 'var(--red)', color: '#fff', fontSize: 9, fontWeight: 800, borderRadius: 20, padding: '1px 5px' }}>{ibBadge}</span>}
         </button>
+        <button className={screen === 'bilgi' ? 'on' : ''} onClick={() => setScreen('bilgi')}><span className="ic">⚙</span>Ayarlar</button>
       </div>
 
       {detay && (() => {
