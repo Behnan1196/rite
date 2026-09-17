@@ -3099,6 +3099,11 @@ export default function Rite() {
               <div className="note" style={{ margin: 0 }}>Kendini bu alanlarda nasıl görüyorsun? (değerlendirmek için bir karta dokun)</div>
               <span className="minlink" onClick={() => setHomeYonetOpen(true)}>⚙️ Alanları yönet</span>
             </div>
+            {/* Koç notu (2026-09, Behnan kararı — Gelişim sekmesinin kaldırılması): eskiden Gelişim'in en
+                altında, artık Home'da doğrudan görünen bir kart — koç bir şey yazdıysa aranmadan görülsün diye
+                (Ruh hali/Kapsama'nın aksine bu bir "analiz" değil, doğrudan iletişim). Kod/koşul (cNot varsa
+                göster) aynen taşındı, sadece yeri değişti. */}
+            {cNot && <div className="card" style={{ marginBottom: 12 }}><h3>Koç notu</h3><p style={{ fontSize: 12, color: '#4a565c', lineHeight: 1.55 }}>{cNot}</p></div>}
             {/* 2026-09 (Behnan kararı — "Alanlar" mimarisi): artık her danışana otomatik tüm alanlar
                 tohumlanmıyor, Rite Studio'dan atanana kadar Home boş görünebilir — bu iki durumu ayrı ayrı
                 açıklıyoruz (hiç atanmamış vs hepsi gizlenmiş). */}
@@ -3136,11 +3141,15 @@ export default function Rite() {
                 sözlüğü arasında bir eşleme gerektirmiyor.
                 2026-09 (Behnan kararı, WhatsApp-esinli sadeleştirme): Home'da ölçüm eklemek artık bottom_nav'ın
                 genel ＋'sından değil, buradaki başlık şeridinden — Havuz'daki Grup şeridiyle aynı görsel
-                standart (bkz. aktKart üstündeki grup başlığı). Boşken de bu şerit tek başına görünüyor. */}
+                standart (bkz. aktKart üstündeki grup başlığı). Boşken de bu şerit tek başına görünüyor.
+                2026-09 (aynı gün, Gelişim'in kaldırılması — Behnan kararı: "bağlam bazında başka ekranlar
+                açabiliriz"): şeridin kendisi (etiket) artık EKLEME değil, Ruh hali'nin (eskiden Gelişim'de)
+                taşındığı bağlamsal "Ölçümler" detay/analiz ekranını açıyor — ekleme sadece sağdaki ＋'da kaldı
+                (stopPropagation ile şeridin tıklamasını tetiklemiyor). */}
             <div style={{ marginTop: 10 }}>
               <div
                 style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', background: '#efe8da', borderRadius: 10, padding: '10px 10px 10px 12px' }}
-                onClick={() => { setOlcumSecAnahtar(null); setOlcumOzelAd(''); setOlcumDeger(''); setOlcumBirim(''); setOlcumEkleOpen(true); }}
+                onClick={() => setScreen('olcumler')}
               >
                 <span style={{ flex: 1, fontWeight: 700 }}>Ölçümler</span>
                 <button
@@ -3157,6 +3166,14 @@ export default function Rite() {
                   ))}
                 </div>
               )}
+            </div>
+            {/* Kapsama (eski Gelişim'in ana kartı — haftalık alan-dokunma analizi) 2026-09'da (Behnan kararı)
+                bottom_nav'dan çıkarılıp Home'dan erişilen, bağlama girmeyen genel bir "Analiz" ekranına taşındı
+                — Behnan'ın deyişiyle "bottom nav'da görünmeyen ama home'dan ulaşabiliriz". İçerik/mantık hiç
+                değişmedi, sadece giriş noktası bu küçük linke indi; gerekliliğini kullanırken tartışacağız
+                (Behnan notu). */}
+            <div style={{ textAlign: 'center', marginTop: 14 }}>
+              <span className="minlink" onClick={() => setScreen('analiz')}>🔬 Gelişmiş analiz</span>
             </div>
           </div>
         )}
@@ -3552,10 +3569,16 @@ export default function Rite() {
           );
         })()}
 
-        {/* ---------- GELİŞİM ---------- */}
-        {screen === 'gelisim' && (
+        {/* ---------- ANALİZ (eski Gelişim'in Kapsama'sı, 2026-09 Behnan kararı) ---------- */}
+        {/* Gelişim sekmesi bottom_nav'dan kaldırıldı — bu ekran artık sadece Home'daki "🔬 Gelişmiş analiz"
+            linkinden açılıyor, bağlama girmeyen (Behnan: "advanced analysis gibi bir buton, bottom nav'da
+            görünmeyen") genel bir analiz sayfası. Kapsama'nın kodu/mantığı AYNEN taşındı — eski fayda/alan
+            sözlüğüne dayandığını, Meridyen'in yeni 13-alan mimarisiyle henüz örtüşmediğini biliyoruz, bu turda
+            buna dokunulmadı (Behnan: "kullanım sırasında gerekliliğini tartışırız"). */}
+        {screen === 'analiz' && (
           <div>
-            <h2>Gelişim</h2>
+            <button className="linkbtn" onClick={() => setScreen('home')}>‹ Home</button>
+            <h2 style={{ marginTop: 6 }}>🔬 Gelişmiş analiz</h2>
             <div className="card"><h3>Kapsama — bu hafta</h3>
               {(() => {
                 const base = alanList.length ? alanList : Array.from(new Set(faydaList.map((f) => f.alan)));
@@ -3585,24 +3608,26 @@ export default function Rite() {
                 );
               })()}
             </div>
-            {/* Readiness, "Alışkanlık serileri 🔥", "Bu hafta ızgarası", haftalık/aylık uyum % kartları
-                KALDIRILDI (2026-09, Behnan kararı) — hepsi dog_ritual_logs tamamlanma verisinin ayrı bir
-                ekrana taşınmış tekrarlarıydı. Ajanda'da zaten her alışkanlık satırının kendi üzerinde haftalık
-                doluluk çubukları + bu haftanın gün noktaları vardı (bkz. RitItem); seri (🔥) ve bu ayki uyum %
-                da artık aynı satırın altına eklendi (bkz. RitItem — "Seri ve bu ayki uyum %" yorumu). Ayrıca
-                Ajanda'nın gün görünümünün en üstündeki "X/Y tamamlandı" şeridi ve alan pilleri şeridi de
-                kaldırıldı (Behnan isteği). */}
-            {measByKey['ruh_hali'] && <div className="card"><h3>Ruh hali (son 7 gün)</h3>
-              <div style={{ fontSize: 24, letterSpacing: 6 }}>{measByKey['ruh_hali'].slice(-7).map((m: any, i: number) => <span key={i} title={m.tarih}>{MOOD[Math.round(Number(m.deger)) - 1] || '·'}</span>)}</div>
-              {(() => { const arr = measByKey['ruh_hali'].slice(-7).map((m: any) => Number(m.deger)); const ort = arr.reduce((a: number, b: number) => a + b, 0) / arr.length; return <div className="note" style={{ marginTop: 4 }}>Ortalama: {MOOD[Math.round(ort) - 1]} ({ort.toFixed(1)}/5)</div>; })()}
-            </div>}
-            {/* "Ölçümler" kartı da KALDIRILDI (2026-09, Behnan kararı) — son ölçümler artık Home'da (bkz. Home
-                ekranındaki "Son ölçümler" bölümü). Kapsama şimdilik burada duruyor — Behnan'ın notu: Home'un
-                alan kartlarına taşımak eski (fayda-kaynaklı) alan sözlüğü ile Meridyen'in yeni 13 alanı arasında
-                bir eşleme gerektirir, otomatik işleyen bir mantık kurulmadan buna gerek yok ("home daki
-                değerlendirme mantığıyla bence yok... ileride otomatik işleyen bir mantık oluşturulursa alan
-                kartlarında belirtilir"). */}
-            {cNot && <div className="card"><h3>Koç notu</h3><p style={{ fontSize: 12, color: '#4a565c', lineHeight: 1.55 }}>{cNot}</p></div>}
+          </div>
+        )}
+
+        {/* ---------- ÖLÇÜMLER (detay/analiz, eski Gelişim'in Ruh hali'si, 2026-09 Behnan kararı) ---------- */}
+        {/* Home'daki "Ölçümler" başlık şeridine dokununca açılan bağlamsal ekran (Behnan: "onun grafiğine ve
+            analizine yine ölçümler kısmının header şeridinden ulaşabiliriz"). Ruh hali'nin kodu/mantığı AYNEN
+            taşındı (measByKey['ruh_hali'] yoksa hiç görünmez) — henüz yeni bir grafik/trend eklenmedi, bu ilk
+            turda sadece yer değiştirdi. */}
+        {screen === 'olcumler' && (
+          <div>
+            <button className="linkbtn" onClick={() => setScreen('home')}>‹ Home</button>
+            <h2 style={{ marginTop: 6 }}>Ölçümler</h2>
+            {measByKey['ruh_hali'] ? (
+              <div className="card"><h3>Ruh hali (son 7 gün)</h3>
+                <div style={{ fontSize: 24, letterSpacing: 6 }}>{measByKey['ruh_hali'].slice(-7).map((m: any, i: number) => <span key={i} title={m.tarih}>{MOOD[Math.round(Number(m.deger)) - 1] || '·'}</span>)}</div>
+                {(() => { const arr = measByKey['ruh_hali'].slice(-7).map((m: any) => Number(m.deger)); const ort = arr.reduce((a: number, b: number) => a + b, 0) / arr.length; return <div className="note" style={{ marginTop: 4 }}>Ortalama: {MOOD[Math.round(ort) - 1]} ({ort.toFixed(1)}/5)</div>; })()}
+              </div>
+            ) : (
+              <div className="note">Henüz ölçüm analizi için yeterli veri yok.</div>
+            )}
           </div>
         )}
 
@@ -3775,26 +3800,22 @@ export default function Rite() {
           <button key={k} className={['ajanda', 'mezunlar'].includes(screen) && k === 'ajanda' ? 'on' : screen === k ? 'on' : ''} onClick={() => setScreen(k)}><span className="ic">{ic}</span>{l}</button>
         ))}
         {/* ＋ tuşu artık her sekmede görünüyor (kullanıcı isteği — Ayarlar'da grileşip devre dışı kalmak,
-            hiç kaybolmaktan daha tutarlı). Ajanda'da tam menü, Havuz'da daraltılmış menü (bkz. ekleMenüsü);
-            Gelişim'de kart eklemek yerine hızlı bir Ölçüm girişi açıyor (kullanıcı fikri) — böylece Gelişim'deki
-            ＋ de gerçekten işe yarıyor.
+            hiç kaybolmaktan daha tutarlı). Ajanda'da tam menü, Havuz'da daraltılmış menü (bkz. ekleMenüsü).
             2026-09 (Behnan kararı, WhatsApp-esinli sadeleştirme, kademeli — bottom_nav ＋'sinin sayfa-içi
             girişlerle kademeli olarak değiştirilmesi planının ilk adımı): Home artık kendi Ölçümler şeridinden
             ekliyor (bkz. yukarısı), bu yüzden Home'da da Ayarlar'daki gibi grileşip devre dışı kalıyor — aynı
             "hiç kaybolmaktan daha tutarlı" ilkesi. Ajanda'nın ＋'sı için henüz bir karar yok, o yüzden Ajanda
-            aynen kalıyor. */}
+            aynen kalıyor. Gelişim sekmesi (ve onun ayrı Ölçüm-ekle dalı) 2026-09'da (aynı gün, Behnan kararı)
+            tamamen kaldırıldı — Kapsama "Analiz", Ruh hali "Ölçümler" bağlamsal ekranına taşındı (bkz. o
+            ekranlar), Koç notu Home'a taşındı; bu ekranların hiçbiri artık bottom_nav'da değil, Home'dan
+            erişiliyor. */}
         <button
           className={'plus' + (screen === 'bilgi' || screen === 'home' ? ' dim' : '')}
           disabled={screen === 'bilgi' || screen === 'home'}
-          onClick={() => {
-            if (screen === 'gelisim') { setOlcumSecAnahtar(null); setOlcumOzelAd(''); setOlcumDeger(''); setOlcumBirim(''); setOlcumEkleOpen(true); }
-            else if (screen !== 'bilgi' && screen !== 'home') setEkleMenuOpen(true);
-          }}
-          aria-label={screen === 'gelisim' ? 'Ölçüm ekle' : 'Ekle'}
+          onClick={() => { if (screen !== 'bilgi' && screen !== 'home') setEkleMenuOpen(true); }}
+          aria-label="Ekle"
         >＋</button>
-        {[['gelisim', '📈', 'Gelişim'], ['bilgi', '⚙', 'Ayarlar']].map(([k, ic, l]) => (
-          <button key={k} className={screen === k ? 'on' : ''} onClick={() => setScreen(k)}><span className="ic">{ic}</span>{l}</button>
-        ))}
+        <button className={screen === 'bilgi' ? 'on' : ''} onClick={() => setScreen('bilgi')}><span className="ic">⚙</span>Ayarlar</button>
         {/* İletişim/Sohbet (2026-09, Behnan kararı — WhatsApp-esinli 3. madde): koçluk sohbet/görüntülü görüşme
             sekmesi için şimdilik yer tutucu — chat/video altyapısı (stream.io vb.) ayrı, daha büyük bir iş,
             henüz ele alınmadı. Inbox de (eski üst header'daki 📥 butonu/modalı) artık burada, sayfa içi bir kart
@@ -4818,9 +4839,10 @@ export default function Rite() {
         </div>
       )}
 
-      {/* Gelişim ekranındaki ＋ ile hızlı ölçüm/değerlendirme girişi — Ölçüm kartı gibi ayrı bir ritüele bağlı
-          değil, doğrudan bugüne (dog_measurements) yazılıyor (bkz. olcumEkleGenel). Ruh hali/Odak/Su hariç —
-          onların kendi kartları var; burada yalnız fiziksel ölçümler + serbest "Diğer" (özel etiket) var. */}
+      {/* Home'un Ölçümler şeridindeki ＋ ile hızlı ölçüm/değerlendirme girişi (eskiden Gelişim ekranınındaydı) —
+          Ölçüm kartı gibi ayrı bir ritüele bağlı değil, doğrudan bugüne (dog_measurements) yazılıyor (bkz.
+          olcumEkleGenel). Ruh hali/Odak/Su hariç — onların kendi kartları var; burada yalnız fiziksel ölçümler
+          + serbest "Diğer" (özel etiket) var. */}
       {olcumEkleOpen && (
         <div className="modal" onMouseDown={() => setOlcumEkleOpen(false)}>
           <div className="sheet" onMouseDown={(e) => e.stopPropagation()}>
