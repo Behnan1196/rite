@@ -299,7 +299,7 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi, sadeceAcik
     // artık ayrı bir Ad alanı yok, kart adı içeriğin ilk (boş olmayan) satırından türetiliyor. Boş satır/tamamen
     // boş içerikte önceki başlık (ör. "Yeni not") olduğu gibi kalıyor — hiçbir zaman boş bir başlığa düşmüyor.
     if (icerikBaslikTuret) {
-      const ilkSatir = icerikVal.split('\n').map((s) => s.trim()).find((s) => s) || '';
+      const ilkSatir = icerikVal.split('\n').map((s: string) => s.trim()).find((s: string) => s) || '';
       if (ilkSatir) onIcerikBaslikTuret?.(ilkSatir.length > 80 ? ilkSatir.slice(0, 80).trim() + '…' : ilkSatir);
     }
   }
