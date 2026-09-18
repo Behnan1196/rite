@@ -1402,6 +1402,18 @@ export default function Rite() {
   // (ref, state DEĞİL — her dokunuşta re-render'a gerek yok).
   const [devTapN, setDevTapN] = useState(0);
   const devTapHideRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // toggleDevMode: hem gizli 7-dokunuş yolunun hem de Ayarlar'daki görünür anahtarın (aşağıda, "🧪 Geliştirici
+  // modu" kartı) ortak kullandığı tek yer — 2026-09-18, "7 kez basıyorum ama açılmıyor" raporu tekrarlanınca
+  // (userSelect düzeltmesi sonrası bile) Behnan'ın kendi önerisiyle eklendi: iOS'ta dokunuş sayımı ne kadar
+  // sağlam olursa olsun tek bir güvenilir yedek her zaman iyi fikir. Gizli dokunuş yolu KALDIRILMADI — ikisi
+  // birden çalışıyor, biri güvenilmez çıkarsa diğeri var.
+  function toggleDevMode() {
+    setDevMode((v: boolean) => {
+      const nv = !v;
+      try { if (nv) localStorage.setItem(LS_DEV, '1'); else localStorage.removeItem(LS_DEV); } catch (_) {}
+      return nv;
+    });
+  }
   // Ayarlar başlığına 7 kez art arda (1.5sn içinde) dokununca Geliştirici modu açılır/kapanır — Android'in
   // "build number" tıklama geleneğinin aynısı, bilinçli olarak (Behnan: "gerçek mobil uygulamaya da doğal
   // geçecek" diye düşünüldü). localStorage'a yazılır ki kapatıp açınca kaybolmasın.
@@ -1418,11 +1430,7 @@ export default function Rite() {
       r.n = 0;
       setDevTapN(0);
       if (devTapHideRef.current) clearTimeout(devTapHideRef.current);
-      setDevMode((v: boolean) => {
-        const nv = !v;
-        try { if (nv) localStorage.setItem(LS_DEV, '1'); else localStorage.removeItem(LS_DEV); } catch (_) {}
-        return nv;
-      });
+      toggleDevMode();
     }
   }
   // inboxOpen (eski üst header'daki 📥 modalının aç/kapa durumu) 2026-09 (Behnan kararı, WhatsApp-esinli
@@ -4149,6 +4157,16 @@ export default function Rite() {
                     onClick={() => { setBaslangicSekme(k); try { localStorage.setItem(LS_BASLANGIC, k); } catch (_) {} }}
                   >{ic} {l}</span>
                 ))}
+              </div>
+            </div>
+
+            {/* Görünür Geliştirici modu anahtarı (2026-09-18, Behnan önerisi: "bottom nav'daki ayarlar değil mi,
+                ayarlara bir toggle button da olabilir" — gizli 7-dokunuş yolu iPhone'da güvenilir çalışmayınca
+                eklendi). İkisi de aynı toggleDevMode'u çağırıyor, ikisi de aktif — biri tutmazsa diğeri var. */}
+            <div className="card"><h3>🧪 Geliştirici modu</h3>
+              <p className="note" style={{ marginTop: 0 }}>Kart Laboratuvarı gibi deneysel özellikleri açar (bkz. Ekle menüsü).</p>
+              <div>
+                <span className={'chip' + (devMode ? ' on' : '')} onClick={toggleDevMode}>{devMode ? '✅ Açık' : '⬜ Kapalı'}</span>
               </div>
             </div>
 
