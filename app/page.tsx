@@ -4940,6 +4940,13 @@ export default function Rite() {
           önce openRit ile detayı açıp üstüne paylasOpen'ı tetikliyor. */}
       {ritMenuFor && (() => {
         const rmKisisel = ritMenuFor.kart_tipi === 'bilgi' && ritMenuFor.kaynak === 'Kendi';
+        // rmPaylasIzin (2026-09-18, Behnan isteği — Kart Laboratuvarı kartlarında Paylaş seçeneği yoktu, "biz
+        // öyle kural koyduğumuz için" — 2026-09-16'daki karar (bkz. rmKisisel) Paylaş/Havuza-kaydet'i BİLEREK
+        // sadece kişisel Not/Aktivite/Randevu'ya (kart_tipi='bilgi') açmıştı, Lab henüz yokken). Puanla (⭐,
+        // rmKisisel'e bağlı kalmaya devam ediyor — ayrı bir konu, dokunulmadı) hariç, SADECE Paylaş/Havuza-kaydet
+        // için Geliştirici modu açıkken kural gevşetiliyor: kaynak='Kendi' olan HER kart_tipi paylaşılabilir
+        // hale geliyor — normal kullanıcı deneyimi (devMode kapalı) hiç değişmedi.
+        const rmPaylasIzin = ritMenuFor.kaynak === 'Kendi' && (ritMenuFor.kart_tipi === 'bilgi' || devMode);
         return (
         <div className="modal top2" onMouseDown={() => setRitMenuFor(null)}>
           <div className="sheet small" onMouseDown={(e) => e.stopPropagation()}>
@@ -4958,7 +4965,7 @@ export default function Rite() {
               {rmKisisel && (
                 <button className="btn ghost sm" onClick={() => { setPuanDeger(ritMenuFor.puan || 0); setPuanModal(ritMenuFor); setRitMenuFor(null); }}>⭐ Puanla{ritMenuFor.puan ? ' (' + ritMenuFor.puan + '★)' : ''}</button>
               )}
-              {rmKisisel && !ritMenuFor.sablon_id && (
+              {rmPaylasIzin && !ritMenuFor.sablon_id && (
                 <button className="btn ghost sm" onClick={() => { const r = ritMenuFor; setRitMenuFor(null); openRit(r); setPaylasOpen(true); setKMsg(''); }}>↪️ Paylaş / Havuza kaydet</button>
               )}
               <button className="btn ghost sm" onClick={() => { const id = ritMenuFor.id; setRitMenuFor(null); ritSil(id); }}>🗑️ Sil</button>
