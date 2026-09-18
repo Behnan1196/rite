@@ -3896,10 +3896,6 @@ export default function Rite() {
             </div>
             {havuzFolder === 'gelenler' ? (
               <div>
-                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, margin: '6px 0' }}>
-                  <p className="sub" style={{ margin: 0 }}>Başkalarının seninle paylaştığı kartlar burada birikir.</p>
-                  <button className="btn ghost sm" onClick={() => client && loadInbox(client.id)}>🔄 Yenile</button>
-                </div>
                 {inbox.length === 0 && <div className="note" style={{ textAlign: 'center', marginTop: 10 }}>Gelenler boş. Sana bir şey paylaşıldığında burada göreceksin.</div>}
                 {inbox.map((v) => v.tur !== 'aktivite' ? (
                   <InboxNot key={v.id} v={v} onOpen={() => openIbDetay(v)} />
