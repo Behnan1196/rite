@@ -1496,7 +1496,12 @@ export default function Rite() {
   // şekilde olsun"). Şimdilik iki kök var: 'gelenler' (eski Inbox, artık Sohbet'ten taşındı) ve 'kisisel'
   // (bugüne kadarki Grup/Alt grup ağacı — "Kişisel Arşiv" adını aldı). Üçüncü kök ("Ajandadan Kaydedilenler",
   // kart-tipi kategorili otomatik klasörleme) ayrı bir sonraki adımda eklenecek.
-  const [havuzFolder, setHavuzFolder] = useState<'gelenler' | 'kisisel' | 'ajandadan'>('kisisel');
+  // 8c. adım (2026-09-18, Behnan: "Tek olsun ve sadece havuzda, aslında ben Silinenler diye bir klasör
+  // yaratırsın diye düşünmüştüm, hem havuz yapısına uygun düşer, hem yukarıdaki çöp ikonu manalı durmuyor,
+  // sanki seçilenleri sil fonksiyonuna benziyor"): 🗑️ Silinenler artık bir header ikonu değil, Havuz'un
+  // 4. kök klasörü — Ajanda'nın kendi 🗑️ ikonu kaldırıldı, TEK çöp kutusu var ve sadece buradan (Havuz'dan)
+  // erişiliyor (bkz. cop tanımındaki not — artık ajandaCop'u da (dog_rituals) içine alıyor).
+  const [havuzFolder, setHavuzFolder] = useState<'gelenler' | 'kisisel' | 'ajandadan' | 'silinenler'>('kisisel');
   // kaGrup/kaAlt (2026-09-18, Havuz yeniden tasarımı — 2. adım, Behnan: "outlook/windows tarzı bir klasör
   // yapısı yapamaz mıyız"): Kişisel Arşiv artık hepsi-birden-açık bir akordeon değil, gerçek bir klasör
   // gezgini — bir klasöre dokunup İÇİNE girersin (breadcrumb yol gösterir), geri dönmek için üstteki yol
@@ -1528,21 +1533,12 @@ export default function Rite() {
   // Gelişmiş filtre yok (v1). Arama açıkken normal klasör gezinme UI'ı (kök şeridi + breadcrumb) gizleniyor.
   const [havuzAramaAcik, setHavuzAramaAcik] = useState(false);
   const [havuzArama, setHavuzArama] = useState('');
-  // copAcik (2026-09-18, Havuz yeniden tasarımı — 8. adım, Behnan: "çöp kutusunda sadece liste görünümü,
-  // silinme tarihi, tipi, geldiği klasör ve Geri al tuşu"): 🔍 arama ile aynı desen — header'daki 🗑️ ikonuyla
-  // açılan, klasör gezinme UI'ının yerini alan düz bir liste. Arama ile aynı anda açık olmasın diye ikisi
-  // karşılıklı kapatılıyor (bkz. header'daki onClick'ler).
-  const [copAcik, setCopAcik] = useState(false);
   // ajAramaAcik/ajArama (2026-09-18, Havuz yeniden tasarımı — 7. adım): Ajanda'nın global araması — Havuz'unkinden
   // farklı olarak (Behnan: "Ajanda ve havuz da farklı sonuç listesi olacaktır") gündüz/hafta görünümüyle sınırlı
   // değil, TÜM rituals'ı (günlerden bağımsız) tarayıp düz, tarihe göre sıralı bir liste gösteriyor. Aynı basit
   // substring (ad+aciklama) eşleşmesi, gelişmiş filtre yok.
   const [ajAramaAcik, setAjAramaAcik] = useState(false);
   const [ajArama, setAjArama] = useState('');
-  // ajCopAcik (2026-09-18, 8b. adım, Behnan: "sanırım ajandadan silince çöp kutusuna gitmiyor"): Havuz'un
-  // 🗑️'sinden (copAcik) BİLEREK ayrı — Ajanda'nın kendi çöp kutusu (dog_rituals/ajandaCop). 🔍 ile aynı
-  // desen/karşılıklı kapatma.
-  const [ajCopAcik, setAjCopAcik] = useState(false);
   // havuzGorunum (2026-09-18, Havuz yeniden tasarımı — 5. adım, Behnan: "havuz için default liste görünümü
   // olmalı, sayının artacağını düşünerek... bu mantığı bir çok yerde kullanabiliriz, mesela Odak alanları.
   // Liste görünümü derkende aslında tek satırlık kartlar ve gerekli flag'lar, etiketler"; 6. adımda genişletme,
@@ -3433,9 +3429,11 @@ export default function Rite() {
   // gezinmesinden) düşüyor, sadece 🗑️ Çöp kutusu'nda görünüyorlar.
   const personalActs = activities.filter((a: any) => a.client_id === client.id && (a.havuz_kok || 'kisisel') !== 'ajandadan' && !a.silindi_tarih);
   const ajandaActs = activities.filter((a: any) => a.client_id === client.id && a.havuz_kok === 'ajandadan' && !a.silindi_tarih);
-  // cop (2026-09-18, 8. adım): Havuz'un 3 kökünden çöp kutusuna taşınmış TÜM satırlar, tek düz liste — en son
-  // silinen en üstte. Her satır kendi geri-alma fonksiyonunu taşıyor (aktiviteGeriAl/inboxGeriAl) ki render
-  // tarafı kök tipine göre dallanmak zorunda kalmasın.
+  // cop (2026-09-18, 8. adım; 8c'de genişletildi — Behnan: "Tek olsun ve sadece havuzda"): artık Havuz'un 3
+  // kökü + Ajanda'nın (dog_rituals/ajandaCop) TAMAMINDAN çöp kutusuna taşınmış satırlar, TEK düz liste — en
+  // son silinen en üstte. Her satır kendi geri-alma fonksiyonunu taşıyor (aktiviteGeriAl/inboxGeriAl/ritGeriAl)
+  // ki render tarafı kök tipine göre dallanmak zorunda kalmasın. Havuz'un "Silinenler" klasöründen (bkz.
+  // havuzFolder) görüntüleniyor — Ajanda'nın artık kendi ayrı çöp kutusu YOK.
   const cop = [
     ...activities.filter((a: any) => a.client_id === client.id && a.silindi_tarih).map((a: any) => ({
       id: 'a:' + a.id, tarih: a.silindi_tarih,
@@ -3449,6 +3447,12 @@ export default function Rite() {
       ikon: v.tur !== 'aktivite' ? '📌' : (KARTLAR.find((k) => k[0] === (v.payload?.kartTipi || 'standart'))?.[2] || '🎁'),
       tip: v.tur !== 'aktivite' ? 'Not / paylaşım' : (KARTLAR.find((k) => k[0] === (v.payload?.kartTipi || 'standart'))?.[1] || 'Standart'),
       ad: v.baslik || v.payload?.ad || 'Paylaşım', geriAl: () => inboxGeriAl(v.id),
+    })),
+    ...ajandaCop.map((r: any) => ({
+      id: 'r:' + r.id, tarih: r.silindi_tarih, kok: '📅 Ajanda',
+      ikon: kartIkon(r.kart_tipi) || '📅',
+      tip: KARTLAR.find((k) => k[0] === (r.kart_tipi || 'standart'))?.[1] || 'Standart',
+      ad: r.ad, geriAl: () => ritGeriAl(r.id),
     })),
   ].sort((a, b) => (a.tarih < b.tarih ? 1 : -1));
   const personalGroupOf = (a: any) => a.grup && a.grup !== 'Kişisel' ? a.grup : 'Genel';
@@ -3743,16 +3747,9 @@ export default function Rite() {
                 <button
                   type="button"
                   title="Ara"
-                  onClick={() => { if (ajAramaAcik) setAjArama(''); else setAjCopAcik(false); setAjAramaAcik((o: any) => !o); }}
+                  onClick={() => { if (ajAramaAcik) setAjArama(''); setAjAramaAcik((o: any) => !o); }}
                   style={{ background: ajAramaAcik ? 'var(--green)' : 'none', color: ajAramaAcik ? '#fff' : undefined, border: '1px solid var(--line)', borderRadius: '50%', width: 30, height: 30, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: '0 0 auto', padding: 0 }}
                 >🔍</button>
-                {/* 🗑️ Ajanda'nın çöp kutusu (2026-09-18, 8b. adım): bkz. ajCopAcik tanımındaki not. */}
-                <button
-                  type="button"
-                  title="Çöp kutusu"
-                  onClick={() => { if (!ajCopAcik) { setAjAramaAcik(false); setAjArama(''); } setAjCopAcik((o: any) => !o); }}
-                  style={{ background: ajCopAcik ? 'var(--green)' : 'none', color: ajCopAcik ? '#fff' : undefined, border: '1px solid var(--line)', borderRadius: '50%', width: 30, height: 30, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: '0 0 auto', padding: 0, position: 'relative' }}
-                >🗑️{ajandaCop.length > 0 && <span style={{ position: 'absolute', top: -2, right: -2, background: 'var(--red)', color: '#fff', borderRadius: '50%', width: 15, height: 15, fontSize: 9, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{ajandaCop.length}</span>}</button>
                 {/* Gün/Ay vswitch kaldırıldı (2026-09-17, Behnan kararı: "Gün, Ay butonları yerine sadece bir
                     takvim ikonu bile yeterli") — Ay artık ayrı bir sayfa değil, bu ikonla açılan bir overlay/popup
                     (bkz. aşağısı, ayPopupOpen). Ajanda'nın asıl gövdesi artık hep "Gün" görünümü. */}
@@ -3789,28 +3786,7 @@ export default function Rite() {
                 <input autoFocus value={ajArama} onChange={(e: any) => setAjArama(e.target.value)} placeholder="🔍 Başlık veya içerikte ara…" style={{ width: '100%' }} />
               </div>
             )}
-            {ajCopAcik ? (
-              // 🗑️ Ajanda'nın çöp kutusu (2026-09-18, 8b. adım): Havuz'unkiyle aynı format (tip, silinme
-              // tarihi, Geri al) — burada "geldiği klasör" kavramı yok, hepsi Ajanda'nın kendi silinenleri.
-              <div>
-                {ajandaCop.length === 0 ? (
-                  <div className="note" style={{ textAlign: 'center', marginTop: 10 }}>Çöp kutusu boş.</div>
-                ) : (
-                  <>
-                    <p className="sub" style={{ marginTop: 0 }}>Silinen kartlar burada 30 gün tutulur, sonra kalıcı silinir.</p>
-                    {ajandaCop.map((r: any) => (
-                      <div key={r.id} className="actcard">
-                        <div style={{ flex: 1 }}>
-                          <div className="n">{kartIkon(r.kart_tipi) || '📅'} {r.ad}</div>
-                          <div className="o">silindi: {kisaTarih((r.silindi_tarih || '').slice(0, 10))}</div>
-                        </div>
-                        <button className="btn ghost sm" onClick={() => ritGeriAl(r.id)}>Geri al</button>
-                      </div>
-                    ))}
-                  </>
-                )}
-              </div>
-            ) : ajArama.trim() ? (() => {
+            {ajArama.trim() ? (() => {
               // Ajanda arama sonuçları (2026-09-18, 7. adım): gün/hafta görünümünün yerini alıyor, günlerden
               // bağımsız düz, tarihe göre sıralı bir liste — bkz. ajArama tanımındaki not.
               const q = ajArama.trim().toLowerCase();
@@ -4229,16 +4205,9 @@ export default function Rite() {
                 <span
                   className={'chip' + (havuzAramaAcik ? ' on' : '')}
                   style={{ padding: '5px 10px', fontSize: 12, margin: 0 }}
-                  onClick={() => { if (havuzAramaAcik) setHavuzArama(''); else setCopAcik(false); setHavuzAramaAcik((o: any) => !o); }}
+                  onClick={() => { if (havuzAramaAcik) setHavuzArama(''); setHavuzAramaAcik((o: any) => !o); }}
                   title="Ara"
                 >🔍</span>
-                {/* 🗑️ Çöp kutusu (2026-09-18, 8. adım): bkz. copAcik tanımındaki not. */}
-                <span
-                  className={'chip' + (copAcik ? ' on' : '')}
-                  style={{ padding: '5px 10px', fontSize: 12, margin: 0 }}
-                  onClick={() => { if (!copAcik) { setHavuzAramaAcik(false); setHavuzArama(''); } setCopAcik((o: any) => !o); }}
-                  title="Çöp kutusu"
-                >🗑️{cop.length > 0 ? ' · ' + cop.length : ''}</span>
                 {/* Liste/Kart görünüm toggle'ı (2026-09-18, Havuz yeniden tasarımı — 5-6. adım, Behnan: "sanki
                     toggle tek olup, tüm klasörler için geçerli olsa daha uygun olur"): tek toggle, Havuz'un her
                     3 kökünde de geçerli — bkz. havuzGorunum tanımındaki not ve gelKartListe. */}
@@ -4251,29 +4220,7 @@ export default function Rite() {
                 <input autoFocus value={havuzArama} onChange={(e: any) => setHavuzArama(e.target.value)} placeholder="🔍 Başlık veya içerikte ara…" style={{ width: '100%' }} />
               </div>
             )}
-            {copAcik ? (
-              // 🗑️ Çöp kutusu (2026-09-18, 8. adım): sadece liste görünümü — silinme tarihi, tipi, geldiği
-              // klasör, Geri al. bkz. cop tanımındaki not. Kalıcı sil butonu YOK (Behnan: "kalıcı sil'e bence
-              // gerek yok"), 30 gün sonra copKutusuTemizle sessizce siliyor.
-              <div>
-                {cop.length === 0 ? (
-                  <div className="note" style={{ textAlign: 'center', marginTop: 10 }}>Çöp kutusu boş.</div>
-                ) : (
-                  <>
-                    <p className="sub" style={{ marginTop: 0 }}>Silinen kartlar burada 30 gün tutulur, sonra kalıcı silinir.</p>
-                    {cop.map((c) => (
-                      <div key={c.id} className="actcard">
-                        <div style={{ flex: 1 }}>
-                          <div className="n">{c.ikon} {c.ad}</div>
-                          <div className="o">{c.tip} · {c.kok} · silindi: {kisaTarih(c.tarih.slice(0, 10))}</div>
-                        </div>
-                        <button className="btn ghost sm" onClick={c.geriAl}>Geri al</button>
-                      </div>
-                    ))}
-                  </>
-                )}
-              </div>
-            ) : havuzArama.trim() ? (() => {
+            {havuzArama.trim() ? (() => {
               // Arama sonuçları (2026-09-18, 7. adım): klasör gezinme UI'ı tamamen yerini alıyor, normal köke
               // dönmek için 🔍 ikonuna tekrar dokunup aramayı kapatmak yeterli.
               const q = havuzArama.trim().toLowerCase();
@@ -4304,8 +4251,33 @@ export default function Rite() {
               <span className={'chip' + (havuzFolder === 'gelenler' ? ' on' : '')} onClick={() => setHavuzFolder('gelenler')}>📥 Gelenler{ibBadge > 0 ? ' · ' + ibBadge : ''}</span>
               <span className={'chip' + (havuzFolder === 'ajandadan' ? ' on' : '')} onClick={() => setHavuzFolder('ajandadan')}>📦 Ajandadan Kaydedilenler{ajandaActs.length > 0 ? ' · ' + ajandaActs.length : ''}</span>
               <span className={'chip' + (havuzFolder === 'kisisel' ? ' on' : '')} onClick={() => setHavuzFolder('kisisel')}>🗄️ Kişisel Arşiv</span>
+              {/* 🗑️ Silinenler (2026-09-18, 8c. adım, Behnan: "Silinenler diye bir klasör yaratırsın diye
+                  düşünmüştüm, hem havuz yapısına uygun düşer"): 4. kök — Havuz'un 3 kökü + Ajanda'nın TÜM
+                  silinenleri (bkz. cop tanımındaki not), TEK çöp kutusu. */}
+              <span className={'chip' + (havuzFolder === 'silinenler' ? ' on' : '')} onClick={() => setHavuzFolder('silinenler')}>🗑️ Silinenler{cop.length > 0 ? ' · ' + cop.length : ''}</span>
             </div>
-            {havuzFolder === 'ajandadan' ? (
+            {havuzFolder === 'silinenler' ? (
+              // Sadece liste görünümü — silinme tarihi, tipi, geldiği yer, Geri al. Kalıcı sil butonu YOK
+              // (Behnan: "kalıcı sil'e bence gerek yok"), 30 gün sonra copKutusuTemizle sessizce siliyor.
+              <div>
+                {cop.length === 0 ? (
+                  <div className="note" style={{ textAlign: 'center', marginTop: 10 }}>Çöp kutusu boş.</div>
+                ) : (
+                  <>
+                    <p className="sub" style={{ marginTop: 0 }}>Silinen kartlar burada 30 gün tutulur, sonra kalıcı silinir.</p>
+                    {cop.map((c) => (
+                      <div key={c.id} className="actcard">
+                        <div style={{ flex: 1 }}>
+                          <div className="n">{c.ikon} {c.ad}</div>
+                          <div className="o">{c.tip} · {c.kok} · silindi: {kisaTarih(c.tarih.slice(0, 10))}</div>
+                        </div>
+                        <button className="btn ghost sm" onClick={c.geriAl}>Geri al</button>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+            ) : havuzFolder === 'ajandadan' ? (
               <div>
                 {/* 📦 Ajandadan Kaydedilenler (2026-09-18, Havuz yeniden tasarımı — 3. adım): sabit, kullanıcının
                     yeniden adlandıramayacağı/silemeyeceği bir kök — Gelenler/Kişisel Arşiv'in aksine burada
