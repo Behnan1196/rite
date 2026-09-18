@@ -26,6 +26,16 @@ function SortableRow({ id, disabled, children }: { id: string; disabled?: boolea
 
 type Client = { id: string; ad: string; share_code?: string; auth_id?: string | null; meridyen_bagli?: boolean; email?: string };
 const LS = 'rite_client';
+// LS_BASLANGIC (2026-09-18, Behnan isteği — "yolda yürürken falan sürekli not ekliyorum, program açık değilse
+// hep Home'a geliyor, oradan Ajanda'yı seçip + basıyorum, ilk gelecek sekmeyi Ayarlar'dan seçebilsem"): hangi
+// bottom_nav sekmesiyle açılacağını tutan, cihaza özel (senkron gerekmez, Supabase'e yazmaya gerek yok) basit
+// bir localStorage tercihi — `client` (LS) ile AYNI kalıp, ayrı anahtar.
+const LS_BASLANGIC = 'rite_baslangic_sekme';
+// Ayarlar'da seçilebilecek başlangıç sekmeleri — bottom_nav'daki 5 gerçek varış noktasıyla birebir aynı
+// (alt-ekranlar, ör. 'analiz'/'olcumler', başlangıç sekmesi olamaz — onlara sadece Home üzerinden gidiliyor).
+const BASLANGIC_SEKMELERI: [string, string, string][] = [
+  ['home', '🏠', 'Home'], ['ajanda', '🗓', 'Ajanda'], ['havuz', '⊕', 'Havuz'], ['iletisim', '💬', 'Sohbet'], ['bilgi', '⚙', 'Ayarlar'],
+];
 
 const POOL: Record<string, { ad: string; dsc: string; zaman: string; flag?: string }[]> = {
   def: [
@@ -1351,6 +1361,10 @@ function urlB64ToUint8(base64String: string) {
 export default function Rite() {
   const [client, setClient] = useState<Client | null>(null);
   const [screen, setScreen] = useState('home');
+  // baslangicSekme (2026-09-18, Behnan isteği — bkz. LS_BASLANGIC): Ayarlar'daki seçim çiplerinin hangisinin
+  // "seçili" göründüğünü tutan yerel state — gerçek yönlendirme aşağıdaki ilk mount useEffect'inde (localStorage
+  // okunup uygunsa setScreen çağrılarak) oluyor, burası sadece Ayarlar ekranının kendi görünümü için.
+  const [baslangicSekme, setBaslangicSekme] = useState('home');
   // inboxOpen (eski üst header'daki 📥 modalının aç/kapa durumu) 2026-09 (Behnan kararı, WhatsApp-esinli
   // sadeleştirme) KALDIRILDI — Inbox artık ayrı bir modal değil, "Sohbet" sekmesinin (screen==='iletisim')
   // sayfa içi bir parçası, o yüzden ayrı bir aç/kapa state'ine gerek kalmadı.
@@ -1637,6 +1651,16 @@ export default function Rite() {
     try {
       const s = localStorage.getItem(LS);
       if (s) { const c = JSON.parse(s); setClient(c); loadData(c.id); loadInbox(c.id); loadKisiler(c.id); ensureShareCode(c); reassignPush(c.id); }
+    } catch (_) {}
+    // Başlangıç sekmesi tercihi (bkz. LS_BASLANGIC) — Behnan isteği: "program açık değilse hep Home'a geliyor,
+    // ilk gelecek sekmeyi Ayarlar'dan seçebilsem". Kayıtlı değer BASLANGIC_SEKMELERI'nde geçerli bir anahtarsa
+    // (eski/bozuk bir değer varsa sessizce yok sayılıp Home'da kalınır) hem çipin seçili görünmesi hem de asıl
+    // yönlendirme için kullanılıyor — `screen`'in kendi useState varsayılanı bilerek hep 'home' kalıyor (SSR/
+    // hidrasyon güvenliği için, `client`'ın kendisi gibi, ilk render'da localStorage okunmuyor), tercih varsa
+    // mount'tan hemen sonra burada üstüne yazılıyor.
+    try {
+      const bs = localStorage.getItem(LS_BASLANGIC);
+      if (bs && BASLANGIC_SEKMELERI.some(([k]) => k === bs)) { setBaslangicSekme(bs); setScreen(bs); }
     } catch (_) {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -4014,6 +4038,24 @@ export default function Rite() {
               <div className="rowbtns"><button className="btn ghost sm" onClick={enableNotifs}>{pushOn ? '🔔 Açık' : '🔔 Bildirimleri aç'}</button><button className="btn ghost sm" onClick={testPush}>Test gönder</button></div>
               {pushMsg && <div className="msg">{pushMsg}</div>}
             </div>
+
+            {/* Başlangıç sekmesi (2026-09-18, Behnan isteği): "yolda yürürken sürekli not ekliyorum, program
+                açık değilse hep Home'a geliyor, oradan Ajanda'yı seçip + basıyorum" — uygulama sıfırdan
+                açıldığında hangi sekmeyle başlayacağını burada seçebiliyor (bkz. LS_BASLANGIC, ilk mount
+                useEffect'i). Seçenekler bottom_nav'daki 5 gerçek sekmeyle birebir aynı (BASLANGIC_SEKMELERI). */}
+            <div className="card"><h3>Başlangıç sekmesi</h3>
+              <p className="note" style={{ marginTop: 0 }}>Uygulamayı açtığında hangi sekmeyle karşılaşmak istersin?</p>
+              <div>
+                {BASLANGIC_SEKMELERI.map(([k, ic, l]) => (
+                  <span
+                    key={k}
+                    className={'chip' + (baslangicSekme === k ? ' on' : '')}
+                    onClick={() => { setBaslangicSekme(k); try { localStorage.setItem(LS_BASLANGIC, k); } catch (_) {} }}
+                  >{ic} {l}</span>
+                ))}
+              </div>
+            </div>
+
             <div className="card"><h3>Test</h3>
               <div className="note" style={{ marginTop: 0 }}>Ajandayı sıfırla: tüm ritüeller ve işaretler silinir (kişisel aktiviteler havuzda kalır).</div>
               <div className="rowbtns"><button className="btn ghost sm" style={{ color: 'var(--red)', borderColor: '#e6c4bd' }} onClick={resetAjanda}>Ajandayı sıfırla</button></div>
