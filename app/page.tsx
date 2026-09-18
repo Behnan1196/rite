@@ -1466,6 +1466,14 @@ export default function Rite() {
   // sayfa içi bir parçası, o yüzden ayrı bir aç/kapa state'ine gerek kalmadı.
   const [ibGrupSec, setIbGrupSec] = useState<string | null>(null); // havuza eklerken grup seçimi açık olan inbox öğesi
   const [ibGrupVal, setIbGrupVal] = useState('Genel');
+  // havuzFolder (2026-09-18, Havuz yeniden tasarımı — 1. adım): Havuz artık tek bir düz ağaç değil, kök
+  // klasörler arasında geçiş yapılan bir yapı. Bilerek Havuz'un kendi ekran IIFE'si İÇİNDE değil, sayfa
+  // seviyesinde tutuluyor — ileride Ajanda/Ayarlar gibi başka bir ekrandaki bir buton "Gelenler'i aç" diyerek
+  // hem bunu hem screen'i ayarlayabilsin diye (Behnan: "ajandan veya ayarlardan bir butonla da açılabilecek
+  // şekilde olsun"). Şimdilik iki kök var: 'gelenler' (eski Inbox, artık Sohbet'ten taşındı) ve 'kisisel'
+  // (bugüne kadarki Grup/Alt grup ağacı — "Kişisel Arşiv" adını aldı). Üçüncü kök ("Ajandadan Kaydedilenler",
+  // kart-tipi kategorili otomatik klasörleme) ayrı bir sonraki adımda eklenecek.
+  const [havuzFolder, setHavuzFolder] = useState<'gelenler' | 'kisisel'>('kisisel');
   // Ay görünümü artık ayrı bir sayfa değil, takvim ikonuyla açılan bir overlay/popup (2026-09-17, Behnan kararı:
   // "sadece bir takvim ikonu bile yeterli, çıkan aylık seçim ve navigasyon popup'ın ... dışarıda bir şeye
   // dokunduğumuzda kapanır"). ayPopupOpen açık/kapalı durumu tutar; ayCursor ise popup içinde GEZİNİLEN ay —
@@ -3894,11 +3902,70 @@ export default function Rite() {
           <div>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
               <h2 style={{ margin: 0 }}>Aktivite Havuzu</h2>
-              <div style={{ display: 'flex', gap: 12 }}>
-                <button className="minlink" onClick={() => { setAnaGrupEkleAcik((o) => !o); setGrupYeniAd(''); }}>＋ Grup</button>
-                <button className="minlink" onClick={() => setGruplarYonetOpen(true)}>🗂 Grupları yönet</button>
-              </div>
+              {havuzFolder === 'kisisel' && (
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <button className="minlink" onClick={() => { setAnaGrupEkleAcik((o) => !o); setGrupYeniAd(''); }}>＋ Grup</button>
+                  <button className="minlink" onClick={() => setGruplarYonetOpen(true)}>🗂 Grupları yönet</button>
+                </div>
+              )}
             </div>
+            {/* Kök klasör şeridi (2026-09-18, Havuz yeniden tasarımı — 1. adım): eski ayrı "Sohbet > Inbox"
+                kartı kalktı, Inbox artık burada bir klasör (📥 Gelenler) — paylaşılan bir şey geldiği an zaten
+                Havuz'un içinde, ayrı bir "kabul et" adımına gerek yok. */}
+            <div style={{ display: 'flex', gap: 8, margin: '10px 0 4px' }}>
+              <span className={'chip' + (havuzFolder === 'gelenler' ? ' on' : '')} onClick={() => setHavuzFolder('gelenler')}>📥 Gelenler{ibBadge > 0 ? ' · ' + ibBadge : ''}</span>
+              <span className={'chip' + (havuzFolder === 'kisisel' ? ' on' : '')} onClick={() => setHavuzFolder('kisisel')}>🗄️ Kişisel Arşiv</span>
+            </div>
+            {havuzFolder === 'gelenler' ? (
+              <div>
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, margin: '6px 0' }}>
+                  <p className="sub" style={{ margin: 0 }}>Başkalarının seninle paylaştığı kartlar burada birikir.</p>
+                  <button className="btn ghost sm" onClick={() => client && loadInbox(client.id)}>🔄 Yenile</button>
+                </div>
+                {inbox.length === 0 && <div className="note" style={{ textAlign: 'center', marginTop: 10 }}>Gelenler boş. Sana bir şey paylaşıldığında burada göreceksin.</div>}
+                {inbox.map((v) => v.tur !== 'aktivite' ? (
+                  <InboxNot key={v.id} v={v} onOpen={() => openIbDetay(v)} />
+                ) : (
+                  <div key={v.id} className="card">
+                    <div
+                      onClick={v.payload?.kartTipi === 'bilgi' ? () => openInboxPreview(v) : undefined}
+                      style={v.payload?.kartTipi === 'bilgi' ? { cursor: 'pointer' } : undefined}
+                    >
+                      <div style={{ fontSize: 13, fontWeight: 700 }}>🎁 {v.baslik || v.payload?.ad}</div>
+                      <div className="note" style={{ margin: '2px 0' }}>{v.payload?.from_ad ? 'Kimden: ' + v.payload.from_ad : 'Paylaşım'}{v.from_code ? ' · ' + v.from_code : ''}</div>
+                      {(v.payload?.faydalar || []).length > 0 && <div>{Array.from(new Set((v.payload.faydalar || []).map((k: string) => faydaMap[k]?.alan).filter(Boolean))).map((a: any) => <span key={a} className="tagp p-alan">{a}</span>)}</div>}
+                      {v.payload?.aciklama && <div className="note" style={{ marginTop: 4 }}>{v.payload.aciklama}</div>}
+                      {v.payload?.kartTipi === 'bilgi' && (
+                        <div className="note" style={{ margin: '4px 0 0', fontWeight: 700 }}>
+                          👁 Kartı aç{v.payload?.kartConfig?.randevu && v.payload.baslangic ? ' · 📅 ' + kisaTarih(v.payload.baslangic) : ''}
+                        </div>
+                      )}
+                    </div>
+                    {ibGrupSec === v.id && (
+                      <div style={{ margin: '6px 0' }}>
+                        <label className="fldlbl" style={{ marginTop: 0 }}>Kişisel Arşiv&apos;de hangi grupta saklansın?</label>
+                        {personalGroups.length > 0 && <div style={{ margin: '2px 0 6px' }}>{personalGroups.map((g) => <span key={g} className={'chip' + (ibGrupVal === g ? ' on' : '')} onClick={() => setIbGrupVal(g)}>{g}</span>)}</div>}
+                        <input value={ibGrupVal} onChange={(e) => setIbGrupVal(e.target.value)} placeholder="ör. Genel, Beslenme… (yeni grup için yaz)" />
+                        <div className="rowbtns" style={{ marginTop: 6 }}>
+                          <button className="btn sm" onClick={() => inboxAktiviteEkle(v, ibGrupVal)}>Kaydet</button>
+                          <button className="btn ghost sm" onClick={() => { setIbGrupSec(null); setIbGrupVal('Genel'); }}>Vazgeç</button>
+                        </div>
+                      </div>
+                    )}
+                    <div className="rowbtns">
+                      {v.durum === 'alindi'
+                        ? <span className="note" style={{ margin: 0, color: 'var(--green)', fontWeight: 700 }}>✓ Alındı</span>
+                        : ibGrupSec !== v.id && <>
+                            <button className="btn ghost sm" onClick={() => inboxAktiviteAjanda(v)}>Ajandama ekle</button>
+                            {!v.payload?.kartConfig?.randevu && <button className="btn ghost sm" onClick={() => { setIbGrupSec(v.id); setIbGrupVal('Genel'); }}>Kişisel Arşiv&apos;e taşı</button>}
+                          </>}
+                      <button className="btn ghost sm" style={{ color: 'var(--red)', borderColor: '#e6c4bd' }} onClick={() => inboxSil(v.id)}>Sil</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+            <>
             <p className="sub">Her Grup kendi araştırma başlığın — başlığa dokunup aç/kapat. Yeni bir kişisel kart Ajanda&apos;daki <b>+</b> ile oluşturulur, en son açtığın Grup/Alt gruba eklenir.</p>
             {anaGrupEkleAcik && (
               <div style={{ display: 'flex', gap: 6, margin: '0 0 10px' }}>
@@ -3971,6 +4038,8 @@ export default function Rite() {
                 </div>
               );
             })}
+            </>
+            )}
           </div>
           );
         })()}
@@ -4071,72 +4140,24 @@ export default function Rite() {
 
         {/* ---------- İLETİŞİM / SOHBET (2026-09 Behnan kararı) ---------- */}
         {/* Koçluk chat + görüntülü görüşme için ayrılmış sekme — henüz sadece yer tutucu, hiçbir backend/chat
-            mantığı yok (gerçek entegrasyon, ör. stream.io, ayrı bir iş). Inbox (bkz. eskiden üst header'daki
-            📥 butonu/modalı) buraya, sayfa içi bir kart olarak taşındı — "inbox'ı sohbet içinde aynen bir kart
-            gibi taşıyabilirsin" (Behnan kararı) — üst header de bununla birlikte tamamen kaldırıldı. */}
+            mantığı yok (gerçek entegrasyon, ör. kendi chat altyapımız, ayrı bir iş). Inbox artık burada değil —
+            2026-09-18 Havuz yeniden tasarımı 1. adımıyla Havuz'un kendi "📥 Gelenler" klasörüne taşındı (bkz.
+            screen==='havuz', havuzFolder==='gelenler'): paylaşılan bir kart geldiği an zaten Havuz'un içinde,
+            ayrı bir "kabul et" adımı yok. Sohbet gerçek chat olarak açıldığında, o akıştan paylaşılan bir şeyi
+            Havuz'a almak yine elle "Havuza al" ile olacak (bkz. proje hafızası, karar #3) — otomatik değil. */}
         {screen === 'iletisim' && (
           <div>
             <h2>💬 Sohbet</h2>
             <div className="empty" style={{ marginTop: 10 }}>Yakında — koçunla sohbet ve görüntülü görüşme burada olacak.</div>
-
-            <div className="card" style={{ marginTop: 14 }}>
-              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
-                <h3 style={{ margin: 0 }}>📥 Inbox</h3>
-                <button className="btn ghost sm" onClick={() => client && loadInbox(client.id)}>🔄 Yenile</button>
+            {ibBadge > 0 && (
+              <div className="card" style={{ marginTop: 14, cursor: 'pointer' }} onClick={() => { setHavuzFolder('gelenler'); setScreen('havuz'); }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <div><b>📥 Gelenler</b> — {ibBadge} yeni paylaşım</div>
+                  <span className="go">›</span>
+                </div>
+                <div className="note" style={{ marginTop: 2 }}>Paylaşılanlar artık Havuz&apos;un Gelenler klasöründe.</div>
               </div>
-              <div className="note" style={{ marginTop: 4 }}>Başkalarının seninle paylaştığı kartlar burada birikir.</div>
-            </div>
-            {inbox.length === 0 && <div className="note" style={{ textAlign: 'center', marginTop: 10 }}>Inbox boş. Sana bir şey paylaşıldığında burada göreceksin. Kendi notunu/randevunu eklemek için Ajanda'daki ＋ butonunu kullan.</div>}
-            {inbox.map((v) => v.tur !== 'aktivite' ? (
-              <InboxNot key={v.id} v={v} onOpen={() => openIbDetay(v)} />
-            ) : (
-              <div key={v.id} className="card">
-                {(
-                  <>
-                    {/* Kişisel bilgi kartları (Not/Randevu/Alışkanlık) için tıklayınca gerçek detay ekranını
-                        (aynen Ajanda/Havuz'daki gibi, salt okunur) açar — kabul etmeden önce ne geldiğini görüp
-                        gerekirse hemen silebilsin diye (kullanıcı isteği: "gereksiz paylaşım"lar). Sadece
-                        başlık/özet alanı tıklanabilir; alttaki Ajandama ekle/Havuzuma ekle/Sil ayrı, tetiklenmez. */}
-                    <div
-                      onClick={v.payload?.kartTipi === 'bilgi' ? () => openInboxPreview(v) : undefined}
-                      style={v.payload?.kartTipi === 'bilgi' ? { cursor: 'pointer' } : undefined}
-                    >
-                      <div style={{ fontSize: 13, fontWeight: 700 }}>🎁 {v.baslik || v.payload?.ad}</div>
-                      <div className="note" style={{ margin: '2px 0' }}>{v.payload?.from_ad ? 'Kimden: ' + v.payload.from_ad : 'Paylaşım'}{v.from_code ? ' · ' + v.from_code : ''}</div>
-                      {(v.payload?.faydalar || []).length > 0 && <div>{Array.from(new Set((v.payload.faydalar || []).map((k: string) => faydaMap[k]?.alan).filter(Boolean))).map((a: any) => <span key={a} className="tagp p-alan">{a}</span>)}</div>}
-                      {v.payload?.aciklama && <div className="note" style={{ marginTop: 4 }}>{v.payload.aciklama}</div>}
-                      {v.payload?.kartTipi === 'bilgi' && (
-                        <div className="note" style={{ margin: '4px 0 0', fontWeight: 700 }}>
-                          👁 Kartı aç{v.payload?.kartConfig?.randevu && v.payload.baslangic ? ' · 📅 ' + kisaTarih(v.payload.baslangic) : ''}
-                        </div>
-                      )}
-                    </div>
-                    {ibGrupSec === v.id && (
-                      <div style={{ margin: '6px 0' }}>
-                        <label className="fldlbl" style={{ marginTop: 0 }}>Hangi grupta saklansın?</label>
-                        {personalGroups.length > 0 && <div style={{ margin: '2px 0 6px' }}>{personalGroups.map((g) => <span key={g} className={'chip' + (ibGrupVal === g ? ' on' : '')} onClick={() => setIbGrupVal(g)}>{g}</span>)}</div>}
-                        <input value={ibGrupVal} onChange={(e) => setIbGrupVal(e.target.value)} placeholder="ör. Genel, Beslenme… (yeni grup için yaz)" />
-                        <div className="rowbtns" style={{ marginTop: 6 }}>
-                          <button className="btn sm" onClick={() => inboxAktiviteEkle(v, ibGrupVal)}>Kaydet</button>
-                          <button className="btn ghost sm" onClick={() => { setIbGrupSec(null); setIbGrupVal('Genel'); }}>Vazgeç</button>
-                        </div>
-                      </div>
-                    )}
-                    <div className="rowbtns">
-                      {v.durum === 'alindi'
-                        ? <span className="note" style={{ margin: 0, color: 'var(--green)', fontWeight: 700 }}>✓ Alındı</span>
-                        : ibGrupSec !== v.id && <>
-                            <button className="btn ghost sm" onClick={() => inboxAktiviteAjanda(v)}>Ajandama ekle</button>
-                            {/* Randevu tek bir tarihe/saate bağlı — havuz (tekrarlanan/tarihsiz aktivite şablonu) kavramına uymuyor,
-                                o yüzden randevu paylaşımlarında bu seçenek hiç gösterilmiyor (kullanıcı isteği). */}
-                            {!v.payload?.kartConfig?.randevu && <button className="btn ghost sm" onClick={() => { setIbGrupSec(v.id); setIbGrupVal('Genel'); }}>Havuzuma ekle</button>}
-                          </>}
-                      <button className="btn ghost sm" style={{ color: 'var(--red)', borderColor: '#e6c4bd' }} onClick={() => inboxSil(v.id)}>Sil</button>
-                    </div>
-                  </>
-                )}
-              </div>
-            ))}
+            )}
           </div>
         )}
 
@@ -4230,7 +4251,12 @@ export default function Rite() {
             görünürde hiç yazmıyor). Diğer sekmelerin aksine tek kelimelik bir etiketi olmadığı için dizi
             girdisindeki üçüncü eleman (etiket) boş string. */}
         {[['home', '🏠', ''], ['ajanda', '🗓', 'Ajanda'], ['havuz', '⊕', 'Havuz']].map(([k, ic, l]) => (
-          <button key={k} className={screen === k ? 'on' : ''} onClick={() => setScreen(k)}><span className="ic">{ic}</span>{l}</button>
+          <button key={k} className={screen === k ? 'on' : ''} style={k === 'havuz' ? { position: 'relative' } : undefined} onClick={() => { setScreen(k); if (k === 'havuz' && client) loadInbox(client.id); }}>
+            <span className="ic">{ic}</span>{l}
+            {/* Gelenler rozeti (2026-09-18, Havuz yeniden tasarımı 1. adımı ile eski Sohbet-nav rozetinden
+                buraya taşındı — paylaşılanlar artık Havuz > Gelenler'de birikiyor, rozet de oraya ait). */}
+            {k === 'havuz' && ibBadge > 0 && <span style={{ position: 'absolute', top: 3, right: '22%', background: 'var(--red)', color: '#fff', fontSize: 9, fontWeight: 800, borderRadius: 20, padding: '1px 5px' }}>{ibBadge}</span>}
+          </button>
         ))}
         {/* bottom_nav'ın genel ＋ tuşu 2026-09'da (aynı gün, Behnan kararı — WhatsApp-esinli sadeleştirmenin
             son adımı) TAMAMEN KALDIRILDI. Kademeli planın son durağıydı: Home kendi Ölçümler şeridinden
@@ -4252,9 +4278,8 @@ export default function Rite() {
             "bdg" class'ına güveniyordu ama o CSS kuralı (.ibtn .bdg) sadece .ibtn atası içinde geçerliydi; burada
             öyle bir ata yok, o yüzden position:absolute hiç uygulanmıyordu ve rakam "Sohbet1" gibi satır içine
             akıyordu — konumlandırma artık doğrudan inline style ile veriliyor. */}
-        <button key="iletisim" className={screen === 'iletisim' ? 'on' : ''} style={{ position: 'relative' }} onClick={() => { setScreen('iletisim'); if (client) loadInbox(client.id); }}>
+        <button key="iletisim" className={screen === 'iletisim' ? 'on' : ''} onClick={() => { setScreen('iletisim'); if (client) loadInbox(client.id); }}>
           <span className="ic">💬</span>Sohbet
-          {ibBadge > 0 && <span style={{ position: 'absolute', top: 3, right: '22%', background: 'var(--red)', color: '#fff', fontSize: 9, fontWeight: 800, borderRadius: 20, padding: '1px 5px' }}>{ibBadge}</span>}
         </button>
         <button className={screen === 'bilgi' ? 'on' : ''} onClick={() => setScreen('bilgi')}><span className="ic">⚙</span>Ayarlar</button>
       </div>
