@@ -1520,6 +1520,20 @@ export default function Rite() {
   // gelAcikId (2026-09-18, Havuz yeniden tasarımı — 6. adım): Gelenler'in liste görünümünde hangi aktivite-türü
   // satırın genişletilmiş (aksiyon butonları görünür) halde olduğu — null = hepsi daralı. bkz. gelKartListe.
   const [gelAcikId, setGelAcikId] = useState<string | null>(null);
+  // havuzAramaAcik/havuzArama (2026-09-18, Havuz yeniden tasarımı — 7. adım, Behnan: "hem havuzda, hem ajanda
+  // da klasik, mercek ikonlu serbest bir metin yazarak içinde bu kelimelerin geçtiği yerleri görmek isterim...
+  // Ajanda ve havuz da farklı sonuç listesi olacaktır"): Havuz'un global araması — başlık(ad/baslik) VE
+  // içerik(aciklama) alanında, case-insensitive, basit bir substring eşleşmesi; Havuz'un 3 kökünün TAMAMINI
+  // tarıyor (personalActs, ajandaActs, inbox), sonuçlar kök etiketiyle (📥/📦/🗄️) birlikte listeleniyor.
+  // Gelişmiş filtre yok (v1). Arama açıkken normal klasör gezinme UI'ı (kök şeridi + breadcrumb) gizleniyor.
+  const [havuzAramaAcik, setHavuzAramaAcik] = useState(false);
+  const [havuzArama, setHavuzArama] = useState('');
+  // ajAramaAcik/ajArama (2026-09-18, Havuz yeniden tasarımı — 7. adım): Ajanda'nın global araması — Havuz'unkinden
+  // farklı olarak (Behnan: "Ajanda ve havuz da farklı sonuç listesi olacaktır") gündüz/hafta görünümüyle sınırlı
+  // değil, TÜM rituals'ı (günlerden bağımsız) tarayıp düz, tarihe göre sıralı bir liste gösteriyor. Aynı basit
+  // substring (ad+aciklama) eşleşmesi, gelişmiş filtre yok.
+  const [ajAramaAcik, setAjAramaAcik] = useState(false);
+  const [ajArama, setAjArama] = useState('');
   // havuzGorunum (2026-09-18, Havuz yeniden tasarımı — 5. adım, Behnan: "havuz için default liste görünümü
   // olmalı, sayının artacağını düşünerek... bu mantığı bir çok yerde kullanabiliriz, mesela Odak alanları.
   // Liste görünümü derkende aslında tek satırlık kartlar ve gerekli flag'lar, etiketler"; 6. adımda genişletme,
@@ -3625,6 +3639,13 @@ export default function Rite() {
             <div className="ajhead">
               <h2>Ajanda</h2>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {/* 🔍 Ajanda araması (2026-09-18, 7. adım): bkz. ajArama tanımındaki not. */}
+                <button
+                  type="button"
+                  title="Ara"
+                  onClick={() => { if (ajAramaAcik) setAjArama(''); setAjAramaAcik((o: any) => !o); }}
+                  style={{ background: ajAramaAcik ? 'var(--green)' : 'none', color: ajAramaAcik ? '#fff' : undefined, border: '1px solid var(--line)', borderRadius: '50%', width: 30, height: 30, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: '0 0 auto', padding: 0 }}
+                >🔍</button>
                 {/* Gün/Ay vswitch kaldırıldı (2026-09-17, Behnan kararı: "Gün, Ay butonları yerine sadece bir
                     takvim ikonu bile yeterli") — Ay artık ayrı bir sayfa değil, bu ikonla açılan bir overlay/popup
                     (bkz. aşağısı, ayPopupOpen). Ajanda'nın asıl gövdesi artık hep "Gün" görünümü. */}
@@ -3656,6 +3677,35 @@ export default function Rite() {
             </div>
             </div>
 
+            {ajAramaAcik && (
+              <div style={{ margin: '8px 0 2px' }}>
+                <input autoFocus value={ajArama} onChange={(e: any) => setAjArama(e.target.value)} placeholder="🔍 Başlık veya içerikte ara…" style={{ width: '100%' }} />
+              </div>
+            )}
+            {ajArama.trim() ? (() => {
+              // Ajanda arama sonuçları (2026-09-18, 7. adım): gün/hafta görünümünün yerini alıyor, günlerden
+              // bağımsız düz, tarihe göre sıralı bir liste — bkz. ajArama tanımındaki not.
+              const q = ajArama.trim().toLowerCase();
+              const eslesir = (baslik?: string | null, aciklama?: string | null) => (baslik || '').toLowerCase().includes(q) || (aciklama || '').toLowerCase().includes(q);
+              const sonuclar = rituals.filter((r: any) => !r.mezun && eslesir(r.ad, r.aciklama)).sort((a: any, b: any) => (a.baslangic || '') < (b.baslangic || '') ? -1 : 1);
+              return sonuclar.length === 0 ? (
+                <div className="note" style={{ textAlign: 'center', marginTop: 10 }}>&quot;{ajArama}&quot; için sonuç bulunamadı.</div>
+              ) : (
+                <>
+                  <p className="sub" style={{ marginTop: 0 }}>{sonuclar.length} sonuç</p>
+                  {sonuclar.map((r: any) => (
+                    <div key={r.id} className="actcard" onClick={() => openRit(r)}>
+                      <div style={{ flex: 1 }}>
+                        <div className="n">{kartIkon(r.kart_tipi) || '📅'} {r.ad}</div>
+                        <div className="o">{r.baslangic ? dayLabel(r.baslangic) : 'tarihsiz'}{r.hatirlatma_saat ? ' · 🔔 ' + r.hatirlatma_saat : ''}</div>
+                      </div>
+                      <span className="go">›</span>
+                    </div>
+                  ))}
+                </>
+              );
+            })() : (
+            <>
             <div className="weekstrip">
               {weekDays(day).map((d) => {
                 const dt = parseD(d);
@@ -3859,6 +3909,8 @@ export default function Rite() {
                 ))}
               </div>
             )}
+            </>
+            )}
 
             {/* Ay takvimi + Yaklaşan aktiviteler artık ayrı bir "Ay" sayfası değil, takvim ikonuyla açılan bir
                 popup/overlay (2026-09-17, Behnan kararı — bkz. ayPopupOpen/ayCursor tanımı, yukarısı). Popup
@@ -4044,14 +4096,50 @@ export default function Rite() {
           <div>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
               <h2 style={{ margin: 0 }}>Aktivite Havuzu</h2>
-              {/* Liste/Kart görünüm toggle'ı (2026-09-18, Havuz yeniden tasarımı — 5-6. adım, Behnan: "sanki
-                  toggle tek olup, tüm klasörler için geçerli olsa daha uygun olur"): tek toggle, Havuz'un her
-                  3 kökünde de geçerli — bkz. havuzGorunum tanımındaki not ve gelKartListe. */}
-              <div style={{ display: 'flex', gap: 4 }}>
+              <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                {/* 🔍 Havuz araması (2026-09-18, 7. adım): bkz. havuzArama tanımındaki not. */}
+                <span
+                  className={'chip' + (havuzAramaAcik ? ' on' : '')}
+                  style={{ padding: '5px 10px', fontSize: 12, margin: 0 }}
+                  onClick={() => { if (havuzAramaAcik) setHavuzArama(''); setHavuzAramaAcik((o: any) => !o); }}
+                  title="Ara"
+                >🔍</span>
+                {/* Liste/Kart görünüm toggle'ı (2026-09-18, Havuz yeniden tasarımı — 5-6. adım, Behnan: "sanki
+                    toggle tek olup, tüm klasörler için geçerli olsa daha uygun olur"): tek toggle, Havuz'un her
+                    3 kökünde de geçerli — bkz. havuzGorunum tanımındaki not ve gelKartListe. */}
                 <span className={'chip' + (havuzGorunum === 'liste' ? ' on' : '')} style={{ padding: '5px 10px', fontSize: 12, margin: 0 }} onClick={() => setHavuzGorunum('liste')} title="Liste görünümü">☰ Liste</span>
                 <span className={'chip' + (havuzGorunum === 'kart' ? ' on' : '')} style={{ padding: '5px 10px', fontSize: 12, margin: 0 }} onClick={() => setHavuzGorunum('kart')} title="Kart görünümü">▦ Kart</span>
               </div>
             </div>
+            {havuzAramaAcik && (
+              <div style={{ margin: '8px 0 2px' }}>
+                <input autoFocus value={havuzArama} onChange={(e: any) => setHavuzArama(e.target.value)} placeholder="🔍 Başlık veya içerikte ara…" style={{ width: '100%' }} />
+              </div>
+            )}
+            {havuzArama.trim() ? (() => {
+              // Arama sonuçları (2026-09-18, 7. adım): klasör gezinme UI'ı tamamen yerini alıyor, normal köke
+              // dönmek için 🔍 ikonuna tekrar dokunup aramayı kapatmak yeterli.
+              const q = havuzArama.trim().toLowerCase();
+              const eslesir = (baslik?: string | null, aciklama?: string | null) => (baslik || '').toLowerCase().includes(q) || (aciklama || '').toLowerCase().includes(q);
+              const sonuclar: { kok: string; el: any }[] = [];
+              personalActs.filter((a: any) => eslesir(a.ad, a.aciklama)).forEach((a: any) => sonuclar.push({ kok: '🗄️ Kişisel Arşiv', el: aktKartFn(a) }));
+              ajandaActs.filter((a: any) => eslesir(a.ad, a.aciklama)).forEach((a: any) => sonuclar.push({ kok: '📦 Ajandadan Kaydedilenler', el: aktKartFn(a) }));
+              inbox.filter((v: any) => eslesir(v.baslik || v.payload?.ad, v.payload?.aciklama)).forEach((v: any) => sonuclar.push({ kok: '📥 Gelenler', el: gelKartFn(v) }));
+              return sonuclar.length === 0 ? (
+                <div className="note" style={{ textAlign: 'center', marginTop: 10 }}>&quot;{havuzArama}&quot; için sonuç bulunamadı.</div>
+              ) : (
+                <>
+                  <p className="sub" style={{ marginTop: 0 }}>{sonuclar.length} sonuç</p>
+                  {sonuclar.map((s, i) => (
+                    <div key={i}>
+                      <div className="note" style={{ margin: '10px 0 2px', fontWeight: 700 }}>{s.kok}</div>
+                      {s.el}
+                    </div>
+                  ))}
+                </>
+              );
+            })() : (
+            <>
             {/* Kök klasör şeridi (2026-09-18, Havuz yeniden tasarımı — 1. adım): eski ayrı "Sohbet > Inbox"
                 kartı kalktı, Inbox artık burada bir klasör (📥 Gelenler) — paylaşılan bir şey geldiği an zaten
                 Havuz'un içinde, ayrı bir "kabul et" adımına gerek yok. */}
@@ -4226,6 +4314,8 @@ export default function Rite() {
                 </>
               );
             })()}
+            </>
+            )}
             </>
             )}
           </div>
