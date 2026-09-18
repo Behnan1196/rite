@@ -544,18 +544,34 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi, sadeceAcik
                 // notTasarimi: Ad alanıyla aynı yalın karakter (şeffaf zemin, aynı yazı stili) ama ince bir çerçeve
                 // ile ayrı bir alan olduğu belli oluyor (kullanıcı isteği); baştan 3-4 satır yükseklikte açılsın
                 // diye rows kullanılıyor.
-                <textarea
-                  ref={icerikRef}
-                  autoFocus={!notOdak}
-                  rows={notTasarimi ? 4 : undefined}
-                  value={icerikVal}
-                  onChange={(e) => setIcerikVal(e.target.value)}
-                  onBlur={icerikKaydet}
-                  placeholder={'Notunu yaz…'}
-                  style={notTasarimi
-                    ? { width: '100%', minHeight: 0, border: '1px solid var(--line)', borderRadius: 8, outline: 'none', background: 'transparent', padding: 8, fontFamily: 'inherit', fontSize: 14, lineHeight: 1.6, color: 'var(--ink)', resize: 'vertical', boxSizing: 'border-box' }
-                    : { width: '100%', minHeight: 100 }}
-                />
+                <div style={{ position: 'relative' }}>
+                  <textarea
+                    ref={icerikRef}
+                    autoFocus={!notOdak}
+                    rows={notTasarimi ? 4 : undefined}
+                    value={icerikVal}
+                    onChange={(e) => setIcerikVal(e.target.value)}
+                    onBlur={icerikKaydet}
+                    placeholder={'Notunu yaz…'}
+                    style={notTasarimi
+                      ? { width: '100%', minHeight: 0, border: '1px solid var(--line)', borderRadius: 8, outline: 'none', background: 'transparent', padding: '8px 28px 8px 8px', fontFamily: 'inherit', fontSize: 14, lineHeight: 1.6, color: 'var(--ink)', resize: 'vertical', boxSizing: 'border-box' }
+                      : { width: '100%', minHeight: 100 }}
+                  />
+                  {/* Temizle (✕) — Behnan isteği (2026-09-18): "Yeni not" ön-dolgusunu çoğunlukla silmek
+                      gerekeceği için, arama kutularındaki gibi sağ üstte tek dokunuşla temizleme. onMouseDown'da
+                      preventDefault ŞART — yoksa tıklama textarea'da önce blur tetikler (icerikKaydet çalışıp
+                      icerikEdit'i false yapar, kutu kapanır), temizleme hiç gerçekleşmeden düzenleme modundan
+                      çıkılmış olurdu. İçerik boşken buton zaten hiç görünmüyor (arama kutusu deseniyle aynı). */}
+                  {notTasarimi && icerikVal.trim() && (
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => { setIcerikVal(''); icerikRef.current?.focus(); }}
+                      title="Temizle"
+                      style={{ position: 'absolute', top: 6, right: 6, background: 'none', border: 'none', padding: 2, fontSize: 14, color: 'var(--muted)', cursor: 'pointer', lineHeight: 1 }}
+                    >✕</button>
+                  )}
+                </div>
               ) : (
                 // notTasarimi: dokunmadan önceki bu görünüm de textarea ile aynı çerçeveyi ve min-yüksekliği (4 satır +
                 // padding) alıyor — yoksa tıklayınca kutu aniden büyüyüp kayıyormuş gibi bir sıçrama oluyordu
@@ -4065,6 +4081,12 @@ export default function Rite() {
         const kisiselTur: 'not' | 'aliskanlik' | 'yapilacak' = o.aliskanlik ? 'aliskanlik' : ((kCfg?.gorev || kCfg?.randevu) ? 'yapilacak' : 'not');
         const kisiselEtiket = (kisiselTur === 'aliskanlik' || kisiselTur === 'yapilacak') ? 'Aktivite' : 'Not';
         const kisiselYeni = (kisiselTur === 'aliskanlik' || kisiselTur === 'yapilacak') ? 'Yeni aktivite' : 'Yeni not';
+        // 2026-09-18 (Behnan isteği): Not'un tüm kimliği içeriğinden (başlığı da oradan türüyor) geldiği için,
+        // açıklama tamamen boşsa Kaydet'i devre dışı bırakıyoruz — "Yeni not" ön-dolgusunu silip boş kaydetmek
+        // eskiden yine içeriksiz "Yeni not" adlı bir kart oluşturuyordu, artık buna izin verilmiyor. Aktivite/
+        // Randevu'da açıklama zaten opsiyonel (asıl kimlik ayrı Ad alanından geliyor), o yüzden SADECE
+        // kisiselTur==='not' iken uygulanıyor.
+        const notBos = kisiselTur === 'not' && !(kCfg?.icerik || '').trim();
         // Kart daha bu an ＋ menüsünden oluşturulduysa (taze) ya da hâlâ taslaksa, "zaten var olan bir kart"
         // için anlamlı mezun et / paylaş seçenekleri gizli kalır (kullanıcı isteği) — hem aşağıdaki genel
         // zamanlama şeridinde hem de kişisel kartın kendi ince başlık şeridinde kullanılıyor.
@@ -4502,13 +4524,13 @@ export default function Rite() {
             {isRit && isKisisel && !isTaze && (
               <div style={{ display: 'flex', gap: 8, margin: '2px 0 8px' }}>
                 <button className="btn ghost" style={{ flex: 1 }} onClick={kisiselDuzenleVazgec}>Vazgeç</button>
-                <button className="btn" style={{ flex: 1 }} onClick={kisiselDuzenleKaydet}>Kaydet</button>
+                <button className="btn" style={{ flex: 1 }} disabled={notBos} onClick={kisiselDuzenleKaydet}>Kaydet</button>
               </div>
             )}
             {isDraft && (
               <div style={{ display: 'flex', gap: 8, margin: '2px 0 8px' }}>
                 <button className="btn ghost" style={{ flex: 1 }} onClick={closeDetay}>Vazgeç</button>
-                <button className="btn" style={{ flex: 1 }} onClick={taslakKaydet}>Kaydet</button>
+                <button className="btn" style={{ flex: 1 }} disabled={notBos} onClick={taslakKaydet}>Kaydet</button>
               </div>
             )}
             {isRit && kTip === 'video' && <div style={{ margin: '4px 0 8px' }}>
