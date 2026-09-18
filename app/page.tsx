@@ -587,21 +587,16 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi, sadeceAcik
                     value={icerikVal}
                     onChange={(e) => setIcerikVal(e.target.value)}
                     onBlur={icerikKaydet}
-                    // 2026-09-18 (Behnan isteği): "ad" satırına (ilk satır) çift tıklayınca TAMAMI seçilsin ki
-                    // ✕ Temizle'ye (altındaki açıklamayı da götürüyor) gerek kalmadan üstüne rahatça yazılabilsin.
-                    // İlk deneme (varsayılan adı "Yeni_not" gibi alt çizgili/boşluksuz tek "kelime" yapmak, çift
-                    // tıkla native kelime-seçimine güvenmek) Windows/Chrome'da işe yaradı ama macOS/iOS'ta (Apple
-                    // platformlarının kelime sınırı kuralı alt çizgiyi de ayraç sayıyor) işe yaramadı — platforma
-                    // göre değişen native davranışa güvenmek yerine burada KENDİ seçimimizi uyguluyoruz: tarayıcının
-                    // native çift-tık seçimi ilk satırın İÇİNDE bir yere denk geldiyse (satır 2+'daki normal
-                    // kelime seçimine dokunmadan), seçimi o satırın TAMAMINI kapsayacak şekilde genişletiyoruz —
-                    // platform bağımsız, tutarlı çalışıyor.
-                    onDoubleClick={(e) => {
-                      const el = e.currentTarget;
-                      const ilkSatirSonu = el.value.indexOf('\n');
-                      const sinir = ilkSatirSonu === -1 ? el.value.length : ilkSatirSonu;
-                      if (el.selectionStart <= sinir) el.setSelectionRange(0, sinir);
-                    }}
+                    // 2026-09-18 (Behnan isteği): "ad" satırına (ilk satır) çift tıklayınca/dokununca TAMAMI
+                    // seçilsin ki ✕ Temizle'ye (altındaki açıklamayı da götürüyor) gerek kalmadan üstüne rahatça
+                    // yazılabilsin. İki ayrı deneme elendi: (1) alt çizgili "Yeni_not" — Windows/Chrome'da işe
+                    // yaradı ama macOS/iOS'ta alt çizgi de kelime ayracı sayıldığı için yaramadı; (2) burada bir
+                    // onDoubleClick JS override'ı (native seçimi ilk satırın tamamına genişletmek) — iPhone'da
+                    // (dokunma/seçim akışı farklı işlediği için) yine yaramadı. Behnan kararı: "platforma bağlı
+                    // çözüme gitmeyelim" — asıl çözüm aşağıdaki `ad` varsayılanında: hiçbir ayraç KARAKTERİ
+                    // olmayan camelCase tek kelime ("YeniNot" — boşluk/alt çizgi/tire yok), kelime sınırı
+                    // algoritması ne olursa olsun (Windows/Apple fark etmeksizin) baştan sona TEK kelime olarak
+                    // algılanıyor, çift tık/çift dokunma her yerde tutarlı çalışıyor.
                     placeholder={'Notunu yaz…'}
                     style={notTasarimi
                       ? { width: '100%', minHeight: 0, border: '1px solid var(--line)', borderRadius: 8, outline: 'none', background: 'transparent', padding: '8px 28px 8px 8px', fontFamily: 'inherit', fontSize: 14, lineHeight: 1.6, color: 'var(--ink)', resize: 'vertical', boxSizing: 'border-box' }
@@ -2310,21 +2305,22 @@ export default function Rite() {
     // 2026-09-18 (Behnan isteği, önce Not'ta): açıklamaya hiç dokunmadan hemen Kaydet'e basınca kart "Yeni not"
     // adıyla içeriksiz oluşuyordu — "mantıklı ama sürpriz olmasın" diyerek çözüldü, sonra aynı gün Aktivite'ye de
     // genelleştirildi ("kullanıcılar Not'ta alışıyorsa Aktivite'de de yabancılık çekmeyebilir"). cfg.icerik
-    // burada artık HİÇBİR tür için elle doldurulmuyor (null kalıyor) — "Yeni not"/"Yeni aktivite" ön-doldurması
+    // burada artık HİÇBİR tür için elle doldurulmuyor (null kalıyor) — "YeniNot"/"YeniAktivite" ön-doldurması
     // aşağıdaki `ad` değerinden, BilgiKartEdit'in `baslikKaynagi` prop'u üzerinden geliyor (bkz. oradaki not) —
     // tek bir gerçek editable metin, ayrı bir "sahte başlık" alanı YOK.
-    // NOT (aynı gün, kısa süreli bir deneme+geri alma): varsayılan adı "Yeni_not" gibi alt çizgili/boşluksuz tek
-    // "kelime" yapıp native çift-tık kelime-seçimine güvenmek denendi — Windows/Chrome'da işe yaradı ama
-    // macOS/iOS'ta (Apple'ın kelime sınırı kuralı alt çizgiyi de ayraç sayıyor) yaramadı. Platforma göre değişen
-    // native davranışa güvenmek yerine (bkz. aşağıdaki içerik textarea'sındaki onDoubleClick) kendi seçim
-    // mantığımız kuruldu — o yüzden ad tekrar okunaklı, boşluklu hâline döndü.
+    // Varsayılan ad BİLEREK camelCase/boşluksuz-ayraçsız tek kelime ("YeniNot", "Yeni not"/"Yeni_not" değil,
+    // Behnan isteği — aynı gün iki farklı deneme elendi): içerik kutusunda bu ilk satıra çift tıklayınca/
+    // dokununca tamamı seçilsin istendi. Boşluklu "Yeni not" çift tıkla sadece bir kelimeyi seçiyordu; alt
+    // çizgili "Yeni_not" Windows'ta işe yaradı ama iOS'ta yaramadı (Apple'ın kelime sınırı kuralı alt çizgiyi de
+    // ayraç sayıyor); bir JS onDoubleClick override'ı da iPhone'da tutarlı çalışmadı. Hiçbir ayraç karakteri
+    // içermeyen camelCase ise kelime-sınırı algoritmasından bağımsız, HER platformda tek kelime.
     const cfg: any = { icerik: null, videolar: [] };
     // Yapılacak (Aktivite'nin "Bugün" hâli): kart_config.gorev — bitissiz (yapıncaya kadar her gün görünür),
     // işaretlenince kalıcı kapanır (bkz. kartYapildiToggle).
     if (tur === 'yapilacak') cfg.gorev = true;
     openRit({
       id: null,
-      ad: (tur === 'aliskanlik' || tur === 'yapilacak') ? 'Yeni aktivite' : 'Yeni not',
+      ad: (tur === 'aliskanlik' || tur === 'yapilacak') ? 'YeniAktivite' : 'YeniNot',
       kaynak: 'Kendi', tip: 'aliskanlik', kart_tipi: 'bilgi', kart_config: cfg,
       aliskanlik: tur === 'aliskanlik', aktif: true, mezun: false,
       // Not artık tek günlük değil — bir yapışkan not gibi, silininceye kadar her gün duruyor (Ayraç'takiyle
@@ -2350,11 +2346,13 @@ export default function Rite() {
   function yeniHavuzTaslakAc(tur: 'not' | 'aliskanlik') {
     // Ajanda'daki yeniTaslakAc ile aynı mantık — ön-doldurma artık burada değil, BilgiKartEdit'in
     // `baslikKaynagi` prop'u üzerinden `ad`'dan geliyor (şu an Havuz'a doğrudan ekleme girişi UI'da yok ama
-    // fonksiyon ileride kullanılabilir diye tutuluyor, tutarlılık için burada da uygulandı).
+    // fonksiyon ileride kullanılabilir diye tutuluyor, tutarlılık için burada da uygulandı). Ad burada da
+    // BİLEREK camelCase/ayraçsız — bkz. yeniTaslakAc'taki aynı not (çift tık/çift dokunma her platformda tek
+    // kelime olarak tutarlı seçilsin diye).
     const cfg: any = { icerik: null, videolar: [] };
     openDetay({
       id: null,
-      ad: tur === 'aliskanlik' ? 'Yeni alışkanlık' : 'Yeni not',
+      ad: tur === 'aliskanlik' ? 'YeniAlışkanlık' : 'YeniNot',
       grup: actGroup || 'Genel', alt_grup: actAltGroup || null, kart_tipi: 'bilgi', kart_config: cfg,
       aliskanlik: tur === 'aliskanlik', faydalar: [], aciklama: null, videolar: [],
       zaman: 'gün', zamanlar: null, gunler: tur === 'aliskanlik' ? [] : null, sure_gun: null,
