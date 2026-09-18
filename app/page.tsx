@@ -1528,6 +1528,11 @@ export default function Rite() {
   // Gelişmiş filtre yok (v1). Arama açıkken normal klasör gezinme UI'ı (kök şeridi + breadcrumb) gizleniyor.
   const [havuzAramaAcik, setHavuzAramaAcik] = useState(false);
   const [havuzArama, setHavuzArama] = useState('');
+  // copAcik (2026-09-18, Havuz yeniden tasarımı — 8. adım, Behnan: "çöp kutusunda sadece liste görünümü,
+  // silinme tarihi, tipi, geldiği klasör ve Geri al tuşu"): 🔍 arama ile aynı desen — header'daki 🗑️ ikonuyla
+  // açılan, klasör gezinme UI'ının yerini alan düz bir liste. Arama ile aynı anda açık olmasın diye ikisi
+  // karşılıklı kapatılıyor (bkz. header'daki onClick'ler).
+  const [copAcik, setCopAcik] = useState(false);
   // ajAramaAcik/ajArama (2026-09-18, Havuz yeniden tasarımı — 7. adım): Ajanda'nın global araması — Havuz'unkinden
   // farklı olarak (Behnan: "Ajanda ve havuz da farklı sonuç listesi olacaktır") gündüz/hafta görünümüyle sınırlı
   // değil, TÜM rituals'ı (günlerden bağımsız) tarayıp düz, tarihe göre sıralı bir liste gösteriyor. Aynı basit
@@ -1859,6 +1864,14 @@ export default function Rite() {
     loadGruplar(client.id);
     const t = setInterval(() => loadGruplar(client.id), 30000);
     return () => clearInterval(t);
+  }, [client, screen]);
+
+  // Çöp kutusu "lazy purge" (2026-09-18, Havuz yeniden tasarımı — 8. adım, bkz. copKutusuTemizle tanımı):
+  // gerçek bir arka plan cron yok — Havuz ekranına her girişte (screen 'havuz' olduğunda) 30 günden eski çöp
+  // kutusu satırları sessizce kalıcı siliniyor.
+  useEffect(() => {
+    if (!client || screen !== 'havuz') return;
+    copKutusuTemizle(client.id);
   }, [client, screen]);
 
   async function loadInbox(cid: string) {
@@ -2285,11 +2298,33 @@ export default function Rite() {
     loadActivities();
     setTimeout(() => { setPaylasOpen(false); setKMsg(''); setPaylasBusy(false); }, 900);
   }
+  // silAktivite (2026-09-18, Havuz yeniden tasarımı — 8. adım, Behnan: "çöp kutusunda... Geri al tuşu"):
+  // artık kalıcı silme değil, dog_activities.silindi_tarih damgalanan bir "çöp kutusuna taşıma" — kart
+  // Kişisel Arşiv/Ajandadan Kaydedilenler'den kaybolur ama 30 gün boyunca Havuz'un 🗑️ Çöp kutusu'ndan Geri
+  // Al ile kurtarılabilir (bkz. aktiviteGeriAl, copKutusuTemizle).
   async function silAktivite(act: any) {
-    if (!confirm('Bu kişisel aktivite havuzdan silinsin mi? (Ajandadaki ritüeller kalır)')) return;
-    const r = await supabase.from('dog_activities').delete().eq('id', act.id);
+    if (!confirm('Bu kişisel aktivite çöp kutusuna taşınsın mı? (Ajandadaki ritüeller kalır, 30 gün içinde Havuz\'daki 🗑️ Çöp kutusu\'ndan geri alabilirsin)')) return;
+    const r = await supabase.from('dog_activities').update({ silindi_tarih: new Date().toISOString() }).eq('id', act.id);
     if (r.error) return alert('Hata: ' + r.error.message);
     closeDetay(); loadActivities();
+  }
+  async function aktiviteGeriAl(act: any) {
+    const r = await supabase.from('dog_activities').update({ silindi_tarih: null }).eq('id', act.id);
+    if (r.error) return alert('Hata: ' + r.error.message);
+    loadActivities();
+  }
+  // copKutusuTemizle (2026-09-18, 8. adım, Behnan: "her gün silinme zamanı gelenler tespit edip kalıcı
+  // silse"): gerçek bir sunucu-taraflı cron YOK (uygulamanın zaten böyle bir mimarisi yok) — bunun yerine
+  // Havuz ekranı her açıldığında (bkz. aşağıdaki useEffect) 30 günden eski çöp kutusu satırları kalıcı
+  // silinir, "lazy purge". .select('id') sadece gerçekten bir şey silinip silinmediğini (gereksiz
+  // loadActivities/loadInbox'tan kaçınmak için) anlamak içindir.
+  async function copKutusuTemizle(cid: string) {
+    const sinir = new Date(Date.now() - 30 * 86400000).toISOString();
+    const [r1, r2] = await Promise.all([
+      supabase.from('dog_activities').delete().eq('client_id', cid).not('silindi_tarih', 'is', null).lt('silindi_tarih', sinir).select('id'),
+      supabase.from('dog_inbox').delete().eq('client_id', cid).not('silindi_tarih', 'is', null).lt('silindi_tarih', sinir).select('id'),
+    ]);
+    if ((r1.data && r1.data.length) || (r2.data && r2.data.length)) { loadActivities(); loadInbox(cid); }
   }
   // ---------- Havuz: kalıcı Grup / Alt grup listesi (dog_gruplar) ----------
   // ustId null → yeni bir üst seviye Grup; doluysa o Grup'a bağlı bir Alt grup.
@@ -3128,8 +3163,15 @@ export default function Rite() {
     await supabase.from('dog_rituals').delete().eq('client_id', client.id).eq('program', pid);
     loadData(client.id);
   }
+  // inboxSil (2026-09-18, 8. adım): silAktivite ile aynı mantık — kalıcı silme değil, çöp kutusuna taşıma.
+  // Ayrıca bir onay (confirm) istemiyor, tıpkı öncesinde de istemediği gibi (Behnan: "kalıcı sil'e bence
+  // gerek yok" — geri alınabilir olduğu için buna hiç gerek kalmadı).
   async function inboxSil(id: string) {
-    await supabase.from('dog_inbox').delete().eq('id', id);
+    await supabase.from('dog_inbox').update({ silindi_tarih: new Date().toISOString() }).eq('id', id);
+    if (client) loadInbox(client.id);
+  }
+  async function inboxGeriAl(id: string) {
+    await supabase.from('dog_inbox').update({ silindi_tarih: null }).eq('id', id);
     if (client) loadInbox(client.id);
   }
   function openIbDetay(v: any) {
@@ -3343,14 +3385,38 @@ export default function Rite() {
   const days7 = lastDays(7);
   const last30 = lastDays(30);
   const weekArr = weekDays(day);
-  const ibBadge = inbox.filter((x) => x.durum === 'yeni').length;
+  // inboxAktif (2026-09-18, 8. adım): çöp kutusuna taşınmış (silindi_tarih dolu) satırlar artık normal
+  // Gelenler görünümünde/rozette/aramada görünmesin diye — ham `inbox` state'i (tümü, çöp dahil) sadece
+  // çöp kutusu listesini kurarken kullanılıyor, gerisi hep inboxAktif üzerinden.
+  const inboxAktif = inbox.filter((v: any) => !v.silindi_tarih);
+  const ibBadge = inboxAktif.filter((x) => x.durum === 'yeni').length;
   // personalActs = Kişisel Arşiv'in ağacı. 2026-09-18 (Havuz yeniden tasarımı — 3. adım): havuz_kok==='ajandadan'
   // olan satırlar artık BURADAN değil, ayrı "📦 Ajandadan Kaydedilenler" klasöründen (ajandaActs) geliyor —
   // (a.havuz_kok || 'kisisel') !== 'ajandadan': bu alan eklenmeden ÖNCE oluşmuş tüm eski kartların havuz_kok'u
   // NULL, bilerek 'kisisel' kabul ediliyor ki var olan Kişisel Arşiv düzeni hiç bozulmasın/hiçbir kart aniden
   // yer değiştirmesin — sadece BUNDAN SONRA "Kendi Havuzuma al" ile gelenler yeni klasöre düşüyor.
-  const personalActs = activities.filter((a: any) => a.client_id === client.id && (a.havuz_kok || 'kisisel') !== 'ajandadan');
-  const ajandaActs = activities.filter((a: any) => a.client_id === client.id && a.havuz_kok === 'ajandadan');
+  // 8. adım: !a.silindi_tarih eklendi — çöp kutusundaki kartlar artık buradan (dolayısıyla klasör
+  // gezinmesinden) düşüyor, sadece 🗑️ Çöp kutusu'nda görünüyorlar.
+  const personalActs = activities.filter((a: any) => a.client_id === client.id && (a.havuz_kok || 'kisisel') !== 'ajandadan' && !a.silindi_tarih);
+  const ajandaActs = activities.filter((a: any) => a.client_id === client.id && a.havuz_kok === 'ajandadan' && !a.silindi_tarih);
+  // cop (2026-09-18, 8. adım): Havuz'un 3 kökünden çöp kutusuna taşınmış TÜM satırlar, tek düz liste — en son
+  // silinen en üstte. Her satır kendi geri-alma fonksiyonunu taşıyor (aktiviteGeriAl/inboxGeriAl) ki render
+  // tarafı kök tipine göre dallanmak zorunda kalmasın.
+  const cop = [
+    ...activities.filter((a: any) => a.client_id === client.id && a.silindi_tarih).map((a: any) => ({
+      id: 'a:' + a.id, tarih: a.silindi_tarih,
+      kok: a.havuz_kok === 'ajandadan' ? '📦 Ajandadan Kaydedilenler' : '🗄️ Kişisel Arşiv' + (a.grup ? ' · ' + a.grup + (a.alt_grup ? ' › ' + a.alt_grup : '') : ''),
+      ikon: a.tur === 'program' ? '🧩' : (KARTLAR.find((k) => k[0] === (a.kart_tipi || 'standart'))?.[2] || '•'),
+      tip: a.tur === 'program' ? 'Program' : (KARTLAR.find((k) => k[0] === (a.kart_tipi || 'standart'))?.[1] || 'Standart'),
+      ad: a.ad, geriAl: () => aktiviteGeriAl(a),
+    })),
+    ...inbox.filter((v: any) => v.client_id === client.id && v.silindi_tarih).map((v: any) => ({
+      id: 'i:' + v.id, tarih: v.silindi_tarih, kok: '📥 Gelenler',
+      ikon: v.tur !== 'aktivite' ? '📌' : (KARTLAR.find((k) => k[0] === (v.payload?.kartTipi || 'standart'))?.[2] || '🎁'),
+      tip: v.tur !== 'aktivite' ? 'Not / paylaşım' : (KARTLAR.find((k) => k[0] === (v.payload?.kartTipi || 'standart'))?.[1] || 'Standart'),
+      ad: v.baslik || v.payload?.ad || 'Paylaşım', geriAl: () => inboxGeriAl(v.id),
+    })),
+  ].sort((a, b) => (a.tarih < b.tarih ? 1 : -1));
   const personalGroupOf = (a: any) => a.grup && a.grup !== 'Kişisel' ? a.grup : 'Genel';
   // Havuz gruplama: Genel her zaman seçenek olarak durur (boş bile olsa), üstüne kullanıcının kendi eklediği
   // gruplar eklenir — sabit tek sekme yerine büyüyebilen bir chip listesi.
@@ -4101,9 +4167,16 @@ export default function Rite() {
                 <span
                   className={'chip' + (havuzAramaAcik ? ' on' : '')}
                   style={{ padding: '5px 10px', fontSize: 12, margin: 0 }}
-                  onClick={() => { if (havuzAramaAcik) setHavuzArama(''); setHavuzAramaAcik((o: any) => !o); }}
+                  onClick={() => { if (havuzAramaAcik) setHavuzArama(''); else setCopAcik(false); setHavuzAramaAcik((o: any) => !o); }}
                   title="Ara"
                 >🔍</span>
+                {/* 🗑️ Çöp kutusu (2026-09-18, 8. adım): bkz. copAcik tanımındaki not. */}
+                <span
+                  className={'chip' + (copAcik ? ' on' : '')}
+                  style={{ padding: '5px 10px', fontSize: 12, margin: 0 }}
+                  onClick={() => { if (!copAcik) { setHavuzAramaAcik(false); setHavuzArama(''); } setCopAcik((o: any) => !o); }}
+                  title="Çöp kutusu"
+                >🗑️{cop.length > 0 ? ' · ' + cop.length : ''}</span>
                 {/* Liste/Kart görünüm toggle'ı (2026-09-18, Havuz yeniden tasarımı — 5-6. adım, Behnan: "sanki
                     toggle tek olup, tüm klasörler için geçerli olsa daha uygun olur"): tek toggle, Havuz'un her
                     3 kökünde de geçerli — bkz. havuzGorunum tanımındaki not ve gelKartListe. */}
@@ -4116,7 +4189,29 @@ export default function Rite() {
                 <input autoFocus value={havuzArama} onChange={(e: any) => setHavuzArama(e.target.value)} placeholder="🔍 Başlık veya içerikte ara…" style={{ width: '100%' }} />
               </div>
             )}
-            {havuzArama.trim() ? (() => {
+            {copAcik ? (
+              // 🗑️ Çöp kutusu (2026-09-18, 8. adım): sadece liste görünümü — silinme tarihi, tipi, geldiği
+              // klasör, Geri al. bkz. cop tanımındaki not. Kalıcı sil butonu YOK (Behnan: "kalıcı sil'e bence
+              // gerek yok"), 30 gün sonra copKutusuTemizle sessizce siliyor.
+              <div>
+                {cop.length === 0 ? (
+                  <div className="note" style={{ textAlign: 'center', marginTop: 10 }}>Çöp kutusu boş.</div>
+                ) : (
+                  <>
+                    <p className="sub" style={{ marginTop: 0 }}>Silinen kartlar burada 30 gün tutulur, sonra kalıcı silinir.</p>
+                    {cop.map((c) => (
+                      <div key={c.id} className="actcard">
+                        <div style={{ flex: 1 }}>
+                          <div className="n">{c.ikon} {c.ad}</div>
+                          <div className="o">{c.tip} · {c.kok} · silindi: {kisaTarih(c.tarih.slice(0, 10))}</div>
+                        </div>
+                        <button className="btn ghost sm" onClick={c.geriAl}>Geri al</button>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+            ) : havuzArama.trim() ? (() => {
               // Arama sonuçları (2026-09-18, 7. adım): klasör gezinme UI'ı tamamen yerini alıyor, normal köke
               // dönmek için 🔍 ikonuna tekrar dokunup aramayı kapatmak yeterli.
               const q = havuzArama.trim().toLowerCase();
@@ -4124,7 +4219,7 @@ export default function Rite() {
               const sonuclar: { kok: string; el: any }[] = [];
               personalActs.filter((a: any) => eslesir(a.ad, a.aciklama)).forEach((a: any) => sonuclar.push({ kok: '🗄️ Kişisel Arşiv', el: aktKartFn(a) }));
               ajandaActs.filter((a: any) => eslesir(a.ad, a.aciklama)).forEach((a: any) => sonuclar.push({ kok: '📦 Ajandadan Kaydedilenler', el: aktKartFn(a) }));
-              inbox.filter((v: any) => eslesir(v.baslik || v.payload?.ad, v.payload?.aciklama)).forEach((v: any) => sonuclar.push({ kok: '📥 Gelenler', el: gelKartFn(v) }));
+              inboxAktif.filter((v: any) => eslesir(v.baslik || v.payload?.ad, v.payload?.aciklama)).forEach((v: any) => sonuclar.push({ kok: '📥 Gelenler', el: gelKartFn(v) }));
               return sonuclar.length === 0 ? (
                 <div className="note" style={{ textAlign: 'center', marginTop: 10 }}>&quot;{havuzArama}&quot; için sonuç bulunamadı.</div>
               ) : (
@@ -4197,15 +4292,15 @@ export default function Rite() {
                       <span style={{ fontWeight: 700 }}>{KART_KATEGORILER.find((k: any) => k.key === gelKategori)?.ad}</span>
                     </div>
                     {(() => {
-                      const items = inbox.filter((v: any) => gelKategoriOf(v) === gelKategori);
+                      const items = inboxAktif.filter((v: any) => gelKategoriOf(v) === gelKategori);
                       return items.length === 0 ? <div className="note">Bu kategoride henüz kart yok.</div> : items.map(gelKartFn);
                     })()}
                   </>
                 ) : (
                   <>
-                    {inbox.length === 0 && <p className="sub" style={{ marginTop: 0 }}>Gelenler boş. Sana bir şey paylaşıldığında burada, kart tipine göre otomatik kategorilere ayrılmış halde göreceksin.</p>}
+                    {inboxAktif.length === 0 && <p className="sub" style={{ marginTop: 0 }}>Gelenler boş. Sana bir şey paylaşıldığında burada, kart tipine göre otomatik kategorilere ayrılmış halde göreceksin.</p>}
                     {KART_KATEGORILER.map((kat: any) => {
-                      const say = inbox.filter((v: any) => gelKategoriOf(v) === kat.key).length;
+                      const say = inboxAktif.filter((v: any) => gelKategoriOf(v) === kat.key).length;
                       return (
                         <div key={kat.key} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', padding: '9px 0', borderTop: '1px solid var(--line)' }} onClick={() => setGelKategori(kat.key)}>
                           <span>{kat.ikon}</span>
