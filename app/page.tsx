@@ -203,7 +203,7 @@ async function resimKucult(file: File, maxDim = 1600, quality = 0.82): Promise<B
   const blob: Blob | null = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
   return blob || file;
 }
-function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi, sadeceAciklama, tekVideo, cokluVideo, videoEkleTetik, onVideoEkleTetikKapat, videoYok, ekAyri, icerikBaslikTuret, onIcerikBaslikTuret, notOdak, icerikOdakTetik, onIcerikOdakTetikKapat }: { cfg: any; onSave: (cfg: any) => void; randevu?: boolean; readOnly?: boolean; notTasarimi?: boolean; sadeceAciklama?: boolean; tekVideo?: boolean; cokluVideo?: boolean; videoEkleTetik?: boolean; onVideoEkleTetikKapat?: () => void; videoYok?: boolean; ekAyri?: boolean; icerikBaslikTuret?: boolean; onIcerikBaslikTuret?: (ilkSatir: string) => void; notOdak?: boolean; icerikOdakTetik?: boolean; onIcerikOdakTetikKapat?: () => void }) {
+function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi, sadeceAciklama, tekVideo, cokluVideo, videoEkleTetik, onVideoEkleTetikKapat, videoYok, ekAyri, icerikBaslikTuret, onIcerikBaslikTuret, baslikKaynagi, icerikOdakTetik, onIcerikOdakTetikKapat }: { cfg: any; onSave: (cfg: any) => void; randevu?: boolean; readOnly?: boolean; notTasarimi?: boolean; sadeceAciklama?: boolean; tekVideo?: boolean; cokluVideo?: boolean; videoEkleTetik?: boolean; onVideoEkleTetikKapat?: () => void; videoYok?: boolean; ekAyri?: boolean; icerikBaslikTuret?: boolean; onIcerikBaslikTuret?: (ilkSatir: string) => void; baslikKaynagi?: string; icerikOdakTetik?: boolean; onIcerikOdakTetikKapat?: () => void }) {
   const videolar: { baslik?: string; url: string; bas?: number; bit?: number; ozelNot?: string }[] = cfg?.videolar || [];
   const [vidSec, setVidSec] = useState(0);
   // cokluVideo (Alışkanlık, 2026-09-16 — "çoklu video" tasarımı): video ekleme artık sayfa seviyesindeki
@@ -218,16 +218,25 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi, sadeceAcik
   const [vBas, setVBas] = useState('');
   const [vBit, setVBit] = useState('');
   const [vAciklama, setVAciklama] = useState('');
-  // notOdak (2026-09-18, Behnan isteği — "Yeni not ekle" ön-doldurma): taze bir Not taslağı açılır açılmaz
-  // (yeniTaslakAc/yeniHavuzTaslakAc, cfg.icerik'i zaten "Yeni not\n" ile kuruyor) düzenleme kutusu baştan
-  // açık gelsin, imleç de o ilk satırın HEMEN ALTINA (2. satır başına) konumlansın — kullanıcı hiç dokunmadan
-  // Kaydet'e basarsa yine "Yeni not" adıyla kaydedilir (eski davranışla birebir aynı), ama isterse direkt
-  // yazmaya başlayabilir, ilk satırı silip değiştirmek de dahil tam kontrol kendisinde.
-  const [icerikEdit, setIcerikEdit] = useState(!!notOdak);
-  const [icerikVal, setIcerikVal] = useState(cfg?.icerik || '');
+  // baslikKaynagi (2026-09-18, Behnan isteği — önce Not'ta "Yeni not ekle" ön-doldurma, sonra Aktivite'ye de
+  // genelleştirildi: "kullanıcılar not girişinde alışıyorlarsa aktivitede de yabancılık çekmeyebilir"): artık
+  // hiçbir kişisel kart türünde (Not/Aktivite) ayrı bir Ad girişi yok — kartın adı hep içeriğin ilk satırından
+  // türüyor (bkz. icerikBaslikTuret). İçerik kutusu boşken bir isim kaynağı sunmak için parent bu prop'ta
+  // kartın MEVCUT `ad`'ını taşıyor: taze bir taslakta bu, yeniTaslakAc/yeniHavuzTaslakAc'ın koyduğu "Yeni not"/
+  // "Yeni aktivite" varsayılanı; bu değişiklikten ÖNCE oluşturulmuş, içeriği hiç olmayan eski bir kartta ise
+  // kartın gerçek (elle girilmiş) adı — böylece hiçbir eski kartın adı "kaybolmuyor", sadece artık ayrı bir
+  // alanda değil, içerik kutusunun ilk satırında görünüyor/düzenleniyor. İçerik zaten doluysa (hem tazede hem
+  // eskide) baslikKaynagi'ye hiç dokunulmuyor, cfg.icerik aynen kullanılıyor.
+  const icerikOnDolduruldu = !(cfg?.icerik || '').trim() && !!(baslikKaynagi && baslikKaynagi.trim());
+  const [icerikEdit, setIcerikEdit] = useState(icerikOnDolduruldu);
+  const [icerikVal, setIcerikVal] = useState(() => {
+    const mevcut = cfg?.icerik || '';
+    if (mevcut.trim()) return mevcut;
+    return baslikKaynagi && baslikKaynagi.trim() ? baslikKaynagi.trim() + '\n' : mevcut;
+  });
   const icerikRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
-    if (!notOdak) return;
+    if (!icerikOnDolduruldu) return;
     const el = icerikRef.current;
     if (!el) return;
     el.focus();
@@ -268,7 +277,13 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi, sadeceAcik
   // olmasın") — tek satırlık link alanı doğrudan cfg.videolar[0]'ı okur/yazar, formuAc/vidFormMode akışını hiç
   // kullanmıyor; vUrl'i cfg değiştiğinde (kart değişince ya da kayıt sonrası) senkron tutuyoruz.
   useEffect(() => { if (tekVideo) setVUrl(cfg?.videolar?.[0]?.url || ''); }, [tekVideo, cfg?.videolar]);
-  useEffect(() => { setIcerikVal(cfg?.icerik || ''); }, [cfg?.icerik]);
+  // baslikKaynagi'deki ön-doldurma yukarıdaki useState initializer'ında zaten uygulanıyor — bu effect de AYNI
+  // formülü kullanıyor (cfg?.icerik boşsa baslikKaynagi'ye düş), yoksa mount anında bu effect (her useEffect
+  // gibi ilk render'dan hemen sonra da çalışır) icerikVal'i "" ile ezip ön-doldurmayı anında silerdi.
+  useEffect(() => {
+    const mevcut = cfg?.icerik || '';
+    setIcerikVal(mevcut.trim() ? mevcut : (baslikKaynagi && baslikKaynagi.trim() ? baslikKaynagi.trim() + '\n' : mevcut));
+  }, [cfg?.icerik]);
   useEffect(() => { setResimler(resimlerdenAl(cfg)); }, [cfg?.resim, cfg?.resimler]);
   useEffect(() => { setYer(cfg?.yer || ''); }, [cfg?.yer]);
   const secili = videolar[Math.min(vidSec, videolar.length - 1)];
@@ -336,9 +351,10 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi, sadeceAcik
   function icerikKaydet() {
     setIcerikEdit(false);
     if (icerikVal.trim() !== (cfg?.icerik || '')) onSave({ ...cfg, icerik: icerikVal.trim() || null });
-    // icerikBaslikTuret (Not, 2026-09-17 — "başlık ve açıklamanın teke düşmesi", Apple Notes esintili): Not'ta
-    // artık ayrı bir Ad alanı yok, kart adı içeriğin ilk (boş olmayan) satırından türetiliyor. Boş satır/tamamen
-    // boş içerikte önceki başlık (ör. "Yeni not") olduğu gibi kalıyor — hiçbir zaman boş bir başlığa düşmüyor.
+    // icerikBaslikTuret (önce Not'ta, 2026-09-17 — "başlık ve açıklamanın teke düşmesi", Apple Notes esintili;
+    // 2026-09-18'de Aktivite'ye de genelleştirildi): ayrı bir Ad alanı yok, kart adı içeriğin ilk (boş olmayan)
+    // satırından türetiliyor. Boş satır/tamamen boş içerikte önceki başlık (ör. "Yeni not"/"Yeni aktivite" ya
+    // da eski bir kartın gerçek adı) olduğu gibi kalıyor — hiçbir zaman boş bir başlığa düşmüyor.
     if (icerikBaslikTuret) {
       const ilkSatir = icerikVal.split('\n').map((s: string) => s.trim()).find((s: string) => s) || '';
       if (ilkSatir) onIcerikBaslikTuret?.(ilkSatir.length > 80 ? ilkSatir.slice(0, 80).trim() + '…' : ilkSatir);
@@ -566,7 +582,7 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi, sadeceAcik
                 <div style={{ position: 'relative' }}>
                   <textarea
                     ref={icerikRef}
-                    autoFocus={!notOdak}
+                    autoFocus={!icerikOnDolduruldu}
                     rows={notTasarimi ? 4 : undefined}
                     value={icerikVal}
                     onChange={(e) => setIcerikVal(e.target.value)}
@@ -2276,13 +2292,13 @@ export default function Rite() {
   // randevu artık sadece 'yapilacak' bir Aktivite, "Cuma saat 15 diş randevusu" gibi detaylar içeriğe serbest
   // metin olarak yazılıyor.
   function yeniTaslakAc(tur: 'not' | 'aliskanlik' | 'yapilacak') {
-    // 2026-09-18 (Behnan isteği): Not ekle deyip açıklamaya hiç dokunmadan hemen Kaydet'e basınca kart "Yeni
-    // not" adıyla içeriksiz oluşuyordu — "mantıklı ama sürpriz olmasın" diyerek, içerik kutusunun daha ilk
-    // açılışta "Yeni not" ile dolu, imleç onun hemen altında (ikinci satırda) gelmesini istedi; isterse bu
-    // satırı silip kendi başlığını yazabiliyor, tam kontrol yine kullanıcıda. Bkz. BilgiKartEdit'teki
-    // `notOdak` prop'u (otomatik düzenleme moduna açılış + imleç konumlandırma) — tek bir gerçek editable
-    // metin, ayrı bir "sahte başlık" alanı YOK (Not'un başlık+açıklama birleşmesi kararıyla tutarlı kalsın diye).
-    const cfg: any = { icerik: tur === 'not' ? 'Yeni not\n' : null, videolar: [] };
+    // 2026-09-18 (Behnan isteği, önce Not'ta): açıklamaya hiç dokunmadan hemen Kaydet'e basınca kart "Yeni not"
+    // adıyla içeriksiz oluşuyordu — "mantıklı ama sürpriz olmasın" diyerek çözüldü, sonra aynı gün Aktivite'ye de
+    // genelleştirildi ("kullanıcılar Not'ta alışıyorsa Aktivite'de de yabancılık çekmeyebilir"). cfg.icerik
+    // burada artık HİÇBİR tür için elle doldurulmuyor (null kalıyor) — "Yeni not"/"Yeni aktivite" ön-doldurması
+    // aşağıdaki `ad` değerinden, BilgiKartEdit'in `baslikKaynagi` prop'u üzerinden geliyor (bkz. oradaki not) —
+    // tek bir gerçek editable metin, ayrı bir "sahte başlık" alanı YOK.
+    const cfg: any = { icerik: null, videolar: [] };
     // Yapılacak (Aktivite'nin "Bugün" hâli): kart_config.gorev — bitissiz (yapıncaya kadar her gün görünür),
     // işaretlenince kalıcı kapanır (bkz. kartYapildiToggle).
     if (tur === 'yapilacak') cfg.gorev = true;
@@ -2312,9 +2328,10 @@ export default function Rite() {
   // DB'ye hiç yazılmıyor). Ajanda'ya eklenince (aktiviteEkleSlotlar) sure_gun boşsa kart zaten süregelen —
   // yani "alışkanlık" — oluyor (bkz. ritEkle: aliskanlik = aliskanlikP===null ? !bitis : aliskanlikP).
   function yeniHavuzTaslakAc(tur: 'not' | 'aliskanlik') {
-    // Ajanda'daki yeniTaslakAc ile aynı "Yeni not" ön-doldurma — bkz. oradaki not (şu an Havuz'a doğrudan
-    // ekleme girişi UI'da yok ama fonksiyon ileride kullanılabilir diye tutuluyor, tutarlılık için burada da uygulandı).
-    const cfg: any = { icerik: tur === 'not' ? 'Yeni not\n' : null, videolar: [] };
+    // Ajanda'daki yeniTaslakAc ile aynı mantık — ön-doldurma artık burada değil, BilgiKartEdit'in
+    // `baslikKaynagi` prop'u üzerinden `ad`'dan geliyor (şu an Havuz'a doğrudan ekleme girişi UI'da yok ama
+    // fonksiyon ileride kullanılabilir diye tutuluyor, tutarlılık için burada da uygulandı).
+    const cfg: any = { icerik: null, videolar: [] };
     openDetay({
       id: null,
       ad: tur === 'aliskanlik' ? 'Yeni alışkanlık' : 'Yeni not',
@@ -2328,11 +2345,12 @@ export default function Rite() {
     const o = detay.obj;
     // 2026-09-18 (Behnan isteği — "her zaman enable, tıklayınca kontrol et"): eskiden Kaydet butonu boş Not'ta
     // disabled kalıyordu (notBos), artık her zaman tıklanabilir — burada (kisiselTur'ün JSX-scope'undaki
-    // notBos'a eşdeğer, ama bu fonksiyon o scope'un DIŞINDA tanımlı olduğu için bağımsız türetilmiş) bir "boş
-    // Not" taslağıysa DB'ye hiç yazmadan dönüyor ve notOdakAcik'i tetikleyip BilgiKartEdit'in içerik kutusuna
-    // odaklanmasını sağlıyoruz. Ritual ve Havuz dallarının ikisi için de geçerli: alışkanlık/yapılacak (gorev/
-    // randevu) taslaklarında içerik zaten opsiyonel, o yüzden onlar hiç etkilenmiyor.
-    const taslakNotBos = !o.aliskanlik && !(o.kart_config?.gorev || o.kart_config?.randevu) && !(o.kart_config?.icerik || '').trim();
+    // notBos'a eşdeğer, ama bu fonksiyon o scope'un DIŞINDA tanımlı olduğu için bağımsız türetilmiş) bir "boş"
+    // taslaksa DB'ye hiç yazmadan dönüyor ve notOdakAcik'i tetikleyip BilgiKartEdit'in içerik kutusuna
+    // odaklanmasını sağlıyoruz. AYNI GÜN, aynı kontrol Aktivite'ye de genelleştirildi ("Not'ta alışıyorlarsa
+    // Aktivite'de de yabancılık çekmeyebilir" — Behnan kararı) — artık kisiselTur farkı gözetmeden, sadece
+    // içerik (o.kart_config.icerik) boş mu diye bakıyor; Ritual ve Havuz dallarının ikisi için de geçerli.
+    const taslakNotBos = !(o.kart_config?.icerik || '').trim();
     if (taslakNotBos) { setNotOdakAcik(true); return; }
     if (detay.tur === 'ritual') {
       // Kaydetmeden hemen önce son bir kez: gunler seçiliyse ve [baslangic,bitis] penceresi ona hiç denk
@@ -4115,12 +4133,13 @@ export default function Rite() {
         const kisiselTur: 'not' | 'aliskanlik' | 'yapilacak' = o.aliskanlik ? 'aliskanlik' : ((kCfg?.gorev || kCfg?.randevu) ? 'yapilacak' : 'not');
         const kisiselEtiket = (kisiselTur === 'aliskanlik' || kisiselTur === 'yapilacak') ? 'Aktivite' : 'Not';
         const kisiselYeni = (kisiselTur === 'aliskanlik' || kisiselTur === 'yapilacak') ? 'Yeni aktivite' : 'Yeni not';
-        // 2026-09-18 (Behnan isteği): Not'un tüm kimliği içeriğinden (başlığı da oradan türüyor) geldiği için,
-        // açıklama tamamen boşsa Kaydet'i devre dışı bırakıyoruz — "Yeni not" ön-dolgusunu silip boş kaydetmek
-        // eskiden yine içeriksiz "Yeni not" adlı bir kart oluşturuyordu, artık buna izin verilmiyor. Aktivite/
-        // Randevu'da açıklama zaten opsiyonel (asıl kimlik ayrı Ad alanından geliyor), o yüzden SADECE
-        // kisiselTur==='not' iken uygulanıyor.
-        const notBos = kisiselTur === 'not' && !(kCfg?.icerik || '').trim();
+        // 2026-09-18 (Behnan isteği): önce sadece Not'ta — tüm kimlik içerikten (başlığı da oradan türüyor)
+        // geldiği için, açıklama tamamen boşken Kaydet'e basılırsa (kisiselDuzenleKaydet içinde) DB'ye hiç
+        // yazılmıyor, kullanıcı odaklanıyor. Aynı gün Aktivite'ye de genelleştirildi ("Not'ta alışıyorlarsa
+        // Aktivite'de de yabancılık çekmeyebilir" — Behnan kararı, artık Aktivite'de de ayrı bir Ad alanı yok,
+        // kart adı içeriğin ilk satırından türüyor) — o yüzden artık kisiselTur farkı gözetilmiyor, sadece
+        // içerik boş mu diye bakılıyor.
+        const notBos = !(kCfg?.icerik || '').trim();
         // Kart daha bu an ＋ menüsünden oluşturulduysa (taze) ya da hâlâ taslaksa, "zaten var olan bir kart"
         // için anlamlı mezun et / paylaş seçenekleri gizli kalır (kullanıcı isteği) — hem aşağıdaki genel
         // zamanlama şeridinde hem de kişisel kartın kendi ince başlık şeridinde kullanılıyor.
@@ -4246,29 +4265,16 @@ export default function Rite() {
               // yerel taslağı (patchDetay) güncelliyor, taslakKaydet basılınca gerçek satıra yazılıyor.
               <input className="detbaslik" value={adInput} autoFocus onFocus={(e) => e.target.select()} onChange={(e) => setAdInput(e.target.value)} onBlur={() => { if (adInput.trim() && adInput.trim() !== (o.ad || '')) patchDetay({ ad: adInput.trim() }); }} style={{ width: '100%' }} />
             ) : <h2 style={{ paddingRight: 34 }}>{o.ad}</h2>}
-            {/* Not'ta artık ayrı bir Ad alanı yok (kullanıcı isteği, 2026-09-17: "başlık ve açıklamanın teke
-                düşmesi") — kart adı, aşağıdaki içerik kutusunun ilk satırından otomatik türetiliyor (bkz.
-                BilgiKartEdit içindeki icerikBaslikTuret). Aktivite/Randevu şimdilik eski ayrı Ad alanını
-                kullanmaya devam ediyor. */}
-            {isKisisel && kisiselTur !== 'not' && (
-              kisiselGorunumModu ? (
-                // Görüntüleme modu: Ad artık bir giriş alanı değil, düz metin — input'la aynı boyut/boşluk.
-                <div style={{ width: '100%', margin: '10px 0 14px', fontSize: 21, fontWeight: 700 }}>{o.ad}</div>
-              ) : (
-                // Gerçek "başlık" artık bu — ince etiketten belirgin şekilde ayrışsın diye daha büyük/kalın,
-                // ve etiketten biraz mesafeli (kullanıcı isteği — "kart adı biraz aşağıdan başlamalı").
-                <input
-                  className="detbaslik"
-                  value={adInput}
-                  onFocus={(e) => e.target.select()}
-                  onChange={(e) => setAdInput(e.target.value)}
-                  onBlur={() => { if (adInput.trim() && adInput.trim() !== (o.ad || '')) setRitAd(o.id, adInput); }}
-                  placeholder={kisiselEtiket + ' adı'}
-                  autoFocus={isDraft}
-                  style={{ width: '100%', padding: 0, margin: '10px 0 14px', fontSize: 21 }}
-                />
-              )
-            )}
+            {/* Not'ta zaten ayrı bir Ad alanı yoktu (kullanıcı isteği, 2026-09-17: "başlık ve açıklamanın teke
+                düşmesi"). 2026-09-18 (Behnan kararı — "deneyip görelim, kullanıcılar Not'ta alıştıysa
+                Aktivite'de de yabancılık çekmeyebilir"): Aktivite/Yapılacak için de kaldırıldı — artık HİÇBİR
+                kişisel kart türünde ayrı bir Ad girişi yok, kart adı hep aşağıdaki içerik kutusunun ilk
+                satırından türüyor (bkz. BilgiKartEdit'teki icerikBaslikTuret + baslikKaynagi). `ad` kolonu
+                tabloda aynen duruyor — kaldırılan sadece bu formdaki AYRI giriş alanı; bu değişiklikten önce
+                oluşturulmuş, içeriği hiç olmayan eski kartların gerçek adı da BilgiKartEdit açılışında
+                otomatik olarak içerik kutusunun ilk satırına taşınıyor (baslikKaynagi), yani hiçbir isim
+                kaybolmuyor, sadece artık başka bir alanda görünüyor. `adInput`/`setRitAd` altyapısı kişisel-
+                OLMAYAN ritüellerin (Meridyen/program kaynaklı) kendi başlık şeridinde hâlâ kullanılıyor. */}
             <div className="m">
               {isRit ? null : (
                 personal ? (
@@ -4374,7 +4380,7 @@ export default function Rite() {
               // (kullanıcı isteği, 2026-09-17: "önce not'u aktivite de olduğu şekilde video eklenecek hale getirelim").
               // randevu prop'u artık hiç geçilmiyor (Randevu birleşmesi) — eski randevu-bayraklı kayıtlar da dahil
               // hepsi standart içerik/video tasarımından geçiyor, ayrı "yer" alanı yok.
-              if (editable) return <BilgiKartEdit cfg={kCfg} onSave={bilgiKaydet} notTasarimi={isKisisel} readOnly={kisiselGorunumModu} cokluVideo={isKisisel && (kisiselTur === 'aliskanlik' || kisiselTur === 'yapilacak' || kisiselTur === 'not')} videoEkleTetik={videoEkleAcik} onVideoEkleTetikKapat={() => setVideoEkleAcik(false)} videoYok={false} ekAyri={isKisisel} icerikBaslikTuret={isKisisel && kisiselTur === 'not'} onIcerikBaslikTuret={(ilkSatir) => setRitAd(o.id, ilkSatir)} notOdak={isDraft && isKisisel && kisiselTur === 'not'} icerikOdakTetik={notOdakAcik} onIcerikOdakTetikKapat={() => setNotOdakAcik(false)} />;
+              if (editable) return <BilgiKartEdit cfg={kCfg} onSave={bilgiKaydet} notTasarimi={isKisisel} readOnly={kisiselGorunumModu} cokluVideo={isKisisel && (kisiselTur === 'aliskanlik' || kisiselTur === 'yapilacak' || kisiselTur === 'not')} videoEkleTetik={videoEkleAcik} onVideoEkleTetikKapat={() => setVideoEkleAcik(false)} videoYok={false} ekAyri={isKisisel} icerikBaslikTuret={isKisisel} onIcerikBaslikTuret={(ilkSatir) => setRitAd(o.id, ilkSatir)} baslikKaynagi={isKisisel ? o.ad : undefined} icerikOdakTetik={notOdakAcik} onIcerikOdakTetikKapat={() => setNotOdakAcik(false)} />;
               if (!preview && isRit) return <BilgiKart cfg={kCfg} onSave={bilgiKaydet} />;
               return <BilgiKartEdit cfg={kCfg} onSave={() => {}} readOnly />;
             })()}
