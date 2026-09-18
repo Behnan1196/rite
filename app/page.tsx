@@ -1517,6 +1517,13 @@ export default function Rite() {
   // sadece göz atıyor. Ajandadan Kaydedilenler'de olduğu gibi 4 kategori de her zaman sabit gösteriliyor
   // (boş olsalar bile), otomatik atlama yok.
   const [gelKategori, setGelKategori] = useState<string | null>(null);
+  // havuzGorunum (2026-09-18, Havuz yeniden tasarımı — 5. adım, Behnan: "havuz için default liste görünümü
+  // olmalı, sayının artacağını düşünerek... bu mantığı bir çok yerde kullanabiliriz, mesela Odak alanları.
+  // Liste görünümü derkende aslında tek satırlık kartlar ve gerekli flag'lar, etiketler"): Kişisel Arşiv ve
+  // Ajandadan Kaydedilenler'deki kart listeleri için liste/kart görünüm toggle'ı, varsayılan 'liste'. Gelenler
+  // buna dahil değil — oradaki her satır zaten kendi içinde aksiyon butonları/mini form barındıran, sayıca az
+  // (triyaj kuyruğu) bir yapı, bu toggle'ın çözmeye çalıştığı "büyüyen arşiv" sorunuyla örtüşmüyor.
+  const [havuzGorunum, setHavuzGorunum] = useState<'liste' | 'kart'>('liste');
   // Ay görünümü artık ayrı bir sayfa değil, takvim ikonuyla açılan bir overlay/popup (2026-09-17, Behnan kararı:
   // "sadece bir takvim ikonu bile yeterli, çıkan aylık seçim ve navigasyon popup'ın ... dışarıda bir şeye
   // dokunduğumuzda kapanır"). ayPopupOpen açık/kapalı durumu tutar; ayCursor ise popup içinde GEZİNİLEN ay —
@@ -3929,6 +3936,26 @@ export default function Rite() {
               <span className="go">›</span>
             </div>
           );
+          // aktKartGenis (2026-09-18, Havuz yeniden tasarımı — 5. adım): aktKart'ın "kart görünümü" karşılığı —
+          // aynı tıklama davranışı (openDetay), ama faydalar tek satırda birleştirilmiş metin yerine ayrı ayrı
+          // etiket/chip (tagp p-alan, uygulamanın başka yerlerinde de kullandığı görsel dil) olarak gösteriliyor.
+          const aktKartGenis = (a: any) => {
+            const alanlar = Array.from(new Set((a.faydalar || []).map((k: string) => faydaMap[k]?.alan).filter(Boolean)));
+            return (
+              <div key={a.id} className="card" style={{ cursor: 'pointer' }} onClick={() => openDetay(a, 'aktivite')}>
+                <div style={{ fontSize: 13.5, fontWeight: 700 }}>{a.tur === 'program' ? '🧩 ' : ''}{a.ad}{a.puan ? <span className="puanp"> {'★'.repeat(a.puan)}</span> : ''}</div>
+                {a.tur === 'program' ? (
+                  <div className="note" style={{ marginTop: 4 }}>{(a.adimlar || []).length} adım{a.sure_gun ? ' · ' + a.sure_gun + ' gün' : ''}</div>
+                ) : (
+                  <>
+                    {a.kaynak_etiket === 'Mezun' && <div className="note" style={{ marginTop: 4 }}>Mezun</div>}
+                    {alanlar.length > 0 && <div style={{ marginTop: 6 }}>{alanlar.map((al: any) => <span key={al} className="tagp p-alan">{al}</span>)}</div>}
+                  </>
+                )}
+              </div>
+            );
+          };
+          const aktKartFn = havuzGorunum === 'kart' ? aktKartGenis : aktKart;
           // gelKategoriOf/gelKart (2026-09-18, Havuz yeniden tasarımı — 4. adım): Gelenler'deki bir dog_inbox
           // satırının hangi KART_KATEGORILER kovasına düştüğünü belirler. 'aktivite' türündekiler paylaşılan bir
           // kartın kart_tipi'ne bakar (Ajandadan Kaydedilenler ile aynı kartKategoriOf mantığı); diğerleri
@@ -3979,6 +4006,14 @@ export default function Rite() {
           <div>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
               <h2 style={{ margin: 0 }}>Aktivite Havuzu</h2>
+              {/* Liste/Kart görünüm toggle'ı (2026-09-18, Havuz yeniden tasarımı — 5. adım): sadece Kişisel
+                  Arşiv ve Ajandadan Kaydedilenler'i etkiler, bkz. havuzGorunum tanımındaki not. */}
+              {havuzFolder !== 'gelenler' && (
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <span className={'chip' + (havuzGorunum === 'liste' ? ' on' : '')} style={{ padding: '5px 10px', fontSize: 12, margin: 0 }} onClick={() => setHavuzGorunum('liste')} title="Liste görünümü">☰ Liste</span>
+                  <span className={'chip' + (havuzGorunum === 'kart' ? ' on' : '')} style={{ padding: '5px 10px', fontSize: 12, margin: 0 }} onClick={() => setHavuzGorunum('kart')} title="Kart görünümü">▦ Kart</span>
+                </div>
+              )}
             </div>
             {/* Kök klasör şeridi (2026-09-18, Havuz yeniden tasarımı — 1. adım): eski ayrı "Sohbet > Inbox"
                 kartı kalktı, Inbox artık burada bir klasör (📥 Gelenler) — paylaşılan bir şey geldiği an zaten
@@ -4002,7 +4037,7 @@ export default function Rite() {
                     </div>
                     {(() => {
                       const items = ajandaActs.filter((a: any) => kartKategoriOf(a.kart_tipi) === ajKategori);
-                      return items.length === 0 ? <div className="note">Bu kategoride henüz kart yok.</div> : items.map(aktKart);
+                      return items.length === 0 ? <div className="note">Bu kategoride henüz kart yok.</div> : items.map(aktKartFn);
                     })()}
                   </>
                 ) : (
@@ -4101,7 +4136,7 @@ export default function Rite() {
               // En derin seviye — mevcut veri modeli (dog_activities.grup/alt_grup düz metin) burada
               // duruyor, alt klasör yok, sadece kartlar.
               const items = personalActs.filter((a) => personalGroupOf(a) === kaGrup && a.alt_grup === kaAlt);
-              return items.length === 0 ? <div className="note">Bu klasörde henüz kart yok.</div> : items.map(aktKart);
+              return items.length === 0 ? <div className="note">Bu klasörde henüz kart yok.</div> : items.map(aktKartFn);
             })() : (() => {
               const isRoot = !kaGrup;
               const folders: string[] = isRoot ? personalGroups : altGruplarOf(kaGrup as string);
@@ -4150,7 +4185,7 @@ export default function Rite() {
                       </div>
                     );
                   })}
-                  {directItems.map(aktKart)}
+                  {directItems.map(aktKartFn)}
                 </>
               );
             })()}
