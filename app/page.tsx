@@ -2218,16 +2218,32 @@ export default function Rite() {
   }
   // ---------- Havuz: kalıcı Grup / Alt grup listesi (dog_gruplar) ----------
   // ustId null → yeni bir üst seviye Grup; doluysa o Grup'a bağlı bir Alt grup.
+  // grupEkleBusyRef: 2026-09-18, Behnan'ın gösterdiği "Geleler" ×7 hatası — HİÇBİR "Ekle" butonunda (Havuz'un
+  // kendi + Grup/+ Alt grup'u, Gruplar Yönet modalının Grup ekle/Alt grup Ekle'si) çift-tıklama koruması yoktu;
+  // Gruplar Yönet'teki "Grup ekle" ise `await` bile etmiyordu. Kök çözüm burada, TEK yerde: grupEkle artık
+  // idempotent — (a) aynı anda ikinci bir çağrı geldiğinde (ilk istek hâlâ sürüyorken) sessizce yok sayılıyor,
+  // (b) aynı üst + aynı isimde (büyük/küçük harf duyarsız) bir grup zaten varsa YENİSİ oluşturulmuyor, var olan
+  // döndürülüyor. Böylece kaç yerden, kaç kere çağrılırsa çağrılsın en fazla bir satır oluşuyor — her çağrı
+  // noktasına ayrı ayrı disabled/busy state eklemek yerine, sorunu kaynağında kapatıyor.
+  const grupEkleBusyRef = useRef(false);
   async function grupEkle(ad: string, ustId: string | null) {
     if (!client) return null;
     const isim = ad.trim();
     if (!isim) return null;
     const kardesler = grupListesi.filter((g) => (g.ust_id || null) === (ustId || null));
-    const sira = kardesler.length ? Math.max(...kardesler.map((g) => g.sira)) + 1 : 0;
-    const ins = await supabase.from('dog_gruplar').insert({ client_id: client.id, ad: isim, ust_id: ustId, sira }).select().single();
-    if (ins.error) { alert('Eklenemedi: ' + ins.error.message); return null; }
-    await loadGruplar(client.id);
-    return ins.data as { id: string; ad: string; ust_id: string | null; sira: number };
+    const ayniAdli = kardesler.find((g: any) => g.ad.trim().toLowerCase() === isim.toLowerCase());
+    if (ayniAdli) return ayniAdli;
+    if (grupEkleBusyRef.current) return null;
+    grupEkleBusyRef.current = true;
+    try {
+      const sira = kardesler.length ? Math.max(...kardesler.map((g) => g.sira)) + 1 : 0;
+      const ins = await supabase.from('dog_gruplar').insert({ client_id: client.id, ad: isim, ust_id: ustId, sira }).select().single();
+      if (ins.error) { alert('Eklenemedi: ' + ins.error.message); return null; }
+      await loadGruplar(client.id);
+      return ins.data as { id: string; ad: string; ust_id: string | null; sira: number };
+    } finally {
+      grupEkleBusyRef.current = false;
+    }
   }
   // Havuz akordeonunda bir Grup başlığından doğrudan "+ Alt grup" denince: o Grup adı henüz gerçek bir
   // dog_gruplar satırı değilse (eski/örtük — HAVUZ_VARSAYILAN_GRUPLAR ya da sadece bir aktivite üzerinde
@@ -5443,7 +5459,7 @@ export default function Rite() {
                     ) : altGrupEkleFor === g.id ? (
                       <div style={{ display: 'flex', gap: 6, margin: '4px 0' }}>
                         <input value={altGrupYeniAd} onChange={(e) => setAltGrupYeniAd(e.target.value)} placeholder="Alt grup adı" style={{ flex: 1 }} autoFocus />
-                        <button className="btn sm" onClick={() => { grupEkle(altGrupYeniAd, g.id); setAltGrupYeniAd(''); setAltGrupEkleFor(null); }}>Ekle</button>
+                        <button className="btn sm" onClick={async () => { const isim = altGrupYeniAd.trim(); if (!isim) return; setAltGrupYeniAd(''); setAltGrupEkleFor(null); await grupEkle(isim, g.id); }}>Ekle</button>
                         <button className="btn ghost sm" onClick={() => setAltGrupEkleFor(null)}>Vazgeç</button>
                       </div>
                     ) : (
@@ -5455,7 +5471,7 @@ export default function Rite() {
             })}
             <div style={{ display: 'flex', gap: 6, marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--line)' }}>
               <input value={grupYeniAd} onChange={(e) => setGrupYeniAd(e.target.value)} placeholder="Yeni Grup adı (ör. Duruş, Mental Health…)" style={{ flex: 1 }} />
-              <button className="btn sm" onClick={() => { grupEkle(grupYeniAd, null); setGrupYeniAd(''); }}>Grup ekle</button>
+              <button className="btn sm" onClick={async () => { const isim = grupYeniAd.trim(); if (!isim) return; setGrupYeniAd(''); await grupEkle(isim, null); }}>Grup ekle</button>
             </div>
           </div>
         </div>
