@@ -1539,6 +1539,10 @@ export default function Rite() {
   // substring (ad+aciklama) eşleşmesi, gelişmiş filtre yok.
   const [ajAramaAcik, setAjAramaAcik] = useState(false);
   const [ajArama, setAjArama] = useState('');
+  // ajCopAcik (2026-09-18, 8b. adım, Behnan: "sanırım ajandadan silince çöp kutusuna gitmiyor"): Havuz'un
+  // 🗑️'sinden (copAcik) BİLEREK ayrı — Ajanda'nın kendi çöp kutusu (dog_rituals/ajandaCop). 🔍 ile aynı
+  // desen/karşılıklı kapatma.
+  const [ajCopAcik, setAjCopAcik] = useState(false);
   // havuzGorunum (2026-09-18, Havuz yeniden tasarımı — 5. adım, Behnan: "havuz için default liste görünümü
   // olmalı, sayının artacağını düşünerek... bu mantığı bir çok yerde kullanabiliriz, mesela Odak alanları.
   // Liste görünümü derkende aslında tek satırlık kartlar ve gerekli flag'lar, etiketler"; 6. adımda genişletme,
@@ -1575,6 +1579,13 @@ export default function Rite() {
   const [grupDuzenleAd, setGrupDuzenleAd] = useState('');
   const [rituals, setRituals] = useState<any[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
+  // ajandaCop (2026-09-18, Havuz yeniden tasarımı — 8b. adım, Behnan: "sanırım ajandadan silince çöp
+  // kutusuna gitmiyor, bir not silmiştim"): 8. adımda çöp kutusu sadece Havuz'un 3 kökünü (dog_activities +
+  // dog_inbox) kapsıyordu, Ajanda'nın kendi silmeleri (dog_rituals — Not dahil, bkz. ritSil) dışarıda kalmıştı.
+  // Bu düzeltmeyle Ajanda'nın da kendi çöp kutusu var — ama Havuz'unkiyle KARIŞTIRILMIYOR, ayrı (decision
+  // #7'deki "Ajanda ve havuz da farklı sonuç listesi olacaktır" ilkesiyle tutarlı, arama gibi). rituals state'i
+  // (loadData) artık sadece silindi_tarih'i boş satırları taşıyor — trashed satırlar burada, ayrı sorgulanıyor.
+  const [ajandaCop, setAjandaCop] = useState<any[]>([]);
   const [ep, setEp] = useState<any>(null);
   const [anchors, setAnchors] = useState<string[]>([]);
   const [meas, setMeas] = useState<any[]>([]);
@@ -1867,10 +1878,11 @@ export default function Rite() {
   }, [client, screen]);
 
   // Çöp kutusu "lazy purge" (2026-09-18, Havuz yeniden tasarımı — 8. adım, bkz. copKutusuTemizle tanımı):
-  // gerçek bir arka plan cron yok — Havuz ekranına her girişte (screen 'havuz' olduğunda) 30 günden eski çöp
-  // kutusu satırları sessizce kalıcı siliniyor.
+  // gerçek bir arka plan cron yok — Havuz VEYA Ajanda ekranına her girişte 30 günden eski çöp kutusu satırları
+  // sessizce kalıcı siliniyor (8b. adımda Ajanda'nın kendi çöp kutusu (dog_rituals) eklenince buraya da
+  // dahil edildi — hangi ekrana önce girilirse o tetikliyor, ikisi de aynı copKutusuTemizle'yi çağırıyor).
   useEffect(() => {
-    if (!client || screen !== 'havuz') return;
+    if (!client || (screen !== 'havuz' && screen !== 'ajanda')) return;
     copKutusuTemizle(client.id);
   }, [client, screen]);
 
@@ -1922,14 +1934,22 @@ export default function Rite() {
   }
 
   async function loadData(clientId: string) {
-    const r = await supabase.from('dog_rituals').select('id,ad,zaman,kategori,tip,kaynak,mezun,aktif,alan,rutin,rutin_ad,sira,baslangic,bitis,activity_id,hatirlatma_saat,blok_sira,faydalar,url,gunler,kart_tipi,kart_config,aliskanlik,aciklama,sablon_id,sablon_adim,kisisel_not,puan').eq('client_id', clientId).order('zaman');
-    // 2026-09-16 eklendi: bu sorgu daha önce hatayı sessizce yutup Ajanda'yı boş gösteriyordu (bkz. Behnan'ın
-    // "ajandada hiçbir şey görünmüyor" bildirimi — kök neden: select listesine yeni eklenen `puan` kolonu henüz
-    // migration'la (rite_ritual_puan_migration.sql) oluşturulmamıştı, PostgREST tüm sorguyu reddetti). Artık
-    // hata varsa görünür şekilde uyarıyoruz — sessizce boş Ajanda göstermek yerine.
+    // select('*') (2026-09-18, Havuz yeniden tasarımı — 8b. adım): bu sorgu daha önce sabit bir kolon listesi
+    // kullanıyordu; 2026-09-16'da select listesine yeni eklenen `puan` kolonu migration'dan önce PostgREST'in
+    // TÜM sorguyu reddetmesine yol açmıştı (bkz. Behnan'ın "ajandada hiçbir şey görünmüyor" bildirimi, aşağıdaki
+    // hata uyarısı o yüzden var). '*'e geçmek bu sınıf hatayı yapısal olarak ortadan kaldırıyor — yeni bir kolon
+    // (mesela şimdi eklenen silindi_tarih) migration'dan önce sorguya hiç yansımıyor (satırlarda o alan
+    // undefined olur, hata FIRLATMAZ), migration'dan sonra otomatik gelir, select listesini ayrıca güncellemeye
+    // gerek kalmıyor.
+    const r = await supabase.from('dog_rituals').select('*').eq('client_id', clientId).order('zaman');
     if (r.error) { console.error('dog_rituals select hatası:', r.error); alert('Ritüeller yüklenemedi: ' + r.error.message); }
     const lg = await supabase.from('dog_ritual_logs').select('id,ritual_id,tarih,yapildi').eq('client_id', clientId);
-    let ritualRows: any[] = r.data || [];
+    // Ajanda'nın çöp kutusu (8b. adım): AYNI sorgudan gelen silindi_tarih dolu satırlar ayrı state'e ayrılıyor
+    // — ekstra bir network isteği gerekmiyor. Havuz'un çöp kutusundan (cop, sayfa seviyesinde hesaplanıyor)
+    // BİLEREK ayrı tutuluyor (decision #7'deki "Ajanda ve havuz da farklı sonuç listesi olacaktır" ilkesiyle
+    // tutarlı — bkz. ajandaCop tanımındaki not).
+    setAjandaCop((r.data || []).filter((rt: any) => rt.silindi_tarih).sort((a: any, b: any) => (a.silindi_tarih < b.silindi_tarih ? 1 : -1)));
+    let ritualRows: any[] = (r.data || []).filter((rt: any) => !rt.silindi_tarih);
     const logRows = lg.data || [];
     // Yapılacak VE Randevu: günü (bitis) geçmiş ama hiç "yapıldı" kaydı olmadan kalmış (yani tamamlanmadan/
     // katılınmadan kapanmamış) her kartın bitis'i null'a çekilir — süresiz hâle gelip siz işaretleyene/silene ya
@@ -2315,16 +2335,20 @@ export default function Rite() {
   }
   // copKutusuTemizle (2026-09-18, 8. adım, Behnan: "her gün silinme zamanı gelenler tespit edip kalıcı
   // silse"): gerçek bir sunucu-taraflı cron YOK (uygulamanın zaten böyle bir mimarisi yok) — bunun yerine
-  // Havuz ekranı her açıldığında (bkz. aşağıdaki useEffect) 30 günden eski çöp kutusu satırları kalıcı
-  // silinir, "lazy purge". .select('id') sadece gerçekten bir şey silinip silinmediğini (gereksiz
-  // loadActivities/loadInbox'tan kaçınmak için) anlamak içindir.
+  // Havuz VEYA Ajanda ekranı her açıldığında (bkz. aşağıdaki useEffect'ler) 30 günden eski çöp kutusu
+  // satırları kalıcı silinir, "lazy purge". .select('id') sadece gerçekten bir şey silinip silinmediğini
+  // (gereksiz loadActivities/loadInbox/loadData'dan kaçınmak için) anlamak içindir. dog_rituals sorgusu
+  // (8b. adım) migration'dan önce sessizce hata verip geçebilir (r3.error) — bu purge işlemi için kabul
+  // edilebilir, uygulamayı kilitlemiyor.
   async function copKutusuTemizle(cid: string) {
     const sinir = new Date(Date.now() - 30 * 86400000).toISOString();
-    const [r1, r2] = await Promise.all([
+    const [r1, r2, r3] = await Promise.all([
       supabase.from('dog_activities').delete().eq('client_id', cid).not('silindi_tarih', 'is', null).lt('silindi_tarih', sinir).select('id'),
       supabase.from('dog_inbox').delete().eq('client_id', cid).not('silindi_tarih', 'is', null).lt('silindi_tarih', sinir).select('id'),
+      supabase.from('dog_rituals').delete().eq('client_id', cid).not('silindi_tarih', 'is', null).lt('silindi_tarih', sinir).select('id'),
     ]);
     if ((r1.data && r1.data.length) || (r2.data && r2.data.length)) { loadActivities(); loadInbox(cid); }
+    if (r3.data && r3.data.length) loadData(cid);
   }
   // ---------- Havuz: kalıcı Grup / Alt grup listesi (dog_gruplar) ----------
   // ustId null → yeni bir üst seviye Grup; doluysa o Grup'a bağlı bir Alt grup.
@@ -2921,9 +2945,19 @@ export default function Rite() {
       if (!confirm('Yarından itibaren kaldırılsın mı? Geçmiş kayıtların korunur.')) return;
       await supabase.from('dog_rituals').update({ bitis: today }).eq('id', id);
     } else {
-      if (!confirm('Bu ritüel silinsin mi?')) return;
-      await supabase.from('dog_rituals').delete().eq('id', id);
+      // 8b. adım (Behnan: "sanırım ajandadan silince çöp kutusuna gitmiyor, bir not silmiştim"): artık kalıcı
+      // silme değil, dog_rituals.silindi_tarih damgalayan çöp kutusuna taşıma — Ajanda'nın kendi 🗑️ Çöp
+      // kutusu'ndan (ajandaCop) 30 gün içinde Geri al ile kurtarılabilir (bkz. ritGeriAl).
+      if (!confirm('Bu kart çöp kutusuna taşınsın mı? (30 gün içinde Ajanda\'daki 🗑️ Çöp kutusu\'ndan geri alabilirsin)')) return;
+      const r = await supabase.from('dog_rituals').update({ silindi_tarih: new Date().toISOString() }).eq('id', id);
+      if (r.error) { alert('Silinemedi: ' + r.error.message); return; }
     }
+    loadData(client.id);
+  }
+  async function ritGeriAl(id: string) {
+    if (!client) return;
+    const r = await supabase.from('dog_rituals').update({ silindi_tarih: null }).eq('id', id);
+    if (r.error) return alert('Geri alınamadı: ' + r.error.message);
     loadData(client.id);
   }
   // Not → Ajandaya koy (kullanıcı isteği, 2026-09-17, Randevu birleşmesi): Not artık günlere bağlı değil (bkz.
@@ -3709,9 +3743,16 @@ export default function Rite() {
                 <button
                   type="button"
                   title="Ara"
-                  onClick={() => { if (ajAramaAcik) setAjArama(''); setAjAramaAcik((o: any) => !o); }}
+                  onClick={() => { if (ajAramaAcik) setAjArama(''); else setAjCopAcik(false); setAjAramaAcik((o: any) => !o); }}
                   style={{ background: ajAramaAcik ? 'var(--green)' : 'none', color: ajAramaAcik ? '#fff' : undefined, border: '1px solid var(--line)', borderRadius: '50%', width: 30, height: 30, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: '0 0 auto', padding: 0 }}
                 >🔍</button>
+                {/* 🗑️ Ajanda'nın çöp kutusu (2026-09-18, 8b. adım): bkz. ajCopAcik tanımındaki not. */}
+                <button
+                  type="button"
+                  title="Çöp kutusu"
+                  onClick={() => { if (!ajCopAcik) { setAjAramaAcik(false); setAjArama(''); } setAjCopAcik((o: any) => !o); }}
+                  style={{ background: ajCopAcik ? 'var(--green)' : 'none', color: ajCopAcik ? '#fff' : undefined, border: '1px solid var(--line)', borderRadius: '50%', width: 30, height: 30, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: '0 0 auto', padding: 0, position: 'relative' }}
+                >🗑️{ajandaCop.length > 0 && <span style={{ position: 'absolute', top: -2, right: -2, background: 'var(--red)', color: '#fff', borderRadius: '50%', width: 15, height: 15, fontSize: 9, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{ajandaCop.length}</span>}</button>
                 {/* Gün/Ay vswitch kaldırıldı (2026-09-17, Behnan kararı: "Gün, Ay butonları yerine sadece bir
                     takvim ikonu bile yeterli") — Ay artık ayrı bir sayfa değil, bu ikonla açılan bir overlay/popup
                     (bkz. aşağısı, ayPopupOpen). Ajanda'nın asıl gövdesi artık hep "Gün" görünümü. */}
@@ -3748,7 +3789,28 @@ export default function Rite() {
                 <input autoFocus value={ajArama} onChange={(e: any) => setAjArama(e.target.value)} placeholder="🔍 Başlık veya içerikte ara…" style={{ width: '100%' }} />
               </div>
             )}
-            {ajArama.trim() ? (() => {
+            {ajCopAcik ? (
+              // 🗑️ Ajanda'nın çöp kutusu (2026-09-18, 8b. adım): Havuz'unkiyle aynı format (tip, silinme
+              // tarihi, Geri al) — burada "geldiği klasör" kavramı yok, hepsi Ajanda'nın kendi silinenleri.
+              <div>
+                {ajandaCop.length === 0 ? (
+                  <div className="note" style={{ textAlign: 'center', marginTop: 10 }}>Çöp kutusu boş.</div>
+                ) : (
+                  <>
+                    <p className="sub" style={{ marginTop: 0 }}>Silinen kartlar burada 30 gün tutulur, sonra kalıcı silinir.</p>
+                    {ajandaCop.map((r: any) => (
+                      <div key={r.id} className="actcard">
+                        <div style={{ flex: 1 }}>
+                          <div className="n">{kartIkon(r.kart_tipi) || '📅'} {r.ad}</div>
+                          <div className="o">silindi: {kisaTarih((r.silindi_tarih || '').slice(0, 10))}</div>
+                        </div>
+                        <button className="btn ghost sm" onClick={() => ritGeriAl(r.id)}>Geri al</button>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+            ) : ajArama.trim() ? (() => {
               // Ajanda arama sonuçları (2026-09-18, 7. adım): gün/hafta görünümünün yerini alıyor, günlerden
               // bağımsız düz, tarihe göre sıralı bir liste — bkz. ajArama tanımındaki not.
               const q = ajArama.trim().toLowerCase();
