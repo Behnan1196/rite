@@ -1474,6 +1474,14 @@ export default function Rite() {
   // (bugüne kadarki Grup/Alt grup ağacı — "Kişisel Arşiv" adını aldı). Üçüncü kök ("Ajandadan Kaydedilenler",
   // kart-tipi kategorili otomatik klasörleme) ayrı bir sonraki adımda eklenecek.
   const [havuzFolder, setHavuzFolder] = useState<'gelenler' | 'kisisel'>('kisisel');
+  // kaGrup/kaAlt (2026-09-18, Havuz yeniden tasarımı — 2. adım, Behnan: "outlook/windows tarzı bir klasör
+  // yapısı yapamaz mıyız"): Kişisel Arşiv artık hepsi-birden-açık bir akordeon değil, gerçek bir klasör
+  // gezgini — bir klasöre dokunup İÇİNE girersin (breadcrumb yol gösterir), geri dönmek için üstteki yol
+  // parçasına dokunursun. null/null = Kişisel Arşiv'in kökü. Mevcut veri modeli en fazla 2 seviye destekliyor
+  // (Grup + Alt grup — dog_activities.grup/alt_grup düz metin alanlar), o yüzden kaAlt doluyken üçüncü bir
+  // seviyeye inilmiyor, sadece kartlar listeleniyor.
+  const [kaGrup, setKaGrup] = useState<string | null>(null);
+  const [kaAlt, setKaAlt] = useState<string | null>(null);
   // Ay görünümü artık ayrı bir sayfa değil, takvim ikonuyla açılan bir overlay/popup (2026-09-17, Behnan kararı:
   // "sadece bir takvim ikonu bile yeterli, çıkan aylık seçim ve navigasyon popup'ın ... dışarıda bir şeye
   // dokunduğumuzda kapanır"). ayPopupOpen açık/kapalı durumu tutar; ayCursor ise popup içinde GEZİNİLEN ay —
@@ -1485,28 +1493,20 @@ export default function Rite() {
   const [selDate, setSelDate] = useState('');
   const [activities, setActivities] = useState<any[]>([]);
   // actGroup/actAltGroup artık bir "seçili sekme" değil, en son açtığın (dokunduğun) Grup/Alt grup — yeni bir
-  // kart Ajanda'daki ＋'dan Havuz'a eklendiğinde otomatik olarak buraya düşer (bkz. Havuz akordeon ekranı).
+  // kart Ajanda'daki ＋'dan Havuz'a eklendiğinde otomatik olarak buraya düşer (bkz. Havuz klasör gezgini,
+  // kaGrup/kaAlt).
   const [actGroup, setActGroup] = useState('Genel');
   const [actAltGroup, setActAltGroup] = useState<string | null>(null);
-  // Havuz ekranında hangi Grup/Alt grup başlıklarının açık (genişletilmiş) olduğu — gerçek akordeon, birden
-  // fazlası aynı anda açık kalabilir. Alt gruplar "Grup␟AltGrup" anahtarıyla tutuluyor (aynı adlı alt grup
-  // farklı Gruplarda çakışmasın diye).
-  const [acikGruplar, setAcikGruplar] = useState<Set<string>>(() => new Set(['Genel']));
-  const [acikAltGruplar, setAcikAltGruplar] = useState<Set<string>>(() => new Set());
-  // Havuz akordeonunda tepedeki "+ Grup" ve bir Grup başlığındaki "+" (alt grup) için satır-içi ekleme —
-  // 🗂 Grupları yönet ekranındaki yeniden adlandır/sil/sırala hâlâ orada, bunlar sadece hızlı ekleme.
+  // anaGrupEkleAcik/grupYeniAd: Havuz'un klasör gezgininde (kaGrup/kaAlt) güncel seviyede yeni bir klasör
+  // açmak için satır-içi giriş — hem kökte (yeni Grup) hem bir Grup içindeyken (yeni Alt grup) aynı iki state
+  // kullanılıyor. grupDuzenleId/grupDuzenleAd aynı gezginde bir klasörü yeniden adlandırmak için.
   const [anaGrupEkleAcik, setAnaGrupEkleAcik] = useState(false);
-  const [altGrupEkleAcikFor, setAltGrupEkleAcikFor] = useState<string | null>(null); // Grup adı
-  const [anaAltGrupYeniAd, setAnaAltGrupYeniAd] = useState('');
   // Havuz'u "kitaplık / araştırma planı" olarak kullanmak için kalıcı Grup + Alt grup listesi (bkz. dog_gruplar
   // tablosu, rite_gruplar_migration.sql). ust_id boş olanlar Grup (üst seviye), dolu olanlar o Grup'a bağlı Alt grup.
   const [grupListesi, setGrupListesi] = useState<any[]>([]);
-  const [gruplarYonetOpen, setGruplarYonetOpen] = useState(false);
   const [grupYeniAd, setGrupYeniAd] = useState('');
   const [grupDuzenleId, setGrupDuzenleId] = useState<string | null>(null);
   const [grupDuzenleAd, setGrupDuzenleAd] = useState('');
-  const [altGrupEkleFor, setAltGrupEkleFor] = useState<string | null>(null);
-  const [altGrupYeniAd, setAltGrupYeniAd] = useState('');
   const [rituals, setRituals] = useState<any[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
   const [ep, setEp] = useState<any>(null);
@@ -2122,7 +2122,7 @@ export default function Rite() {
     if (r.error) return setKMsg('Hata: ' + r.error.message);
     const savedGrup = row.grup;
     studioReset(); loadActivities(); setStudioOpen(false); setActGroup(savedGrup);
-    setAcikGruplar((s) => new Set(s).add(savedGrup));
+    setKaGrup(savedGrup); setKaAlt(null);
   }
   async function loadKisiler(cid: string) {
     const r = await supabase.from('dog_clients').select('kisiler,profil_ad,avatar').eq('id', cid).single();
@@ -2581,8 +2581,7 @@ export default function Rite() {
     loadActivities();
     setActGroup(grup);
     setActAltGroup(altGrup);
-    setAcikGruplar((s) => new Set(s).add(grup));
-    if (altGrup) setAcikAltGruplar((s) => new Set(s).add(grup + '␟' + altGrup));
+    setKaGrup(grup); setKaAlt(altGrup);
     closeDetay();
   }
   // Ayraç: isimli bir bölüm başlığı — bugünden itibaren, siz silene kadar her gün aynı şekilde görünür,
@@ -3873,25 +3872,10 @@ export default function Rite() {
 
         {/* ---------- HAVUZ ---------- */}
         {screen === 'havuz' && (() => {
-          // Gerçek akordeon: her Grup kendi kartı, başlığına dokununca açılır/kapanır — birden fazlası aynı
-          // anda açık kalabilir. Alt gruplar o kartın içinde, kendi başlıklarıyla iç içe aynı şekilde çalışır.
-          // Bir başlığı AÇARKEN actGroup/actAltGroup da güncellenir — Ajanda'daki ＋ ile yeni kart eklendiğinde
-          // (bkz. yeniHavuzTaslakAc/taslakKaydet) kart en son açtığın buraya düşer; kapatmak hedefi değiştirmez.
-          const grupAc = (g: string) => {
-            setAcikGruplar((s) => {
-              const n = new Set(s);
-              if (n.has(g)) n.delete(g); else { n.add(g); setActGroup(g); setActAltGroup(null); }
-              return n;
-            });
-          };
-          const altGrupAc = (g: string, ag: string) => {
-            const key = g + '␟' + ag;
-            setAcikAltGruplar((s) => {
-              const n = new Set(s);
-              if (n.has(key)) n.delete(key); else { n.add(key); setActGroup(g); setActAltGroup(ag); }
-              return n;
-            });
-          };
+          // Klasör gezgini (2026-09-18, Havuz yeniden tasarımı — 2. adım, bkz. kaGrup/kaAlt tanımı yukarıda):
+          // bir klasöre dokunmak İÇİNE girer (kaGrup/kaAlt güncellenir), breadcrumb'taki bir üst parçaya
+          // dokunmak geri çıkarır. actGroup/actAltGroup (Ajanda'daki ＋'dan yeni kart eklendiğinde hangi
+          // klasöre düşeceğini belirleyen "en son açılan yer" state'i) klasöre her girişte de güncelleniyor.
           const aktKart = (a: any) => (
             <div key={a.id} className="actcard" onClick={() => openDetay(a, 'aktivite')}>
               <div style={{ flex: 1 }}><div className="n">{a.tur === 'program' ? '🧩 ' : ''}{a.ad}{a.puan ? <span className="puanp"> {'★'.repeat(a.puan)}</span> : ''}</div><div className="o">{a.tur === 'program' ? (a.adimlar || []).length + ' adım' + (a.sure_gun ? ' · ' + a.sure_gun + ' gün' : '') : (a.kaynak_etiket === 'Mezun' ? 'Mezun · ' : '') + Array.from(new Set((a.faydalar || []).map((k: string) => faydaMap[k]?.alan).filter(Boolean))).join(' · ')}</div></div>
@@ -3902,12 +3886,6 @@ export default function Rite() {
           <div>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
               <h2 style={{ margin: 0 }}>Aktivite Havuzu</h2>
-              {havuzFolder === 'kisisel' && (
-                <div style={{ display: 'flex', gap: 12 }}>
-                  <button className="minlink" onClick={() => { setAnaGrupEkleAcik((o) => !o); setGrupYeniAd(''); }}>＋ Grup</button>
-                  <button className="minlink" onClick={() => setGruplarYonetOpen(true)}>🗂 Grupları yönet</button>
-                </div>
-              )}
             </div>
             {/* Kök klasör şeridi (2026-09-18, Havuz yeniden tasarımı — 1. adım): eski ayrı "Sohbet > Inbox"
                 kartı kalktı, Inbox artık burada bir klasör (📥 Gelenler) — paylaşılan bir şey geldiği an zaten
@@ -3966,78 +3944,100 @@ export default function Rite() {
               </div>
             ) : (
             <>
-            <p className="sub">Her Grup kendi araştırma başlığın — başlığa dokunup aç/kapat. Yeni bir kişisel kart Ajanda&apos;daki <b>+</b> ile oluşturulur, en son açtığın Grup/Alt gruba eklenir.</p>
-            {anaGrupEkleAcik && (
+            {/* Breadcrumb — Windows/Outlook tarzı klasör gezgini (Behnan: "outlook veya windows tarzı bir
+                klasör yapısı"). Bir üst parçaya dokunmak geri çıkarır; en sağdaki "＋ Yeni klasör" güncel
+                seviyede (kökteyse Grup, bir Grup'un içindeyse Alt grup) yeni bir klasör açar. */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '8px 0 4px', flexWrap: 'wrap' }}>
+              <span style={{ cursor: kaGrup ? 'pointer' : 'default', fontWeight: kaGrup ? 400 : 700, color: kaGrup ? 'var(--muted)' : undefined }} onClick={() => { setKaGrup(null); setKaAlt(null); }}>🗄️ Kişisel Arşiv</span>
+              {kaGrup && (<>
+                <span className="note" style={{ margin: 0 }}>›</span>
+                <span style={{ cursor: kaAlt ? 'pointer' : 'default', fontWeight: kaAlt ? 400 : 700, color: kaAlt ? 'var(--muted)' : undefined }} onClick={() => setKaAlt(null)}>{kaGrup}</span>
+              </>)}
+              {kaAlt && (<>
+                <span className="note" style={{ margin: 0 }}>›</span>
+                <span style={{ fontWeight: 700 }}>{kaAlt}</span>
+              </>)}
+              <span style={{ flex: 1 }} />
+              {!kaAlt && <button className="minlink" onClick={() => { setAnaGrupEkleAcik((o) => !o); setGrupYeniAd(''); }}>＋ Yeni klasör</button>}
+            </div>
+            {!kaGrup && <p className="sub" style={{ marginTop: 0 }}>Klasörlerini burada organize et — bir klasöre dokunup aç, ✎ ile yeniden adlandır, 🗑 ile sil. Yeni bir kişisel kart Ajanda&apos;daki <b>+</b> ile oluşturulur, en son açtığın klasöre eklenir.</p>}
+            {anaGrupEkleAcik && !kaAlt && (
               <div style={{ display: 'flex', gap: 6, margin: '0 0 10px' }}>
-                <input value={grupYeniAd} onChange={(e) => setGrupYeniAd(e.target.value)} placeholder="Yeni Grup adı (ör. Duruş)" style={{ flex: 1 }} autoFocus />
-                <button className="btn sm" onClick={async () => { const isim = grupYeniAd.trim(); if (!isim) return; await grupEkle(isim, null); setActGroup(isim); setActAltGroup(null); setAcikGruplar((s) => new Set(s).add(isim)); setGrupYeniAd(''); setAnaGrupEkleAcik(false); }}>Ekle</button>
+                <input autoFocus value={grupYeniAd} onChange={(e) => setGrupYeniAd(e.target.value)} placeholder={kaGrup ? 'Yeni alt klasör adı' : 'Yeni klasör adı (ör. Duruş)'} style={{ flex: 1 }} />
+                <button className="btn sm" onClick={async () => {
+                  const isim = grupYeniAd.trim();
+                  if (!isim) return;
+                  if (kaGrup) {
+                    const ustId = await grupUstIdGaranti(kaGrup);
+                    if (!ustId) return;
+                    await grupEkle(isim, ustId);
+                    setActGroup(kaGrup); setActAltGroup(isim);
+                  } else {
+                    await grupEkle(isim, null);
+                    setActGroup(isim); setActAltGroup(null);
+                  }
+                  setGrupYeniAd(''); setAnaGrupEkleAcik(false);
+                }}>Ekle</button>
                 <button className="btn ghost sm" onClick={() => setAnaGrupEkleAcik(false)}>Vazgeç</button>
               </div>
             )}
-            {personalGroups.length === 0 ? (
-              <div className="note">Henüz grup yok — yukarıdaki ＋ Grup&apos;tan ekleyebilirsin.</div>
-            ) : personalGroups.map((g, gi) => {
-              const altlar = altGruplarOf(g);
-              const acik = acikGruplar.has(g);
-              const dogrudanAkt = personalActs.filter((a) => personalGroupOf(a) === g && !a.alt_grup);
-              const toplamSay = personalActs.filter((a) => personalGroupOf(a) === g).length;
+            {kaAlt ? (() => {
+              // En derin seviye — mevcut veri modeli (dog_activities.grup/alt_grup düz metin) burada
+              // duruyor, alt klasör yok, sadece kartlar.
+              const items = personalActs.filter((a) => personalGroupOf(a) === kaGrup && a.alt_grup === kaAlt);
+              return items.length === 0 ? <div className="note">Bu klasörde henüz kart yok.</div> : items.map(aktKart);
+            })() : (() => {
+              const isRoot = !kaGrup;
+              const folders: string[] = isRoot ? personalGroups : altGruplarOf(kaGrup as string);
+              const ustRow = isRoot ? null : grupUst.find((r) => r.ad === kaGrup);
+              const realRows = isRoot ? grupUst : grupListesi.filter((r) => r.ust_id === ustRow?.id);
+              const siblingsSirali = realRows.slice().sort((a, b) => a.sira - b.sira);
+              const directItems = isRoot ? [] : personalActs.filter((a) => personalGroupOf(a) === kaGrup && !a.alt_grup);
+              if (folders.length === 0 && directItems.length === 0) {
+                return <div className="note">{isRoot ? 'Henüz klasör yok — yukarıdaki ＋ Yeni klasör\'den ekleyebilirsin.' : 'Bu klasörde henüz alt klasör ya da kart yok.'}</div>;
+              }
               return (
-                <div key={g} style={{ marginTop: gi === 0 ? 4 : 10 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', background: '#efe8da', borderRadius: 10, padding: '10px 10px 10px 12px' }} onClick={() => grupAc(g)}>
-                    <span style={{ width: 14, textAlign: 'center', color: '#8a8169' }}>{acik ? '▾' : '▸'}</span>
-                    <span style={{ flex: 1, fontWeight: 700 }}>{g}</span>
-                    {toplamSay > 0 && <span className="note" style={{ margin: 0 }}>{toplamSay}</span>}
-                    <button
-                      type="button"
-                      title="Alt grup ekle"
-                      onClick={(e) => { e.stopPropagation(); setAcikGruplar((s) => new Set(s).add(g)); setAltGrupEkleAcikFor(g); setAnaAltGrupYeniAd(''); }}
-                      style={{ background: 'none', border: 'none', padding: '0 2px', fontSize: 16, fontWeight: 700, color: '#8a8169', cursor: 'pointer', lineHeight: 1 }}
-                    >＋</button>
-                  </div>
-                  {acik && (
-                    <div style={{ padding: '4px 2px 2px' }}>
-                      {altGrupEkleAcikFor === g && (
-                        <div style={{ display: 'flex', gap: 6, margin: '4px 0 8px' }}>
-                          <input value={anaAltGrupYeniAd} onChange={(e) => setAnaAltGrupYeniAd(e.target.value)} placeholder="Yeni Alt grup adı" style={{ flex: 1 }} autoFocus />
-                          <button className="btn sm" onClick={async () => {
-                            const isim = anaAltGrupYeniAd.trim();
-                            if (!isim) return;
-                            const ustId = await grupUstIdGaranti(g);
-                            if (!ustId) return;
-                            await grupEkle(isim, ustId);
-                            setActGroup(g); setActAltGroup(isim);
-                            setAcikAltGruplar((s) => new Set(s).add(g + '␟' + isim));
-                            setAnaAltGrupYeniAd(''); setAltGrupEkleAcikFor(null);
-                          }}>Ekle</button>
-                          <button className="btn ghost sm" onClick={() => setAltGrupEkleAcikFor(null)}>Vazgeç</button>
-                        </div>
-                      )}
-                      {dogrudanAkt.length === 0 && altlar.length === 0 && altGrupEkleAcikFor !== g && <div className="note">Bu grupta henüz aktivite yok.</div>}
-                      {dogrudanAkt.map(aktKart)}
-                      {altlar.map((ag) => {
-                        const key = g + '␟' + ag;
-                        const altAcik = acikAltGruplar.has(key);
-                        const altAkt = personalActs.filter((a) => personalGroupOf(a) === g && a.alt_grup === ag);
-                        return (
-                          <div key={ag} style={{ margin: '2px 0 0', borderTop: '1px solid var(--line)' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 0', cursor: 'pointer' }} onClick={() => altGrupAc(g, ag)}>
-                              <span style={{ width: 12, textAlign: 'center', color: '#9a9280', fontSize: 11 }}>{altAcik ? '▾' : '▸'}</span>
-                              <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600, color: 'var(--muted)' }}>{ag}</span>
-                              {altAkt.length > 0 && <span className="note" style={{ margin: 0 }}>{altAkt.length}</span>}
+                <>
+                  {folders.map((f) => {
+                    const real = realRows.find((r) => r.ad === f);
+                    const idx = real ? siblingsSirali.findIndex((r) => r.id === real.id) : -1;
+                    const say = isRoot
+                      ? personalActs.filter((a) => personalGroupOf(a) === f).length
+                      : personalActs.filter((a) => personalGroupOf(a) === kaGrup && a.alt_grup === f).length;
+                    const duzenleAcik = !!real && grupDuzenleId === real.id;
+                    return (
+                      <div key={f} style={{ borderTop: '1px solid var(--line)' }}>
+                        {duzenleAcik ? (
+                          <div style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '9px 0' }}>
+                            <input autoFocus value={grupDuzenleAd} onChange={(e) => setGrupDuzenleAd(e.target.value)} style={{ flex: 1 }} />
+                            <button className="btn sm" onClick={() => { grupYenidenAdlandir((real as any).id, grupDuzenleAd); setGrupDuzenleId(null); }}>Kaydet</button>
+                            <button className="btn ghost sm" onClick={() => setGrupDuzenleId(null)}>Vazgeç</button>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '9px 0' }}>
+                            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }} onClick={() => { if (isRoot) { setKaGrup(f); setActGroup(f); setActAltGroup(null); } else { setKaAlt(f); setActGroup(kaGrup as string); setActAltGroup(f); } }}>
+                              <span>📁</span>
+                              <span style={{ flex: 1, fontWeight: 600 }}>{f}</span>
+                              {say > 0 && <span className="note" style={{ margin: 0 }}>{say}</span>}
+                              <span className="go">›</span>
                             </div>
-                            {altAcik && (
-                              <div style={{ margin: '0 0 4px 20px' }}>
-                                {altAkt.length === 0 ? <div className="note">Bu alt grupta aktivite yok.</div> : altAkt.map(aktKart)}
-                              </div>
+                            {real && (
+                              <>
+                                <button className="minlink" style={{ padding: '0 2px' }} disabled={idx <= 0} onClick={() => grupSiraDegistir(real, -1)}>▲</button>
+                                <button className="minlink" style={{ padding: '0 2px' }} disabled={idx < 0 || idx >= siblingsSirali.length - 1} onClick={() => grupSiraDegistir(real, 1)}>▼</button>
+                                <button className="minlink" onClick={() => { setGrupDuzenleId((real as any).id); setGrupDuzenleAd((real as any).ad); }}>✎</button>
+                                <button className="minlink" style={{ color: 'var(--red)' }} onClick={() => grupSil(real)}>🗑</button>
+                              </>
                             )}
                           </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {directItems.map(aktKart)}
+                </>
               );
-            })}
+            })()}
             </>
             )}
           </div>
@@ -5408,99 +5408,12 @@ export default function Rite() {
         </div>
       )}
 
-      {/* Havuz'u bir "kitaplık / araştırma planı" olarak kullanmak için Grup + Alt grup'ların kalıcı,
-          düzenlenebilir listesi (bkz. dog_gruplar). Havuz'daki sekmeler artık burada tutulan bu listeden
-          besleniyor — serbestçe yazılan, kalıcı olmayan bir isimden çok, "Duruş" / "Bel çukurluğu" gibi
-          gerçek bir araştırma başlığı listesi. */}
-      {gruplarYonetOpen && (
-        <div className="modal" onMouseDown={() => { setGruplarYonetOpen(false); setGrupDuzenleId(null); setAltGrupEkleFor(null); }}>
-          <div className="sheet" onMouseDown={(e) => e.stopPropagation()}>
-            <button className="x" onClick={() => { setGruplarYonetOpen(false); setGrupDuzenleId(null); setAltGrupEkleFor(null); }}>×</button>
-            <h2>🗂 Grupları yönet</h2>
-            <div className="note" style={{ marginTop: 0 }}>Her Grup bir araştırma başlığı, Alt gruplar onun altındaki daha ince konular.</div>
-            {grupUst.length === 0 && <div className="note">Henüz Grup yok — aşağıdan ekle.</div>}
-            {grupUst.sort((a, b) => a.sira - b.sira).map((g, i) => {
-              const altlar = grupListesi.filter((x) => x.ust_id === g.id).sort((a, b) => a.sira - b.sira);
-              return (
-                <div key={g.id} style={{ margin: '8px 0', padding: '8px 0', borderTop: i === 0 ? undefined : '1px solid var(--line)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                      <button className="minlink" style={{ padding: 0 }} onClick={() => grupSiraDegistir(g, -1)} disabled={i === 0}>▲</button>
-                      <button className="minlink" style={{ padding: 0 }} onClick={() => grupSiraDegistir(g, 1)} disabled={i === grupUst.length - 1}>▼</button>
-                    </div>
-                    {g.sabit ? (
-                      <>
-                        <b style={{ flex: 1 }}>{g.ad} <span className="note" style={{ fontWeight: 400 }}>🔒 sabit</span></b>
-                      </>
-                    ) : grupDuzenleId === g.id ? (
-                      <>
-                        <input value={grupDuzenleAd} onChange={(e) => setGrupDuzenleAd(e.target.value)} style={{ flex: 1 }} autoFocus />
-                        <button className="btn sm" onClick={() => { grupYenidenAdlandir(g.id, grupDuzenleAd); setGrupDuzenleId(null); }}>Kaydet</button>
-                        <button className="btn ghost sm" onClick={() => setGrupDuzenleId(null)}>Vazgeç</button>
-                      </>
-                    ) : (
-                      <>
-                        <b style={{ flex: 1 }}>{g.ad}</b>
-                        <button className="minlink" onClick={() => { setGrupDuzenleId(g.id); setGrupDuzenleAd(g.ad); }}>✎</button>
-                        <button className="minlink" style={{ color: 'var(--red)' }} onClick={() => grupSil(g)}>🗑</button>
-                      </>
-                    )}
-                  </div>
-                  <div style={{ margin: '4px 0 0 24px' }}>
-                    {/* "Meridyen" kökünün alt grupları (= Home'un alanları) artık salt-okunur burada — içerik
-                        (ad/neden/checklist/örnekler) ve hangi alanların bu danışana ait olacağı (2026-09, Behnan
-                        kararı — "Alanlar" mimarisi) TEK kaynak olarak Rite Studio'dan (app-meridyen/atama)
-                        yönetiliyor. Sıra/görünürlük hâlâ Home'un kendi "Alanları yönet" ekranında. Sıradan
-                        Grup/Alt gruplar eskisi gibi (rename/sil, düz ad) kalıyor. */}
-                    {g.sabit ? (
-                      homeAlanlar.length > 0 ? homeAlanlar.map((ag) => (
-                        <div key={ag.id} style={{ margin: '3px 0' }}>
-                          <span className="note" style={{ margin: 0 }}>{ag.ad}</span>
-                        </div>
-                      )) : <div className="note">Henüz Meridyen'den atanmış bir alan yok.</div>
-                    ) : altlar.map((ag, j) => (
-                      <div key={ag.id} style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '3px 0' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                          <button className="minlink" style={{ padding: 0, fontSize: 10 }} onClick={() => grupSiraDegistir(ag, -1)} disabled={j === 0}>▲</button>
-                          <button className="minlink" style={{ padding: 0, fontSize: 10 }} onClick={() => grupSiraDegistir(ag, 1)} disabled={j === altlar.length - 1}>▼</button>
-                        </div>
-                        {grupDuzenleId === ag.id ? (
-                          <>
-                            <input value={grupDuzenleAd} onChange={(e) => setGrupDuzenleAd(e.target.value)} style={{ flex: 1 }} autoFocus />
-                            <button className="btn sm" onClick={() => { grupYenidenAdlandir(ag.id, grupDuzenleAd); setGrupDuzenleId(null); }}>Kaydet</button>
-                            <button className="btn ghost sm" onClick={() => setGrupDuzenleId(null)}>Vazgeç</button>
-                          </>
-                        ) : (
-                          <>
-                            <span className="note" style={{ margin: 0, flex: 1 }}>{ag.ad}</span>
-                            <button className="minlink" onClick={() => { setGrupDuzenleId(ag.id); setGrupDuzenleAd(ag.ad); }}>✎</button>
-                            <button className="minlink" style={{ color: 'var(--red)' }} onClick={() => grupSil(ag)}>🗑</button>
-                          </>
-                        )}
-                      </div>
-                    ))}
-                    {g.sabit ? (
-                      <div className="note" style={{ margin: '6px 0 0' }}>Alanların içeriğini ve atamasını Meridyen'deki Rite Studio'dan yönet — sıra ve görünürlük için "⚙️ Alanları yönet" (Home) ekranını kullan.</div>
-                    ) : altGrupEkleFor === g.id ? (
-                      <div style={{ display: 'flex', gap: 6, margin: '4px 0' }}>
-                        <input value={altGrupYeniAd} onChange={(e) => setAltGrupYeniAd(e.target.value)} placeholder="Alt grup adı" style={{ flex: 1 }} autoFocus />
-                        <button className="btn sm" onClick={async () => { const isim = altGrupYeniAd.trim(); if (!isim) return; setAltGrupYeniAd(''); setAltGrupEkleFor(null); await grupEkle(isim, g.id); }}>Ekle</button>
-                        <button className="btn ghost sm" onClick={() => setAltGrupEkleFor(null)}>Vazgeç</button>
-                      </div>
-                    ) : (
-                      <button className="minlink" style={{ margin: '4px 0 0' }} onClick={() => { setAltGrupEkleFor(g.id); setAltGrupYeniAd(''); }}>+ Alt grup</button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-            <div style={{ display: 'flex', gap: 6, marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--line)' }}>
-              <input value={grupYeniAd} onChange={(e) => setGrupYeniAd(e.target.value)} placeholder="Yeni Grup adı (ör. Duruş, Mental Health…)" style={{ flex: 1 }} />
-              <button className="btn sm" onClick={async () => { const isim = grupYeniAd.trim(); if (!isim) return; setGrupYeniAd(''); await grupEkle(isim, null); }}>Grup ekle</button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Havuz'un ayrı "🗂 Grupları yönet" modalı 2026-09-18'de (Havuz yeniden tasarımı — 2. adım, Behnan:
+          "outlook veya windows tarzı bir klasör yapısı yapamaz mıyız") TAMAMEN KALDIRILDI — yeniden
+          adlandırma/silme/sıralama artık ayrı bir yönetim ekranında değil, doğrudan Kişisel Arşiv'in klasör
+          gezgininde (bkz. screen==='havuz', kaGrup/kaAlt) satır üzerindeki ✎/🗑/▲▼ ile yapılıyor. Kullanılan
+          fonksiyonlar (grupEkle/grupYenidenAdlandir/grupSil/grupSiraDegistir/grupUstIdGaranti) AYNEN kaldı,
+          sadece nereden çağrıldıkları değişti. */}
 
       {ayracYeniOpen && (
         <div className="modal" onMouseDown={() => setAyracYeniOpen(false)}>
