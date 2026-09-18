@@ -1396,6 +1396,12 @@ export default function Rite() {
   const [devMode, setDevMode] = useState(false);
   const [kartLabOpen, setKartLabOpen] = useState(false);
   const devTapRef = useRef<{ n: number; t: number }>({ n: 0, t: 0 });
+  // devTapN: SADECE görünür geri bildirim için (2026-09-18, "7 kez basıyorum ama açılmıyor" hatası sonrası
+  // eklendi) — önceden dokunuşun sayılıp sayılmadığını görmenin hiçbir yolu yoktu, o yüzden gerçekten mi
+  // saymıyor yoksa kullanıcı mı emin olamıyor ayırt edilemiyordu. Sayım mantığının kendisi hâlâ devTapRef'te
+  // (ref, state DEĞİL — her dokunuşta re-render'a gerek yok).
+  const [devTapN, setDevTapN] = useState(0);
+  const devTapHideRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Ayarlar başlığına 7 kez art arda (1.5sn içinde) dokununca Geliştirici modu açılır/kapanır — Android'in
   // "build number" tıklama geleneğinin aynısı, bilinçli olarak (Behnan: "gerçek mobil uygulamaya da doğal
   // geçecek" diye düşünüldü). localStorage'a yazılır ki kapatıp açınca kaybolmasın.
@@ -1405,8 +1411,13 @@ export default function Rite() {
     if (now - r.t > 1500) r.n = 0;
     r.n += 1;
     r.t = now;
+    setDevTapN(r.n);
+    if (devTapHideRef.current) clearTimeout(devTapHideRef.current);
+    devTapHideRef.current = setTimeout(() => setDevTapN(0), 1500);
     if (r.n >= 7) {
       r.n = 0;
+      setDevTapN(0);
+      if (devTapHideRef.current) clearTimeout(devTapHideRef.current);
       setDevMode((v: boolean) => {
         const nv = !v;
         try { if (nv) localStorage.setItem(LS_DEV, '1'); else localStorage.removeItem(LS_DEV); } catch (_) {}
@@ -4081,8 +4092,17 @@ export default function Rite() {
         {screen === 'bilgi' && (
           <div>
             {/* Geliştirici modu: başlığa 7 kez art arda dokununca açılır/kapanır (bkz. devTap) — Android'in
-                build-number tıklama geleneği, kimseye görünür bir ipucu yok, sadece Behnan biliyor. */}
-            <h2 onClick={devTap}>Ayarlar</h2>
+                build-number tıklama geleneği. userSelect:'none' BİLEREK eklendi (2026-09-18, "hızlı basıyorum
+                ama açılmıyor" raporu sonrası): userSelect kapalı olmadan iOS Safari'de art arda hızlı
+                dokunuşlar metni SEÇMEYE başlıyor (viewport'taki userScalable:false sadece çift-dokunuş
+                YAKINLAŞTIRMAYI kapatıyor, metin SEÇİMİNİ değil) — seçim başlayınca sonraki dokunuşlar h2'nin
+                onClick'ine değil seçim tutamaçlarına gidiyor ve sayaç 7'ye hiç ulaşamıyor. devTapN, sayımın
+                gerçekten işlediğini görünür kılmak için eklendi (öncesinde hiç geri bildirim yoktu). */}
+            <h2 onClick={devTap} style={{ userSelect: 'none', WebkitUserSelect: 'none' }}>
+              Ayarlar
+              {devTapN > 1 && devTapN < 7 && <span style={{ fontSize: 12, opacity: .45, marginLeft: 8, fontWeight: 400 }}>{devTapN}/7</span>}
+            </h2>
+            {devMode && <p className="note" style={{ marginTop: -6, marginBottom: 10 }}>🧪 Geliştirici modu açık</p>}
 
             <div className="card profilcard">
               <div className="avatar">{avatarSec || (profilAd || client.ad || 'R').trim().charAt(0).toUpperCase()}</div>
