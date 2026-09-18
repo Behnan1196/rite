@@ -1511,11 +1511,11 @@ export default function Rite() {
   // daha basit bir tek-seviye state yeterli.
   const [ajKategori, setAjKategori] = useState<string | null>(null);
   // gelKategori (2026-09-18, Havuz yeniden tasarımı — 4. adım, Behnan: "Devam et ama uygun görürsen önce
-  // Gelenlerde de benzeri alt klasörler yaratılabilir"): "📥 Gelenler" de "Ajandadan Kaydedilenler" ile aynı
+  // Gelenlerde de benzeri alt klasörler yaratılabilir", sonra: "ajandadan kaydedilenler gibi boşda olsa önceden
+  // klasörleri yaratalım ve içine düşsün"): "📥 Gelenler" de "Ajandadan Kaydedilenler" ile birebir aynı
   // kart-tipi kategorilerini (KART_KATEGORILER) kullanıyor — burada da kullanıcı klasör yaratamıyor/silemiyor,
-  // sadece göz atıyor. Gelenler dinamik/geçici bir triyaj kuyruğu olduğu için (Ajandadan Kaydedilenler'in aksine
-  // sabit bir arşiv değil), kategori listesinde SADECE içi dolu olanlar gösteriliyor — boş kategori klasörleri
-  // burada kalabalık yaratır.
+  // sadece göz atıyor. Ajandadan Kaydedilenler'de olduğu gibi 4 kategori de her zaman sabit gösteriliyor
+  // (boş olsalar bile), otomatik atlama yok.
   const [gelKategori, setGelKategori] = useState<string | null>(null);
   // Ay görünümü artık ayrı bir sayfa değil, takvim ikonuyla açılan bir overlay/popup (2026-09-17, Behnan kararı:
   // "sadece bir takvim ikonu bile yeterli, çıkan aylık seçim ve navigasyon popup'ın ... dışarıda bir şeye
@@ -4024,42 +4024,39 @@ export default function Rite() {
               </div>
             ) : havuzFolder === 'gelenler' ? (
               <div>
-                {/* 📥 Gelenler kategorileri (2026-09-18, Havuz yeniden tasarımı — 4. adım): Ajandadan
-                    Kaydedilenler ile aynı KART_KATEGORILER kovaları, ama burada sadece dolu olanlar listeleniyor
-                    (Gelenler sabit bir arşiv değil, geçici bir triyaj kuyruğu — boş klasörler kalabalık yaratır).
-                    Tek bir kategori varsa breadcrumb'a gerek yok, doğrudan o kategori açılır. */}
-                {inbox.length === 0 ? (
-                  <div className="note" style={{ textAlign: 'center', marginTop: 10 }}>Gelenler boş. Sana bir şey paylaşıldığında burada göreceksin.</div>
-                ) : (() => {
-                  const doluKategoriler = KART_KATEGORILER.filter((kat: any) => inbox.some((v: any) => gelKategoriOf(v) === kat.key));
-                  const aktifKategori = gelKategori && doluKategoriler.some((kat: any) => kat.key === gelKategori) ? gelKategori : (doluKategoriler.length === 1 ? doluKategoriler[0].key : null);
-                  return aktifKategori ? (
-                    <>
-                      {doluKategoriler.length > 1 && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '8px 0 10px' }}>
-                          <span style={{ cursor: 'pointer', color: 'var(--muted)' }} onClick={() => setGelKategori(null)}>📥 Gelenler</span>
-                          <span className="note" style={{ margin: 0 }}>›</span>
-                          <span style={{ fontWeight: 700 }}>{KART_KATEGORILER.find((k: any) => k.key === aktifKategori)?.ad}</span>
+                {/* 📥 Gelenler kategorileri (2026-09-18, Havuz yeniden tasarımı — 4. adım, Behnan: "ajandadan
+                    kaydedilenler gibi boşda olsa önceden klasörleri yaratalım ve içine düşsün"): Ajandadan
+                    Kaydedilenler ile birebir aynı desen — KART_KATEGORILER'in 4 kovası her zaman sabit olarak
+                    gösteriliyor (boş olsa bile), tek dolu kategori varsa da otomatik atlama yok, kullanıcı hep
+                    klasör listesini görür. */}
+                {gelKategori ? (
+                  <>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '8px 0 10px' }}>
+                      <span style={{ cursor: 'pointer', color: 'var(--muted)' }} onClick={() => setGelKategori(null)}>📥 Gelenler</span>
+                      <span className="note" style={{ margin: 0 }}>›</span>
+                      <span style={{ fontWeight: 700 }}>{KART_KATEGORILER.find((k: any) => k.key === gelKategori)?.ad}</span>
+                    </div>
+                    {(() => {
+                      const items = inbox.filter((v: any) => gelKategoriOf(v) === gelKategori);
+                      return items.length === 0 ? <div className="note">Bu kategoride henüz kart yok.</div> : items.map(gelKart);
+                    })()}
+                  </>
+                ) : (
+                  <>
+                    {inbox.length === 0 && <p className="sub" style={{ marginTop: 0 }}>Gelenler boş. Sana bir şey paylaşıldığında burada, kart tipine göre otomatik kategorilere ayrılmış halde göreceksin.</p>}
+                    {KART_KATEGORILER.map((kat: any) => {
+                      const say = inbox.filter((v: any) => gelKategoriOf(v) === kat.key).length;
+                      return (
+                        <div key={kat.key} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', padding: '9px 0', borderTop: '1px solid var(--line)' }} onClick={() => setGelKategori(kat.key)}>
+                          <span>{kat.ikon}</span>
+                          <span style={{ flex: 1, fontWeight: 600 }}>{kat.ad}</span>
+                          {say > 0 && <span className="note" style={{ margin: 0 }}>{say}</span>}
+                          <span className="go">›</span>
                         </div>
-                      )}
-                      {inbox.filter((v: any) => gelKategoriOf(v) === aktifKategori).map(gelKart)}
-                    </>
-                  ) : (
-                    <>
-                      {doluKategoriler.map((kat: any) => {
-                        const say = inbox.filter((v: any) => gelKategoriOf(v) === kat.key).length;
-                        return (
-                          <div key={kat.key} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', padding: '9px 0', borderTop: '1px solid var(--line)' }} onClick={() => setGelKategori(kat.key)}>
-                            <span>{kat.ikon}</span>
-                            <span style={{ flex: 1, fontWeight: 600 }}>{kat.ad}</span>
-                            <span className="note" style={{ margin: 0 }}>{say}</span>
-                            <span className="go">›</span>
-                          </div>
-                        );
-                      })}
-                    </>
-                  );
-                })()}
+                      );
+                    })}
+                  </>
+                )}
               </div>
             ) : (
             <>
