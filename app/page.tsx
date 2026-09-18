@@ -203,7 +203,7 @@ async function resimKucult(file: File, maxDim = 1600, quality = 0.82): Promise<B
   const blob: Blob | null = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
   return blob || file;
 }
-function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi, sadeceAciklama, tekVideo, cokluVideo, videoEkleTetik, onVideoEkleTetikKapat, videoYok, ekAyri, icerikBaslikTuret, onIcerikBaslikTuret }: { cfg: any; onSave: (cfg: any) => void; randevu?: boolean; readOnly?: boolean; notTasarimi?: boolean; sadeceAciklama?: boolean; tekVideo?: boolean; cokluVideo?: boolean; videoEkleTetik?: boolean; onVideoEkleTetikKapat?: () => void; videoYok?: boolean; ekAyri?: boolean; icerikBaslikTuret?: boolean; onIcerikBaslikTuret?: (ilkSatir: string) => void }) {
+function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi, sadeceAciklama, tekVideo, cokluVideo, videoEkleTetik, onVideoEkleTetikKapat, videoYok, ekAyri, icerikBaslikTuret, onIcerikBaslikTuret, notOdak }: { cfg: any; onSave: (cfg: any) => void; randevu?: boolean; readOnly?: boolean; notTasarimi?: boolean; sadeceAciklama?: boolean; tekVideo?: boolean; cokluVideo?: boolean; videoEkleTetik?: boolean; onVideoEkleTetikKapat?: () => void; videoYok?: boolean; ekAyri?: boolean; icerikBaslikTuret?: boolean; onIcerikBaslikTuret?: (ilkSatir: string) => void; notOdak?: boolean }) {
   const videolar: { baslik?: string; url: string; bas?: number; bit?: number; ozelNot?: string }[] = cfg?.videolar || [];
   const [vidSec, setVidSec] = useState(0);
   // cokluVideo (Alışkanlık, 2026-09-16 — "çoklu video" tasarımı): video ekleme artık sayfa seviyesindeki
@@ -218,8 +218,22 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi, sadeceAcik
   const [vBas, setVBas] = useState('');
   const [vBit, setVBit] = useState('');
   const [vAciklama, setVAciklama] = useState('');
-  const [icerikEdit, setIcerikEdit] = useState(false);
+  // notOdak (2026-09-18, Behnan isteği — "Yeni not ekle" ön-doldurma): taze bir Not taslağı açılır açılmaz
+  // (yeniTaslakAc/yeniHavuzTaslakAc, cfg.icerik'i zaten "Yeni not\n" ile kuruyor) düzenleme kutusu baştan
+  // açık gelsin, imleç de o ilk satırın HEMEN ALTINA (2. satır başına) konumlansın — kullanıcı hiç dokunmadan
+  // Kaydet'e basarsa yine "Yeni not" adıyla kaydedilir (eski davranışla birebir aynı), ama isterse direkt
+  // yazmaya başlayabilir, ilk satırı silip değiştirmek de dahil tam kontrol kendisinde.
+  const [icerikEdit, setIcerikEdit] = useState(!!notOdak);
   const [icerikVal, setIcerikVal] = useState(cfg?.icerik || '');
+  const icerikRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (!notOdak) return;
+    const el = icerikRef.current;
+    if (!el) return;
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const RESIM_MAX = 3;
   function resimlerdenAl(c: any): string[] {
     if (Array.isArray(c?.resimler)) return c.resimler.filter((x: any) => typeof x === 'string' && x.trim());
@@ -531,7 +545,8 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi, sadeceAcik
                 // ile ayrı bir alan olduğu belli oluyor (kullanıcı isteği); baştan 3-4 satır yükseklikte açılsın
                 // diye rows kullanılıyor.
                 <textarea
-                  autoFocus
+                  ref={icerikRef}
+                  autoFocus={!notOdak}
                   rows={notTasarimi ? 4 : undefined}
                   value={icerikVal}
                   onChange={(e) => setIcerikVal(e.target.value)}
@@ -2219,7 +2234,13 @@ export default function Rite() {
   // randevu artık sadece 'yapilacak' bir Aktivite, "Cuma saat 15 diş randevusu" gibi detaylar içeriğe serbest
   // metin olarak yazılıyor.
   function yeniTaslakAc(tur: 'not' | 'aliskanlik' | 'yapilacak') {
-    const cfg: any = { icerik: null, videolar: [] };
+    // 2026-09-18 (Behnan isteği): Not ekle deyip açıklamaya hiç dokunmadan hemen Kaydet'e basınca kart "Yeni
+    // not" adıyla içeriksiz oluşuyordu — "mantıklı ama sürpriz olmasın" diyerek, içerik kutusunun daha ilk
+    // açılışta "Yeni not" ile dolu, imleç onun hemen altında (ikinci satırda) gelmesini istedi; isterse bu
+    // satırı silip kendi başlığını yazabiliyor, tam kontrol yine kullanıcıda. Bkz. BilgiKartEdit'teki
+    // `notOdak` prop'u (otomatik düzenleme moduna açılış + imleç konumlandırma) — tek bir gerçek editable
+    // metin, ayrı bir "sahte başlık" alanı YOK (Not'un başlık+açıklama birleşmesi kararıyla tutarlı kalsın diye).
+    const cfg: any = { icerik: tur === 'not' ? 'Yeni not\n' : null, videolar: [] };
     // Yapılacak (Aktivite'nin "Bugün" hâli): kart_config.gorev — bitissiz (yapıncaya kadar her gün görünür),
     // işaretlenince kalıcı kapanır (bkz. kartYapildiToggle).
     if (tur === 'yapilacak') cfg.gorev = true;
@@ -2249,7 +2270,9 @@ export default function Rite() {
   // DB'ye hiç yazılmıyor). Ajanda'ya eklenince (aktiviteEkleSlotlar) sure_gun boşsa kart zaten süregelen —
   // yani "alışkanlık" — oluyor (bkz. ritEkle: aliskanlik = aliskanlikP===null ? !bitis : aliskanlikP).
   function yeniHavuzTaslakAc(tur: 'not' | 'aliskanlik') {
-    const cfg: any = { icerik: null, videolar: [] };
+    // Ajanda'daki yeniTaslakAc ile aynı "Yeni not" ön-doldurma — bkz. oradaki not (şu an Havuz'a doğrudan
+    // ekleme girişi UI'da yok ama fonksiyon ileride kullanılabilir diye tutuluyor, tutarlılık için burada da uygulandı).
+    const cfg: any = { icerik: tur === 'not' ? 'Yeni not\n' : null, videolar: [] };
     openDetay({
       id: null,
       ad: tur === 'aliskanlik' ? 'Yeni alışkanlık' : 'Yeni not',
@@ -4292,7 +4315,7 @@ export default function Rite() {
               // (kullanıcı isteği, 2026-09-17: "önce not'u aktivite de olduğu şekilde video eklenecek hale getirelim").
               // randevu prop'u artık hiç geçilmiyor (Randevu birleşmesi) — eski randevu-bayraklı kayıtlar da dahil
               // hepsi standart içerik/video tasarımından geçiyor, ayrı "yer" alanı yok.
-              if (editable) return <BilgiKartEdit cfg={kCfg} onSave={bilgiKaydet} notTasarimi={isKisisel} readOnly={kisiselGorunumModu} cokluVideo={isKisisel && (kisiselTur === 'aliskanlik' || kisiselTur === 'yapilacak' || kisiselTur === 'not')} videoEkleTetik={videoEkleAcik} onVideoEkleTetikKapat={() => setVideoEkleAcik(false)} videoYok={false} ekAyri={isKisisel} icerikBaslikTuret={isKisisel && kisiselTur === 'not'} onIcerikBaslikTuret={(ilkSatir) => setRitAd(o.id, ilkSatir)} />;
+              if (editable) return <BilgiKartEdit cfg={kCfg} onSave={bilgiKaydet} notTasarimi={isKisisel} readOnly={kisiselGorunumModu} cokluVideo={isKisisel && (kisiselTur === 'aliskanlik' || kisiselTur === 'yapilacak' || kisiselTur === 'not')} videoEkleTetik={videoEkleAcik} onVideoEkleTetikKapat={() => setVideoEkleAcik(false)} videoYok={false} ekAyri={isKisisel} icerikBaslikTuret={isKisisel && kisiselTur === 'not'} onIcerikBaslikTuret={(ilkSatir) => setRitAd(o.id, ilkSatir)} notOdak={isDraft && isKisisel && kisiselTur === 'not'} />;
               if (!preview && isRit) return <BilgiKart cfg={kCfg} onSave={bilgiKaydet} />;
               return <BilgiKartEdit cfg={kCfg} onSave={() => {}} readOnly />;
             })()}
