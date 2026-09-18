@@ -203,7 +203,7 @@ async function resimKucult(file: File, maxDim = 1600, quality = 0.82): Promise<B
   const blob: Blob | null = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
   return blob || file;
 }
-function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi, sadeceAciklama, tekVideo, cokluVideo, videoEkleTetik, onVideoEkleTetikKapat, videoYok, ekAyri, icerikBaslikTuret, onIcerikBaslikTuret, notOdak }: { cfg: any; onSave: (cfg: any) => void; randevu?: boolean; readOnly?: boolean; notTasarimi?: boolean; sadeceAciklama?: boolean; tekVideo?: boolean; cokluVideo?: boolean; videoEkleTetik?: boolean; onVideoEkleTetikKapat?: () => void; videoYok?: boolean; ekAyri?: boolean; icerikBaslikTuret?: boolean; onIcerikBaslikTuret?: (ilkSatir: string) => void; notOdak?: boolean }) {
+function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi, sadeceAciklama, tekVideo, cokluVideo, videoEkleTetik, onVideoEkleTetikKapat, videoYok, ekAyri, icerikBaslikTuret, onIcerikBaslikTuret, notOdak, icerikOdakTetik, onIcerikOdakTetikKapat }: { cfg: any; onSave: (cfg: any) => void; randevu?: boolean; readOnly?: boolean; notTasarimi?: boolean; sadeceAciklama?: boolean; tekVideo?: boolean; cokluVideo?: boolean; videoEkleTetik?: boolean; onVideoEkleTetikKapat?: () => void; videoYok?: boolean; ekAyri?: boolean; icerikBaslikTuret?: boolean; onIcerikBaslikTuret?: (ilkSatir: string) => void; notOdak?: boolean; icerikOdakTetik?: boolean; onIcerikOdakTetikKapat?: () => void }) {
   const videolar: { baslik?: string; url: string; bas?: number; bit?: number; ozelNot?: string }[] = cfg?.videolar || [];
   const [vidSec, setVidSec] = useState(0);
   // cokluVideo (Alışkanlık, 2026-09-16 — "çoklu video" tasarımı): video ekleme artık sayfa seviyesindeki
@@ -234,6 +234,25 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi, sadeceAcik
     el.setSelectionRange(el.value.length, el.value.length);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // icerikOdakTetik (2026-09-18, Behnan isteği — Kaydet artık her zaman enabled, boş Not'ta tıklanınca buraya
+  // yönlendiriyor): sayfa seviyesindeki notOdakAcik bayrağı true olunca (kisiselDuzenleKaydet/taslakKaydet boş
+  // içerikle karşılaşıp kaydetmeden dönünce) içerik kutusunu düzenleme moduna alıp odaklıyoruz — videoEkleTetik
+  // ile AYNI tek-atımlık desen (üstte true olunca iş yapılır, hemen ardından onIcerikOdakTetikKapat ile bayrak
+  // false'a geri çekilir). Textarea icerikEdit false iken DOM'da yok, o yüzden focus'u doğrudan burada değil,
+  // icerikEdit true olduktan SONRAKİ render'da (aşağıdaki ikinci effect, odakBekliyorRef ile) uyguluyoruz.
+  const odakBekliyorRef = useRef(false);
+  useEffect(() => {
+    if (!icerikOdakTetik) return;
+    odakBekliyorRef.current = true;
+    setIcerikEdit(true);
+    onIcerikOdakTetikKapat?.();
+  }, [icerikOdakTetik]);
+  useEffect(() => {
+    if (odakBekliyorRef.current && icerikEdit) {
+      odakBekliyorRef.current = false;
+      icerikRef.current?.focus();
+    }
+  }, [icerikEdit]);
   const RESIM_MAX = 3;
   function resimlerdenAl(c: any): string[] {
     if (Array.isArray(c?.resimler)) return c.resimler.filter((x: any) => typeof x === 'string' && x.trim());
@@ -1425,6 +1444,13 @@ export default function Rite() {
   // video listesi (videolar) hep kart_config'te, BilgiKartEdit'in kendi state'inde kalıyor, burada sadece "aç"
   // komutu taşınıyor.
   const [videoEkleAcik, setVideoEkleAcik] = useState(false);
+  // notOdakAcik (2026-09-18, Behnan isteği — "Kaydet her zaman enable, boşsa tıklayınca uyar" tasarımı):
+  // Not'un açıklaması boşken Kaydet'i disabled bırakmak yerine (eski notBos+disabled yaklaşımı) her zaman
+  // tıklanabilir bırakıyoruz; kisiselDuzenleKaydet/taslakKaydet boş içerikte DB'ye hiç yazmadan burayı true
+  // yapıp geri dönüyor, BilgiKartEdit de (videoEkleTetik'teki AYNI tek-atımlık tetikleyici deseni) içerik
+  // kutusunu açıp imleci oraya odaklıyor — kullanıcı "neden kaydetmedi" diye şaşırmak yerine direkt yazmaya
+  // yönlendiriliyor.
+  const [notOdakAcik, setNotOdakAcik] = useState(false);
   const lastDetayAnahtarRef = useRef<string | null>(null);
   useEffect(() => {
     if (!detay) { lastDetayAnahtarRef.current = null; return; }
@@ -2300,6 +2326,14 @@ export default function Rite() {
   async function taslakKaydet() {
     if (!client || !detay || detay.obj.id) return;
     const o = detay.obj;
+    // 2026-09-18 (Behnan isteği — "her zaman enable, tıklayınca kontrol et"): eskiden Kaydet butonu boş Not'ta
+    // disabled kalıyordu (notBos), artık her zaman tıklanabilir — burada (kisiselTur'ün JSX-scope'undaki
+    // notBos'a eşdeğer, ama bu fonksiyon o scope'un DIŞINDA tanımlı olduğu için bağımsız türetilmiş) bir "boş
+    // Not" taslağıysa DB'ye hiç yazmadan dönüyor ve notOdakAcik'i tetikleyip BilgiKartEdit'in içerik kutusuna
+    // odaklanmasını sağlıyoruz. Ritual ve Havuz dallarının ikisi için de geçerli: alışkanlık/yapılacak (gorev/
+    // randevu) taslaklarında içerik zaten opsiyonel, o yüzden onlar hiç etkilenmiyor.
+    const taslakNotBos = !o.aliskanlik && !(o.kart_config?.gorev || o.kart_config?.randevu) && !(o.kart_config?.icerik || '').trim();
+    if (taslakNotBos) { setNotOdakAcik(true); return; }
     if (detay.tur === 'ritual') {
       // Kaydetmeden hemen önce son bir kez: gunler seçiliyse ve [baslangic,bitis] penceresi ona hiç denk
       // gelmiyorsa (bkz. pencereyiGunlereUydur), pencereyi (süresini koruyarak) uydur — ara adımlarda kaçan
@@ -4104,6 +4138,9 @@ export default function Rite() {
         const kisiselDuzenleVazgec = () => { setZamanOpen(false); closeDetay(); };
         const kisiselDuzenleKaydet = async () => {
           if (!client || !o.id) { setZamanOpen(false); closeDetay(); return; }
+          // 2026-09-18 (Behnan isteği): Kaydet artık her zaman enabled — eskiden notBos ile disabled kalıyordu,
+          // artık burada kontrol edip boşsa yazmadan dönüyoruz ve içerik kutusuna odaklanmasını istiyoruz.
+          if (notBos) { setNotOdakAcik(true); return; }
           // Kaydetmeden hemen önce son bir kez uyumluluk kontrolü — bkz. taslakKaydet'teki aynı satır ve
           // pencereyiGunlereUydur'ün başındaki not. o.baslangic yoksa (teorik olarak olmamalı) dokunmadan geçiyoruz.
           const gunlerSon = o.gunler || null;
@@ -4337,7 +4374,7 @@ export default function Rite() {
               // (kullanıcı isteği, 2026-09-17: "önce not'u aktivite de olduğu şekilde video eklenecek hale getirelim").
               // randevu prop'u artık hiç geçilmiyor (Randevu birleşmesi) — eski randevu-bayraklı kayıtlar da dahil
               // hepsi standart içerik/video tasarımından geçiyor, ayrı "yer" alanı yok.
-              if (editable) return <BilgiKartEdit cfg={kCfg} onSave={bilgiKaydet} notTasarimi={isKisisel} readOnly={kisiselGorunumModu} cokluVideo={isKisisel && (kisiselTur === 'aliskanlik' || kisiselTur === 'yapilacak' || kisiselTur === 'not')} videoEkleTetik={videoEkleAcik} onVideoEkleTetikKapat={() => setVideoEkleAcik(false)} videoYok={false} ekAyri={isKisisel} icerikBaslikTuret={isKisisel && kisiselTur === 'not'} onIcerikBaslikTuret={(ilkSatir) => setRitAd(o.id, ilkSatir)} notOdak={isDraft && isKisisel && kisiselTur === 'not'} />;
+              if (editable) return <BilgiKartEdit cfg={kCfg} onSave={bilgiKaydet} notTasarimi={isKisisel} readOnly={kisiselGorunumModu} cokluVideo={isKisisel && (kisiselTur === 'aliskanlik' || kisiselTur === 'yapilacak' || kisiselTur === 'not')} videoEkleTetik={videoEkleAcik} onVideoEkleTetikKapat={() => setVideoEkleAcik(false)} videoYok={false} ekAyri={isKisisel} icerikBaslikTuret={isKisisel && kisiselTur === 'not'} onIcerikBaslikTuret={(ilkSatir) => setRitAd(o.id, ilkSatir)} notOdak={isDraft && isKisisel && kisiselTur === 'not'} icerikOdakTetik={notOdakAcik} onIcerikOdakTetikKapat={() => setNotOdakAcik(false)} />;
               if (!preview && isRit) return <BilgiKart cfg={kCfg} onSave={bilgiKaydet} />;
               return <BilgiKartEdit cfg={kCfg} onSave={() => {}} readOnly />;
             })()}
@@ -4524,13 +4561,13 @@ export default function Rite() {
             {isRit && isKisisel && !isTaze && (
               <div style={{ display: 'flex', gap: 8, margin: '2px 0 8px' }}>
                 <button className="btn ghost" style={{ flex: 1 }} onClick={kisiselDuzenleVazgec}>Vazgeç</button>
-                <button className="btn" style={{ flex: 1 }} disabled={notBos} onClick={kisiselDuzenleKaydet}>Kaydet</button>
+                <button className="btn" style={{ flex: 1 }} onClick={kisiselDuzenleKaydet}>Kaydet</button>
               </div>
             )}
             {isDraft && (
               <div style={{ display: 'flex', gap: 8, margin: '2px 0 8px' }}>
                 <button className="btn ghost" style={{ flex: 1 }} onClick={closeDetay}>Vazgeç</button>
-                <button className="btn" style={{ flex: 1 }} disabled={notBos} onClick={taslakKaydet}>Kaydet</button>
+                <button className="btn" style={{ flex: 1 }} onClick={taslakKaydet}>Kaydet</button>
               </div>
             )}
             {isRit && kTip === 'video' && <div style={{ margin: '4px 0 8px' }}>
