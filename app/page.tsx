@@ -36,6 +36,12 @@ const LS_BASLANGIC = 'rite_baslangic_sekme';
 const BASLANGIC_SEKMELERI: [string, string, string][] = [
   ['home', '🏠', 'Home'], ['ajanda', '🗓', 'Ajanda'], ['havuz', '⊕', 'Havuz'], ['iletisim', '💬', 'Sohbet'], ['bilgi', '⚙', 'Ayarlar'],
 ];
+// LS_DEV (2026-09-18, Behnan isteği — "Kart Laboratuvarı"): Geliştirici modu bayrağı, `LS`/`LS_BASLANGIC` ile
+// aynı kalıp (cihaza özel localStorage). Gizli açılış: Ayarlar'daki "Ayarlar" başlığına art arda 7 kez dokununca
+// (bkz. devTap) açılıp kapanıyor — telefonlarda "geliştirici seçenekleri" açmak için kullanılan klasik yöntem,
+// ileride gerçek mobil uygulamaya da doğal taşınır. Açıkken Ekle menüsünde "🧪 Lab" seçeneği beliriyor —
+// normal kullanıcılar (ileride gerçek danışanlar) bu gizli kapıyı hiç görmeyecek.
+const LS_DEV = 'rite_dev_mode';
 
 const POOL: Record<string, { ad: string; dsc: string; zaman: string; flag?: string }[]> = {
   def: [
@@ -62,6 +68,24 @@ const SLOTS: [string, string][] = [...TODS, [ZAMANSIZ, 'Serbest']]; // seçim ge
 const GUNLER: [number, string][] = [[1, 'Pzt'], [2, 'Sal'], [3, 'Çar'], [4, 'Per'], [5, 'Cum'], [6, 'Cmt'], [0, 'Paz']];
 // Akıllı kart tipleri: kod · etiket · ikon
 const KARTLAR: [string, string, string][] = [['standart', 'Standart', '•'], ['bilgi', 'Bilgi', '📄'], ['video', 'Video', '🎬'], ['anket', 'Anket', '📋'], ['coktan', 'Çoktan seçmeli', '❓'], ['diyet', 'Diyet', '🍽'], ['tarif', 'Tarif', '🍳'], ['olcum', 'Ölçüm', '📏'], ['nefes', 'Nefes', '🫁'], ['ruhhali', 'Ruh hali', '🙂'], ['workout', 'Egzersiz', '🏋️'], ['sukran', 'Şükran', '🙏'], ['topraklama', '5-4-3-2-1', '🖐'], ['pomodoro', 'Odak', '🍅'], ['beden', 'Beden taraması', '🧘'], ['uykuoncesi', 'Uyku hazırlığı', '🌙'], ['su', 'Su sayacı', '💧'], ['maruz', 'Maruz bırakma', '🎯'], ['niyet', 'Niyet', '🧭'], ['randevu', 'Randevu', '📅']];
+// KART_LAB (2026-09-18, Behnan isteği — Geliştirici modu / "Kart Laboratuvarı"): Rite Studio'yu hiç açmadan,
+// KARTLAR'daki var olan kart türlerinden birini seçip Ajanda'ya GERÇEK bir kart olarak düşürmek için — hem
+// kullanılabilsin (nefes egzersizi gerçekten yapılabilsin) hem incelenebilsin (kart_config'i görülüp
+// anlaşılsın). Sadece BİR KISMIYLA başlanıyor (Behnan: "kartları da parça parça getirelim, incelendikçe yeni
+// fikirler çıkacak") — dış ölçüm tablosuna (dog_measurements) yazan türler (olcum/ruhhali/su/pomodoro,
+// anahtar isimlendirme kuralları netleşene kadar) ve daha karmaşık türler (anket/coktan/diyet/beden/uykuoncesi/
+// maruz/video/randevu/standart/bilgi — bilgi zaten Not/Aktivite'nin kendisi) bilerek bu ilk turda YOK; her biri
+// kendi kendine yeten, dışarıya yazmayan türlerle başlandı. `ornekConfig` o türün bileşeninin (bkz. NefesKart,
+// TopraklamaKart, vs.) beklediği şekle göre, boş/kırık görünmesin diye anlamlı bir örnek değer taşıyor — asıl
+// kimlik/etiket (label+ikon) ayrıca KARTLAR'dan render anında okunuyor, burada tekrar edilmiyor.
+const KART_LAB: { tip: string; ornekConfig: any }[] = [
+  { tip: 'nefes', ornekConfig: { desen: 'kutu', tekrar: 4 } },
+  { tip: 'topraklama', ornekConfig: {} },
+  { tip: 'sukran', ornekConfig: { soru: 'Bugün 3 iyi şey' } },
+  { tip: 'niyet', ornekConfig: { soru: 'Bugünün niyeti', degerler: ['Sağlık', 'Aile', 'Odak'] } },
+  { tip: 'tarif', ornekConfig: { malzemeler: ['1 su bardağı yulaf ezmesi', '2 su bardağı süt', '1 tatlı kaşığı bal'], yapilis: 'Yulafı sütle orta ateşte 5 dakika pişir, bal ekleyip servis et.', sure: '10 dk', porsiyon: '1 kişilik' } },
+  { tip: 'workout', ornekConfig: { hareketler: [{ ad: 'Şınav', set: 3, tekrar: 10 }, { ad: 'Squat', set: 3, tekrar: 15 }, { ad: 'Plank', set: 3, tekrar: '30 sn' }] } },
+];
 // Ölçüm anahtarları için okunur etiketler (Gelişim grafiği + kart). Bilinmeyen anahtar ham gösterilir.
 const OLCU_ETIKET: Record<string, string> = { kilo: 'Kilo', boy: 'Boy', bel: 'Bel', kalca: 'Kalça', gogus: 'Göğüs', kol: 'Kol', bacak: 'Bacak', vucut_yagi: 'Vücut yağı', kas: 'Kas kütlesi', bel_kalca: 'Bel/Kalça', vki: 'VKİ', ruh_hali: 'Ruh hali', odak_dk: 'Odak (dk)', su: 'Su (bardak)' };
 // Ölçüm anahtarı → varsayılan alan (statik tahmin; Meridyen'deki OLCU_INFO ile aynı). Kart_config.dikey varsa (bkz anahtarDikey) ONA öncelik verilir.
@@ -1365,6 +1389,31 @@ export default function Rite() {
   // "seçili" göründüğünü tutan yerel state — gerçek yönlendirme aşağıdaki ilk mount useEffect'inde (localStorage
   // okunup uygunsa setScreen çağrılarak) oluyor, burası sadece Ayarlar ekranının kendi görünümü için.
   const [baslangicSekme, setBaslangicSekme] = useState('home');
+  // devMode + kartLabOpen (2026-09-18, Behnan isteği — bkz. LS_DEV): "Geliştirici modu" bayrağı (gizli, 7 kez
+  // dokunma ile açılır — bkz. devTap) ve onun açtığı "🧪 Kart Laboratuvarı" seçici modalının aç/kapa durumu.
+  // devMode'un kendi useState varsayılanı da (screen/baslangicSekme gibi) SSR/hidrasyon güvenliği için hep
+  // false kalıyor, gerçek değer mount'tan sonra localStorage'dan okunuyor (bkz. ilk mount useEffect'i).
+  const [devMode, setDevMode] = useState(false);
+  const [kartLabOpen, setKartLabOpen] = useState(false);
+  const devTapRef = useRef<{ n: number; t: number }>({ n: 0, t: 0 });
+  // Ayarlar başlığına 7 kez art arda (1.5sn içinde) dokununca Geliştirici modu açılır/kapanır — Android'in
+  // "build number" tıklama geleneğinin aynısı, bilinçli olarak (Behnan: "gerçek mobil uygulamaya da doğal
+  // geçecek" diye düşünüldü). localStorage'a yazılır ki kapatıp açınca kaybolmasın.
+  function devTap() {
+    const now = Date.now();
+    const r = devTapRef.current;
+    if (now - r.t > 1500) r.n = 0;
+    r.n += 1;
+    r.t = now;
+    if (r.n >= 7) {
+      r.n = 0;
+      setDevMode((v: boolean) => {
+        const nv = !v;
+        try { if (nv) localStorage.setItem(LS_DEV, '1'); else localStorage.removeItem(LS_DEV); } catch (_) {}
+        return nv;
+      });
+    }
+  }
   // inboxOpen (eski üst header'daki 📥 modalının aç/kapa durumu) 2026-09 (Behnan kararı, WhatsApp-esinli
   // sadeleştirme) KALDIRILDI — Inbox artık ayrı bir modal değil, "Sohbet" sekmesinin (screen==='iletisim')
   // sayfa içi bir parçası, o yüzden ayrı bir aç/kapa state'ine gerek kalmadı.
@@ -1661,6 +1710,10 @@ export default function Rite() {
     try {
       const bs = localStorage.getItem(LS_BASLANGIC);
       if (bs && BASLANGIC_SEKMELERI.some(([k]) => k === bs)) { setBaslangicSekme(bs); setScreen(bs); }
+    } catch (_) {}
+    try {
+      const dv = localStorage.getItem(LS_DEV);
+      if (dv) setDevMode(true);
     } catch (_) {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -2381,6 +2434,27 @@ export default function Rite() {
       aliskanlik: tur === 'aliskanlik', faydalar: [], aciklama: null, videolar: [],
       zaman: 'gün', zamanlar: null, gunler: tur === 'aliskanlik' ? [] : null, sure_gun: null,
     }, 'aktivite');
+  }
+  // 🧪 Kart Laboratuvarı (Geliştirici modu, 2026-09): Rite Studio'daki bir program/atama akışını hiç açmadan,
+  // Rite'ın zaten kodda var olan kart tiplerinden birini doğrudan Ajanda'ya GERÇEK bir dog_rituals satırı
+  // olarak ekler — taslak değil, direkt kayıt (kaynak:'Kendi' + kart_tipi seçili tür olduğu için render, Rite
+  // Studio'nun atadığı kartlarla AYNI bileşeni kullanıyor, bkz. proje hafızası isKisisel notu). Amaç: Behnan'ın
+  // "önce Rite kartları üzerinden standartları belirleyip sonra Rite Studio'ya aktarma" iş akışı.
+  async function kartLabOlustur(tip: string) {
+    if (!client) return;
+    const meta = KARTLAR.find((k) => k[0] === tip);
+    const ornek = KART_LAB.find((k) => k.tip === tip);
+    await supabase.from('dog_rituals').insert({
+      client_id: client.id, ad: '🧪 ' + (meta?.[1] || tip), zaman: 'gün', kaynak: 'Kendi', tip: 'aliskanlik',
+      kart_tipi: tip, kart_config: ornek?.ornekConfig || {},
+      aliskanlik: true, aktif: true, mezun: false,
+      baslangic: day, bitis: null, gunler: null,
+      hatirlatma_saat: null, kisisel_not: null, blok_sira: Date.now(),
+    });
+    loadData(client.id);
+    setKartLabOpen(false);
+    setEkleMenuOpen(false);
+    setScreen('ajanda');
   }
   async function taslakKaydet() {
     if (!client || !detay || detay.obj.id) return;
@@ -4006,7 +4080,9 @@ export default function Rite() {
         {/* ---------- BİLGİ ---------- */}
         {screen === 'bilgi' && (
           <div>
-            <h2>Ayarlar</h2>
+            {/* Geliştirici modu: başlığa 7 kez art arda dokununca açılır/kapanır (bkz. devTap) — Android'in
+                build-number tıklama geleneği, kimseye görünür bir ipucu yok, sadece Behnan biliyor. */}
+            <h2 onClick={devTap}>Ayarlar</h2>
 
             <div className="card profilcard">
               <div className="avatar">{avatarSec || (profilAd || client.ad || 'R').trim().charAt(0).toUpperCase()}</div>
@@ -5150,6 +5226,31 @@ export default function Rite() {
               <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); yeniTaslakAc('yapilacak'); }}><span className="ekic">☑️</span>Aktivite</button>
               <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); setAyracAdVal(''); setAyracYeniOpen(true); }}><span className="ekic">➖</span>Ayraç</button>
               <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); setScreen('ajanda'); startLink(); }}><span className="ekic">🔗</span>Rutin</button>
+              {/* 🧪 Kart Laboratuvarı (2026-09, Geliştirici modu — Ayarlar başlığına 7 dokunuşla açılır): Rite
+                  Studio'ya hiç girmeden, Rite'ın zaten kodda hazır kart tiplerinden birini doğrudan gerçek bir
+                  Ajanda kartı olarak eklemeyi sağlar (bkz. kartLabOlustur). Sadece devMode açıkken görünür,
+                  normal kullanıcılar bu seçeneği hiç görmez. */}
+              {devMode && (
+                <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); setKartLabOpen(true); }}><span className="ekic">🧪</span>Lab</button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {kartLabOpen && (
+        <div className="modal" onMouseDown={() => setKartLabOpen(false)}>
+          <div className="sheet" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="sheetgrip" onClick={() => setKartLabOpen(false)} />
+            <h2>🧪 Kart Laboratuvarı</h2>
+            <p className="note" style={{ marginTop: 0 }}>Rite Studio'yu hiç açmadan, hazır kart tiplerinden birini doğrudan Ajanda'na ekle.</p>
+            <div className="ekleGrid">
+              {KART_LAB.map((k) => {
+                const meta = KARTLAR.find((m) => m[0] === k.tip);
+                return (
+                  <button key={k.tip} className="ekleOpt" onClick={() => kartLabOlustur(k.tip)}><span className="ekic">{meta?.[2] || '🧪'}</span>{meta?.[1] || k.tip}</button>
+                );
+              })}
             </div>
           </div>
         </div>
