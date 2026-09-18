@@ -587,6 +587,21 @@ function BilgiKartEdit({ cfg, onSave, randevu, readOnly, notTasarimi, sadeceAcik
                     value={icerikVal}
                     onChange={(e) => setIcerikVal(e.target.value)}
                     onBlur={icerikKaydet}
+                    // 2026-09-18 (Behnan isteği): "ad" satırına (ilk satır) çift tıklayınca TAMAMI seçilsin ki
+                    // ✕ Temizle'ye (altındaki açıklamayı da götürüyor) gerek kalmadan üstüne rahatça yazılabilsin.
+                    // İlk deneme (varsayılan adı "Yeni_not" gibi alt çizgili/boşluksuz tek "kelime" yapmak, çift
+                    // tıkla native kelime-seçimine güvenmek) Windows/Chrome'da işe yaradı ama macOS/iOS'ta (Apple
+                    // platformlarının kelime sınırı kuralı alt çizgiyi de ayraç sayıyor) işe yaramadı — platforma
+                    // göre değişen native davranışa güvenmek yerine burada KENDİ seçimimizi uyguluyoruz: tarayıcının
+                    // native çift-tık seçimi ilk satırın İÇİNDE bir yere denk geldiyse (satır 2+'daki normal
+                    // kelime seçimine dokunmadan), seçimi o satırın TAMAMINI kapsayacak şekilde genişletiyoruz —
+                    // platform bağımsız, tutarlı çalışıyor.
+                    onDoubleClick={(e) => {
+                      const el = e.currentTarget;
+                      const ilkSatirSonu = el.value.indexOf('\n');
+                      const sinir = ilkSatirSonu === -1 ? el.value.length : ilkSatirSonu;
+                      if (el.selectionStart <= sinir) el.setSelectionRange(0, sinir);
+                    }}
                     placeholder={'Notunu yaz…'}
                     style={notTasarimi
                       ? { width: '100%', minHeight: 0, border: '1px solid var(--line)', borderRadius: 8, outline: 'none', background: 'transparent', padding: '8px 28px 8px 8px', fontFamily: 'inherit', fontSize: 14, lineHeight: 1.6, color: 'var(--ink)', resize: 'vertical', boxSizing: 'border-box' }
@@ -2295,20 +2310,21 @@ export default function Rite() {
     // 2026-09-18 (Behnan isteği, önce Not'ta): açıklamaya hiç dokunmadan hemen Kaydet'e basınca kart "Yeni not"
     // adıyla içeriksiz oluşuyordu — "mantıklı ama sürpriz olmasın" diyerek çözüldü, sonra aynı gün Aktivite'ye de
     // genelleştirildi ("kullanıcılar Not'ta alışıyorsa Aktivite'de de yabancılık çekmeyebilir"). cfg.icerik
-    // burada artık HİÇBİR tür için elle doldurulmuyor (null kalıyor) — "Yeni_not"/"Yeni_Aktivite" ön-doldurması
+    // burada artık HİÇBİR tür için elle doldurulmuyor (null kalıyor) — "Yeni not"/"Yeni aktivite" ön-doldurması
     // aşağıdaki `ad` değerinden, BilgiKartEdit'in `baslikKaynagi` prop'u üzerinden geliyor (bkz. oradaki not) —
     // tek bir gerçek editable metin, ayrı bir "sahte başlık" alanı YOK.
-    // Varsayılan ad BİLEREK alt çizgili ("Yeni_not" — boşluksuz), "Yeni not" değil (Behnan isteği, aynı gün):
-    // içerik kutusunda bu ilk satır üstüne çift tıklayınca (kelime seçimi) tek kelime olduğu için TAMAMI seçiliyor
-    // ve rahatça üstüne yazılabiliyor — boşluklu olsaydı çift tık sadece "Yeni" ya da "not" kelimesini seçerdi,
-    // tamamını silmek için ✕ Temizle'ye basmak gerekirdi (o da varsa altına yazılmış açıklamayı da götürürdü).
+    // NOT (aynı gün, kısa süreli bir deneme+geri alma): varsayılan adı "Yeni_not" gibi alt çizgili/boşluksuz tek
+    // "kelime" yapıp native çift-tık kelime-seçimine güvenmek denendi — Windows/Chrome'da işe yaradı ama
+    // macOS/iOS'ta (Apple'ın kelime sınırı kuralı alt çizgiyi de ayraç sayıyor) yaramadı. Platforma göre değişen
+    // native davranışa güvenmek yerine (bkz. aşağıdaki içerik textarea'sındaki onDoubleClick) kendi seçim
+    // mantığımız kuruldu — o yüzden ad tekrar okunaklı, boşluklu hâline döndü.
     const cfg: any = { icerik: null, videolar: [] };
     // Yapılacak (Aktivite'nin "Bugün" hâli): kart_config.gorev — bitissiz (yapıncaya kadar her gün görünür),
     // işaretlenince kalıcı kapanır (bkz. kartYapildiToggle).
     if (tur === 'yapilacak') cfg.gorev = true;
     openRit({
       id: null,
-      ad: (tur === 'aliskanlik' || tur === 'yapilacak') ? 'Yeni_Aktivite' : 'Yeni_not',
+      ad: (tur === 'aliskanlik' || tur === 'yapilacak') ? 'Yeni aktivite' : 'Yeni not',
       kaynak: 'Kendi', tip: 'aliskanlik', kart_tipi: 'bilgi', kart_config: cfg,
       aliskanlik: tur === 'aliskanlik', aktif: true, mezun: false,
       // Not artık tek günlük değil — bir yapışkan not gibi, silininceye kadar her gün duruyor (Ayraç'takiyle
@@ -2334,13 +2350,11 @@ export default function Rite() {
   function yeniHavuzTaslakAc(tur: 'not' | 'aliskanlik') {
     // Ajanda'daki yeniTaslakAc ile aynı mantık — ön-doldurma artık burada değil, BilgiKartEdit'in
     // `baslikKaynagi` prop'u üzerinden `ad`'dan geliyor (şu an Havuz'a doğrudan ekleme girişi UI'da yok ama
-    // fonksiyon ileride kullanılabilir diye tutuluyor, tutarlılık için burada da uygulandı). Ad burada da
-    // BİLEREK alt çizgili ("Yeni_alışkanlık"/"Yeni_not") — bkz. yeniTaslakAc'taki aynı not (çift tık ile tek
-    // kelime seçimi).
+    // fonksiyon ileride kullanılabilir diye tutuluyor, tutarlılık için burada da uygulandı).
     const cfg: any = { icerik: null, videolar: [] };
     openDetay({
       id: null,
-      ad: tur === 'aliskanlik' ? 'Yeni_alışkanlık' : 'Yeni_not',
+      ad: tur === 'aliskanlik' ? 'Yeni alışkanlık' : 'Yeni not',
       grup: actGroup || 'Genel', alt_grup: actAltGroup || null, kart_tipi: 'bilgi', kart_config: cfg,
       aliskanlik: tur === 'aliskanlik', faydalar: [], aciklama: null, videolar: [],
       zaman: 'gün', zamanlar: null, gunler: tur === 'aliskanlik' ? [] : null, sure_gun: null,
