@@ -71,13 +71,17 @@ const KARTLAR: [string, string, string][] = [['standart', 'Standart', '•'], ['
 // KART_LAB (2026-09-18, Behnan isteği — Geliştirici modu / "Kart Laboratuvarı"): Rite Studio'yu hiç açmadan,
 // KARTLAR'daki var olan kart türlerinden birini seçip Ajanda'ya GERÇEK bir kart olarak düşürmek için — hem
 // kullanılabilsin (nefes egzersizi gerçekten yapılabilsin) hem incelenebilsin (kart_config'i görülüp
-// anlaşılsın). Sadece BİR KISMIYLA başlanıyor (Behnan: "kartları da parça parça getirelim, incelendikçe yeni
-// fikirler çıkacak") — dış ölçüm tablosuna (dog_measurements) yazan türler (olcum/ruhhali/su/pomodoro,
-// anahtar isimlendirme kuralları netleşene kadar) ve daha karmaşık türler (anket/coktan/diyet/beden/uykuoncesi/
-// maruz/video/randevu/standart/bilgi — bilgi zaten Not/Aktivite'nin kendisi) bilerek bu ilk turda YOK; her biri
-// kendi kendine yeten, dışarıya yazmayan türlerle başlandı. `ornekConfig` o türün bileşeninin (bkz. NefesKart,
-// TopraklamaKart, vs.) beklediği şekle göre, boş/kırık görünmesin diye anlamlı bir örnek değer taşıyor — asıl
-// kimlik/etiket (label+ikon) ayrıca KARTLAR'dan render anında okunuyor, burada tekrar edilmiyor.
+// anlaşılsın). İlk turda (aynı gün) sadece kendi kendine yeten, dışarıya yazmayan 6 türle başlandı (Behnan:
+// "kartları da parça parça getirelim, incelendikçe yeni fikirler çıkacak"); aynı gün "diğer kartları da
+// ekleyebilirsin, hepsinin standartlaşması gerekecek" isteğiyle KALAN TÜM türler eklendi (anket/coktan/diyet/
+// olcum/ruhhali/pomodoro/beden/uykuoncesi/su/maruz/randevu/video/standart) — 'bilgi' hâlâ hariç (zaten Not/
+// Aktivite'nin kendisi, Ekle menüsünde ayrı butonları var) ve 'ayrac' de hariç (o da zaten kendi + girişine
+// sahip). dog_measurements'a yazan türler (olcum/ruhhali/pomodoro/su) için ekstra kablolama GEREKMEDİ — Ajanda
+// zaten HER kart_tipi için aynı sonDegerler/bugun/bugunDk okuma mantığını kullanıyor, kaynak:'Kendi' olması bu
+// akışı değiştirmiyor. `ornekConfig` o türün bileşeninin (bkz. NefesKart, TopraklamaKart, AnketKart, vs. —
+// hepsi bu dosyada ~914-1360 satırları arası) beklediği şekle göre, boş/kırık görünmesin diye anlamlı bir
+// örnek değer taşıyor — asıl kimlik/etiket (label+ikon) ayrıca KARTLAR'dan render anında okunuyor, burada
+// tekrar edilmiyor.
 const KART_LAB: { tip: string; ornekConfig: any }[] = [
   { tip: 'nefes', ornekConfig: { desen: 'kutu', tekrar: 4 } },
   { tip: 'topraklama', ornekConfig: {} },
@@ -85,6 +89,30 @@ const KART_LAB: { tip: string; ornekConfig: any }[] = [
   { tip: 'niyet', ornekConfig: { soru: 'Bugünün niyeti', degerler: ['Sağlık', 'Aile', 'Odak'] } },
   { tip: 'tarif', ornekConfig: { malzemeler: ['1 su bardağı yulaf ezmesi', '2 su bardağı süt', '1 tatlı kaşığı bal'], yapilis: 'Yulafı sütle orta ateşte 5 dakika pişir, bal ekleyip servis et.', sure: '10 dk', porsiyon: '1 kişilik' } },
   { tip: 'workout', ornekConfig: { hareketler: [{ ad: 'Şınav', set: 3, tekrar: 10 }, { ad: 'Squat', set: 3, tekrar: 15 }, { ad: 'Plank', set: 3, tekrar: '30 sn' }] } },
+  // 2026-09-18, ikinci parti (Behnan: "diğer kartları da ekleyebilirsin, hepsinin standartlaşması gerekecek") —
+  // kalan tüm türler, her biri kendi bileşeninin (AnketKart/ChoktanKart/... — hepsi bu dosyada, satır ~914-1360
+  // arası) beklediği cfg şekliyle birebir. olcum/ruhhali/pomodoro/su, dog_measurements'a yazan türler — ekstra
+  // bağlantı gerekmiyor, Ajanda zaten HER kart_tipi için aynı sonDegerler/bugun/bugunDk okuma mantığını
+  // kullanıyor (bkz. render switch, satır ~4761-4770), kaynak:'Kendi' olması bu akışı değiştirmiyor.
+  { tip: 'anket', ornekConfig: { sorular: ['Bugün enerjin 1-10 arası kaç?', 'En zor anı neydi?'] } },
+  { tip: 'coktan', ornekConfig: { soru: 'Su içmek için en iyi zaman hangisi?', secenekler: ['Sabah aç karnına', 'Sadece susadığında', 'Yemekle birlikte bol miktarda', 'Hiç fark etmez'], dogru: 0 } },
+  { tip: 'diyet', ornekConfig: { ogunler: [{ ad: 'Kahvaltı', miktar: '1 porsiyon', kalori: 350, alternatifler: ['Yulaf', 'Omlet'], hazirlanis: 'Peynir, zeytin, yumurta, tam buğday ekmeği.' }, { ad: 'Öğle yemeği', miktar: '1 tabak', kalori: 550 }], makro: '~1800 kcal / 100g protein' } },
+  { tip: 'olcum', ornekConfig: { alanlar: [{ anahtar: 'kilo', label: 'Kilo', birim: 'kg' }] } },
+  { tip: 'ruhhali', ornekConfig: { soru: 'Bugün nasıl hissediyorsun?' } },
+  { tip: 'pomodoro', ornekConfig: { dakika: 25 } },
+  { tip: 'beden', ornekConfig: { adimlar: [{ etiket: 'Omuzlar', saniye: 20 }, { etiket: 'Kollar', saniye: 20 }, { etiket: 'Bacaklar', saniye: 20 }] } },
+  { tip: 'uykuoncesi', ornekConfig: { maddeler: ['Telefonu uzağa koy', 'Odayı karart', 'Birkaç derin nefes al'] } },
+  { tip: 'su', ornekConfig: { hedef: 8 } },
+  { tip: 'maruz', ornekConfig: { gorev: 'Kalabalık bir yerde 10 dakika otur.' } },
+  // randevu: 2026-09-17'deki "Randevu birleşmesi"nden sonra normal + akışında ayrı girişi yok (artık bir
+  // randevu sadece bir Aktivite, detay içeriğe yazılıyor) — ama kart_tipi/bileşen kodda hâlâ duruyor, Behnan
+  // eski verileri/standardı incelemek isteyebilir diye Lab'a dahil edildi.
+  { tip: 'randevu', ornekConfig: { saat: '14:00', format: 'online', yer: '' } },
+  // video/standart: ikisi de çoğunlukla boş bırakılıp kartın kendi arayüzünden dolduruluyor (video: link kutusu
+  // zaten kaynak:'Kendi' + sablon_id yokken düzenlenebilir çıkıyor; standart: opsiyonel resim + üstteki genel
+  // "açıklama" alanı, bkz. o.aciklama — Not/Aktivite'nin dışında TÜM kart tiplerinde ortak).
+  { tip: 'video', ornekConfig: {} },
+  { tip: 'standart', ornekConfig: {} },
 ];
 // Ölçüm anahtarları için okunur etiketler (Gelişim grafiği + kart). Bilinmeyen anahtar ham gösterilir.
 const OLCU_ETIKET: Record<string, string> = { kilo: 'Kilo', boy: 'Boy', bel: 'Bel', kalca: 'Kalça', gogus: 'Göğüs', kol: 'Kol', bacak: 'Bacak', vucut_yagi: 'Vücut yağı', kas: 'Kas kütlesi', bel_kalca: 'Bel/Kalça', vki: 'VKİ', ruh_hali: 'Ruh hali', odak_dk: 'Odak (dk)', su: 'Su (bardak)' };
