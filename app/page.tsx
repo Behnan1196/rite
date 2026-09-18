@@ -2295,16 +2295,20 @@ export default function Rite() {
     // 2026-09-18 (Behnan isteği, önce Not'ta): açıklamaya hiç dokunmadan hemen Kaydet'e basınca kart "Yeni not"
     // adıyla içeriksiz oluşuyordu — "mantıklı ama sürpriz olmasın" diyerek çözüldü, sonra aynı gün Aktivite'ye de
     // genelleştirildi ("kullanıcılar Not'ta alışıyorsa Aktivite'de de yabancılık çekmeyebilir"). cfg.icerik
-    // burada artık HİÇBİR tür için elle doldurulmuyor (null kalıyor) — "Yeni not"/"Yeni aktivite" ön-doldurması
+    // burada artık HİÇBİR tür için elle doldurulmuyor (null kalıyor) — "Yeni_not"/"Yeni_Aktivite" ön-doldurması
     // aşağıdaki `ad` değerinden, BilgiKartEdit'in `baslikKaynagi` prop'u üzerinden geliyor (bkz. oradaki not) —
     // tek bir gerçek editable metin, ayrı bir "sahte başlık" alanı YOK.
+    // Varsayılan ad BİLEREK alt çizgili ("Yeni_not" — boşluksuz), "Yeni not" değil (Behnan isteği, aynı gün):
+    // içerik kutusunda bu ilk satır üstüne çift tıklayınca (kelime seçimi) tek kelime olduğu için TAMAMI seçiliyor
+    // ve rahatça üstüne yazılabiliyor — boşluklu olsaydı çift tık sadece "Yeni" ya da "not" kelimesini seçerdi,
+    // tamamını silmek için ✕ Temizle'ye basmak gerekirdi (o da varsa altına yazılmış açıklamayı da götürürdü).
     const cfg: any = { icerik: null, videolar: [] };
     // Yapılacak (Aktivite'nin "Bugün" hâli): kart_config.gorev — bitissiz (yapıncaya kadar her gün görünür),
     // işaretlenince kalıcı kapanır (bkz. kartYapildiToggle).
     if (tur === 'yapilacak') cfg.gorev = true;
     openRit({
       id: null,
-      ad: (tur === 'aliskanlik' || tur === 'yapilacak') ? 'Yeni aktivite' : 'Yeni not',
+      ad: (tur === 'aliskanlik' || tur === 'yapilacak') ? 'Yeni_Aktivite' : 'Yeni_not',
       kaynak: 'Kendi', tip: 'aliskanlik', kart_tipi: 'bilgi', kart_config: cfg,
       aliskanlik: tur === 'aliskanlik', aktif: true, mezun: false,
       // Not artık tek günlük değil — bir yapışkan not gibi, silininceye kadar her gün duruyor (Ayraç'takiyle
@@ -2330,11 +2334,13 @@ export default function Rite() {
   function yeniHavuzTaslakAc(tur: 'not' | 'aliskanlik') {
     // Ajanda'daki yeniTaslakAc ile aynı mantık — ön-doldurma artık burada değil, BilgiKartEdit'in
     // `baslikKaynagi` prop'u üzerinden `ad`'dan geliyor (şu an Havuz'a doğrudan ekleme girişi UI'da yok ama
-    // fonksiyon ileride kullanılabilir diye tutuluyor, tutarlılık için burada da uygulandı).
+    // fonksiyon ileride kullanılabilir diye tutuluyor, tutarlılık için burada da uygulandı). Ad burada da
+    // BİLEREK alt çizgili ("Yeni_alışkanlık"/"Yeni_not") — bkz. yeniTaslakAc'taki aynı not (çift tık ile tek
+    // kelime seçimi).
     const cfg: any = { icerik: null, videolar: [] };
     openDetay({
       id: null,
-      ad: tur === 'aliskanlik' ? 'Yeni alışkanlık' : 'Yeni not',
+      ad: tur === 'aliskanlik' ? 'Yeni_alışkanlık' : 'Yeni_not',
       grup: actGroup || 'Genel', alt_grup: actAltGroup || null, kart_tipi: 'bilgi', kart_config: cfg,
       aliskanlik: tur === 'aliskanlik', faydalar: [], aciklama: null, videolar: [],
       zaman: 'gün', zamanlar: null, gunler: tur === 'aliskanlik' ? [] : null, sure_gun: null,
