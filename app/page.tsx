@@ -1517,12 +1517,17 @@ export default function Rite() {
   // sadece göz atıyor. Ajandadan Kaydedilenler'de olduğu gibi 4 kategori de her zaman sabit gösteriliyor
   // (boş olsalar bile), otomatik atlama yok.
   const [gelKategori, setGelKategori] = useState<string | null>(null);
+  // gelAcikId (2026-09-18, Havuz yeniden tasarımı — 6. adım): Gelenler'in liste görünümünde hangi aktivite-türü
+  // satırın genişletilmiş (aksiyon butonları görünür) halde olduğu — null = hepsi daralı. bkz. gelKartListe.
+  const [gelAcikId, setGelAcikId] = useState<string | null>(null);
   // havuzGorunum (2026-09-18, Havuz yeniden tasarımı — 5. adım, Behnan: "havuz için default liste görünümü
   // olmalı, sayının artacağını düşünerek... bu mantığı bir çok yerde kullanabiliriz, mesela Odak alanları.
-  // Liste görünümü derkende aslında tek satırlık kartlar ve gerekli flag'lar, etiketler"): Kişisel Arşiv ve
-  // Ajandadan Kaydedilenler'deki kart listeleri için liste/kart görünüm toggle'ı, varsayılan 'liste'. Gelenler
-  // buna dahil değil — oradaki her satır zaten kendi içinde aksiyon butonları/mini form barındıran, sayıca az
-  // (triyaj kuyruğu) bir yapı, bu toggle'ın çözmeye çalıştığı "büyüyen arşiv" sorunuyla örtüşmüyor.
+  // Liste görünümü derkende aslında tek satırlık kartlar ve gerekli flag'lar, etiketler"; 6. adımda genişletme,
+  // Behnan: "sanki toggle tek olup, tüm klasörler için geçerli olsa daha uygun olur"): TEK bir toggle, Havuz'un
+  // her 3 kökünde de (Kişisel Arşiv, Ajandadan Kaydedilenler, Gelenler) geçerli, varsayılan 'liste'. Gelenler'de
+  // aktivite-türü satırlar aksiyon butonu barındırdığı için liste görünümünde tek satır olarak başlayıp
+  // dokununca yerinde genişliyor (bkz. gelKartListe/gelAcikId) — diğer 2 kökte ise doğrudan iki farklı satır
+  // biçimi (aktKart/aktKartGenis) arasında geçiş yapıyor.
   const [havuzGorunum, setHavuzGorunum] = useState<'liste' | 'kart'>('liste');
   // Ay görünümü artık ayrı bir sayfa değil, takvim ikonuyla açılan bir overlay/popup (2026-09-17, Behnan kararı:
   // "sadece bir takvim ikonu bile yeterli, çıkan aylık seçim ve navigasyon popup'ın ... dışarıda bir şeye
@@ -3962,10 +3967,13 @@ export default function Rite() {
           // (InboxNot ile gösterilen not/mesaj paylaşımları) için kart_tipi bilgisi yok, en uygun varsayılan
           // 'notlar' kovası.
           const gelKategoriOf = (v: any) => v.tur === 'aktivite' ? kartKategoriOf(v.payload?.kartTipi) : 'notlar';
-          const gelKart = (v: any) => v.tur !== 'aktivite' ? (
-            <InboxNot key={v.id} v={v} onOpen={() => openIbDetay(v)} />
-          ) : (
-            <div key={v.id} className="card">
+          // gelKartIcerik (2026-09-18, Havuz yeniden tasarımı — 6. adım, Behnan: "sanki toggle tek olup, tüm
+          // klasörler için geçerli olsa daha uygun olur"): bir aktivite-türü Gelenler satırının tüm içeriği
+          // (başlık, faydalar, aksiyon butonları, ibGrupSec formu) — hem gelKart (kart görünümü, dıştan bir
+          // .card kutusu) hem gelKartListe'nin genişletilmiş hali (liste görünümü, satıra tıklayınca açılır)
+          // tarafından aynen paylaşılıyor, tek kaynak.
+          const gelKartIcerik = (v: any) => (
+            <>
               <div
                 onClick={v.payload?.kartTipi === 'bilgi' ? () => openInboxPreview(v) : undefined}
                 style={v.payload?.kartTipi === 'bilgi' ? { cursor: 'pointer' } : undefined}
@@ -4000,20 +4008,49 @@ export default function Rite() {
                     </>}
                 <button className="btn ghost sm" style={{ color: 'var(--red)', borderColor: '#e6c4bd' }} onClick={() => inboxSil(v.id)}>Sil</button>
               </div>
+            </>
+          );
+          const gelKart = (v: any) => v.tur !== 'aktivite' ? (
+            <InboxNot key={v.id} v={v} onOpen={() => openIbDetay(v)} />
+          ) : (
+            <div key={v.id} className="card">{gelKartIcerik(v)}</div>
+          );
+          // gelKartListe (2026-09-18, Havuz yeniden tasarımı — 6. adım): Gelenler'in liste görünümü. Not/mesaj
+          // paylaşımları (InboxNot) zaten tek satırlık bir actcard, değişmeden kullanılıyor. Aktivite-türü
+          // paylaşımlar ise varsayılan olarak tek satırlık bir satır — dokununca (gelAcikId ile) yerinde
+          // genişleyip gelKartIcerik'in tam içeriğini (aksiyon butonları dahil) gösteriyor, tekrar dokununca
+          // daralıyor. Ayrı bir detay ekranı yok (yalnızca bilgi kartTipi'nde openInboxPreview var), o yüzden
+          // "genişlet/daralt" akordeon deseni tercih edildi.
+          const gelKartListe = (v: any) => v.tur !== 'aktivite' ? (
+            <InboxNot key={v.id} v={v} onOpen={() => openIbDetay(v)} />
+          ) : gelAcikId === v.id ? (
+            <div key={v.id} className="card">
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <span className="go" style={{ cursor: 'pointer', transform: 'rotate(90deg)' }} onClick={() => setGelAcikId(null)} title="Daralt">›</span>
+              </div>
+              {gelKartIcerik(v)}
+            </div>
+          ) : (
+            <div key={v.id} className="actcard" onClick={() => setGelAcikId(v.id)}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="n">🎁 {v.baslik || v.payload?.ad}</div>
+                <div className="o">{v.payload?.from_ad ? 'Kimden: ' + v.payload.from_ad : 'Paylaşım'}{v.durum === 'alindi' ? ' · ✓ Alındı' : ''}</div>
+              </div>
+              <span className="go">›</span>
             </div>
           );
+          const gelKartFn = havuzGorunum === 'kart' ? gelKart : gelKartListe;
           return (
           <div>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
               <h2 style={{ margin: 0 }}>Aktivite Havuzu</h2>
-              {/* Liste/Kart görünüm toggle'ı (2026-09-18, Havuz yeniden tasarımı — 5. adım): sadece Kişisel
-                  Arşiv ve Ajandadan Kaydedilenler'i etkiler, bkz. havuzGorunum tanımındaki not. */}
-              {havuzFolder !== 'gelenler' && (
-                <div style={{ display: 'flex', gap: 4 }}>
-                  <span className={'chip' + (havuzGorunum === 'liste' ? ' on' : '')} style={{ padding: '5px 10px', fontSize: 12, margin: 0 }} onClick={() => setHavuzGorunum('liste')} title="Liste görünümü">☰ Liste</span>
-                  <span className={'chip' + (havuzGorunum === 'kart' ? ' on' : '')} style={{ padding: '5px 10px', fontSize: 12, margin: 0 }} onClick={() => setHavuzGorunum('kart')} title="Kart görünümü">▦ Kart</span>
-                </div>
-              )}
+              {/* Liste/Kart görünüm toggle'ı (2026-09-18, Havuz yeniden tasarımı — 5-6. adım, Behnan: "sanki
+                  toggle tek olup, tüm klasörler için geçerli olsa daha uygun olur"): tek toggle, Havuz'un her
+                  3 kökünde de geçerli — bkz. havuzGorunum tanımındaki not ve gelKartListe. */}
+              <div style={{ display: 'flex', gap: 4 }}>
+                <span className={'chip' + (havuzGorunum === 'liste' ? ' on' : '')} style={{ padding: '5px 10px', fontSize: 12, margin: 0 }} onClick={() => setHavuzGorunum('liste')} title="Liste görünümü">☰ Liste</span>
+                <span className={'chip' + (havuzGorunum === 'kart' ? ' on' : '')} style={{ padding: '5px 10px', fontSize: 12, margin: 0 }} onClick={() => setHavuzGorunum('kart')} title="Kart görünümü">▦ Kart</span>
+              </div>
             </div>
             {/* Kök klasör şeridi (2026-09-18, Havuz yeniden tasarımı — 1. adım): eski ayrı "Sohbet > Inbox"
                 kartı kalktı, Inbox artık burada bir klasör (📥 Gelenler) — paylaşılan bir şey geldiği an zaten
@@ -4073,7 +4110,7 @@ export default function Rite() {
                     </div>
                     {(() => {
                       const items = inbox.filter((v: any) => gelKategoriOf(v) === gelKategori);
-                      return items.length === 0 ? <div className="note">Bu kategoride henüz kart yok.</div> : items.map(gelKart);
+                      return items.length === 0 ? <div className="note">Bu kategoride henüz kart yok.</div> : items.map(gelKartFn);
                     })()}
                   </>
                 ) : (
