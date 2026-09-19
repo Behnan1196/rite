@@ -42,7 +42,14 @@ function SortableRow({ id, disabled, children }: { id: string; disabled?: boolea
 // daki gibi İKİ ayrı chip (☰ Liste / ▦ Kart) DEĞİL, TEK bir ikon; ikon o an AÇILACAK modu gösteriyor (kartken ☰
 // "liste'ye geç" görünür, listeyken ▦ "kart'a geç" görünür) ve tıklanınca ikisi arasında geçiş yapıyor. Chevron'un
 // SOLUNDA, aksiyon'un sağında duruyor — header'daki üçüncü/son kontrol.
-function CardContainer({ baslik, acik, onToggle, aksiyon, tikla, gorunum, onGorunumToggle, children }: {
+// `kapaliOnizleme` (2026-09-19, Behnan isteği): kapalıyken içeriği TAMAMEN gizlemek yerine birkaç piksellik bir
+// "önizleme" göstermek için — Behnan: "notların kapalı durumunu, tam kapalı değil 2 satır görünecek şekilde".
+// KULLANICIYA açık bir ayar DEĞİL — her CardContainer çağrısının kendi sabit değeri (piksel yüksekliği), yani
+// container'ın "config"i. Verilmezse (undefined) eski davranış aynen sürüyor: kapalıyken içerik hiç render
+// edilmiyor. Verilirse kapalıyken içerik yine render ediliyor ama sabit yükseklikte kırpılıyor (overflow hidden)
+// + alt kenarda hafif bir gölge (arka plan rengi ne olursa olsun çalışsın diye gradient yerine inset shadow) —
+// "daha var" hissi versin diye.
+function CardContainer({ baslik, acik, onToggle, aksiyon, tikla, gorunum, onGorunumToggle, kapaliOnizleme, children }: {
   baslik: string;
   acik: boolean;
   onToggle: () => void;
@@ -50,6 +57,7 @@ function CardContainer({ baslik, acik, onToggle, aksiyon, tikla, gorunum, onGoru
   tikla?: () => void;
   gorunum?: 'liste' | 'kart';
   onGorunumToggle?: () => void;
+  kapaliOnizleme?: number;
   children: ReactNode;
 }) {
   return (
@@ -75,7 +83,13 @@ function CardContainer({ baslik, acik, onToggle, aksiyon, tikla, gorunum, onGoru
           style={{ background: 'none', border: 'none', padding: '0 2px', fontSize: 13, fontWeight: 700, color: '#8a8169', cursor: 'pointer', lineHeight: 1, transform: acik ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform .15s' }}
         >▾</button>
       </div>
-      {acik && <div style={{ marginTop: 8 }}>{children}</div>}
+      {acik ? (
+        <div style={{ marginTop: 8 }}>{children}</div>
+      ) : kapaliOnizleme ? (
+        <div style={{ marginTop: 8, maxHeight: kapaliOnizleme, overflow: 'hidden', borderRadius: 10, boxShadow: 'inset 0 -18px 14px -14px rgba(0,0,0,.12)' }}>
+          {children}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -4227,6 +4241,7 @@ export default function Rite() {
                 onToggle={() => containerToggle('ajanda_notlar', true)}
                 gorunum={containerGorunumOf('ajanda_notlar')}
                 onGorunumToggle={() => containerGorunumToggle('ajanda_notlar')}
+                kapaliOnizleme={90}
               >
                 {/* 2026-09-19 (Behnan: "Fikrim değişti, sürükle-bırak eklensin" — bkz. onDragEndNotlar, yukarısı):
                     her iki görünüm de aynı DndContext/verticalListSortingStrategy ile sarılı, kartı basılı tutup
