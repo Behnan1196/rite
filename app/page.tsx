@@ -1538,14 +1538,22 @@ export default function Rite() {
   }
   // containerAcik + containerToggle (2026-09-19, bkz. LS_CONTAINER/CardContainer, yukarısı): CardContainer'ların
   // aç/kapa durumunu tutan TEK harita — { containerId: boolean }. Varsayılan {} (SSR/hidrasyon güvenliği için,
-  // devMode gibi, gerçek değer mount'tan sonra localStorage'dan okunuyor) — haritada olmayan bir id de zaten
-  // KAPALI sayılıyor (containerAcik[id] === true kontrolü), yani "varsayılan kapalı" kararı ekstra bir kod
-  // gerektirmiyor. containerToggle her çağrıda haritanın TAMAMINI localStorage'a yazıyor (her container için ayrı
-  // anahtar açmak yerine) — container sayısı arttıkça bu yaklaşım hâlâ tek bir okuma/yazma kalıyor.
+  // devMode gibi, gerçek değer mount'tan sonra localStorage'dan okunuyor).
+  // 2026-09-19 DÜZELTME (Behnan: "eklediğim notları artık göremiyorum"): ilk turda TÜM container'lar için
+  // "varsayılan kapalı" tek bir kural sanılmıştı ("yanımda duran insanlar görmesin" gerekçesi Home'un Odak
+  // Alanları/Ölçümler'i için doğruydu), ama Notlar'ın orijinal sorunu gizlilik DEĞİL büyüme/kalabalıktı — Notlar
+  // kapalı başlayınca yeni eklenen notlar "kayboldu" gibi görünüyor, oysa asıl istenen (liste görünümü) zaten
+  // ayrı bir çözüm. Bu yüzden varsayılan artık container BAZINDA (`containerAcikOf`'un 2. parametresi) — Home'un
+  // ikisi hâlâ varsayılan KAPALI, Notlar varsayılan AÇIK. Kullanıcı bir container'ı elle kapatırsa/açarsa bu
+  // tercih hâlâ localStorage'da kalıcı (varsayılan sadece haritada HİÇ kayıt yokken devreye giriyor).
   const [containerAcik, setContainerAcik] = useState<Record<string, boolean>>({});
-  function containerToggle(id: string) {
+  function containerAcikOf(id: string, varsayilan?: boolean): boolean {
+    return containerAcik[id] === undefined ? !!varsayilan : containerAcik[id];
+  }
+  function containerToggle(id: string, varsayilan?: boolean) {
     setContainerAcik((m) => {
-      const nv = { ...m, [id]: !(m[id] === true) };
+      const guncel = m[id] === undefined ? !!varsayilan : m[id];
+      const nv = { ...m, [id]: !guncel };
       try { localStorage.setItem(LS_CONTAINER, JSON.stringify(nv)); } catch (_) {}
       return nv;
     });
@@ -4152,8 +4160,8 @@ export default function Rite() {
             {!linkMode && notlar.length > 0 && (
               <CardContainer
                 baslik="Notlar"
-                acik={containerAcik['ajanda_notlar'] === true}
-                onToggle={() => containerToggle('ajanda_notlar')}
+                acik={containerAcikOf('ajanda_notlar', true)}
+                onToggle={() => containerToggle('ajanda_notlar', true)}
                 gorunum={containerGorunumOf('ajanda_notlar')}
                 onGorunumToggle={() => containerGorunumToggle('ajanda_notlar')}
               >
