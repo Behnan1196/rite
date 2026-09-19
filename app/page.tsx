@@ -180,6 +180,15 @@ const LS_CONTAINER_GORUNUM = 'rite_container_gorunum';
 // olmayan bir id 'varsayilan' sayılır (bkz. containerRenkOf), her container kendi varsayılanını verebilir (Notlar
 // mevcut sarı görünümünü korumak için 'sari' varsayılanıyla çağrılır).
 const LS_CONTAINER_RENK = 'rite_container_renk';
+// LS_HAVUZ_GORUNUM (2026-09-19, CardContainer genelleme — Havuz'un ilk uygulaması): Havuz'un liste/kart toggle'ı
+// (havuzGorunum) CardContainer'ın per-container gorunum'undan FARKLI bir felsefe taşıyor ve Behnan bunu bilinçli
+// olarak KORUMAK istedi — "toggle tek olup, tüm klasörler için geçerli olsa daha uygun olur" (Kişisel Arşiv,
+// Ajandadan Kaydedilenler, Gelenler'in ÜÇÜNDE de AYNI tek değer, container-bazlı bir harita DEĞİL). Bu yüzden
+// LS_CONTAINER_GORUNUM'un { containerId: değer } kalıbı yerine, doğrudan tek bir 'liste'|'kart' string'i tutan
+// AYRI ve daha basit bir anahtar — sadece CardContainer'ın iki kararı burada da uygulandı: (1) UI artık iki ayrı
+// çip (☰ Liste / ▦ Kart) değil, CardContainer'daki gibi TEK ikon (tıklayınca değer flip'leniyor); (2) tercih artık
+// localStorage'a kalıcı (öncesinde sadece React state'ti, sayfa yenilenince sıfırlanıyordu).
+const LS_HAVUZ_GORUNUM = 'rite_havuz_gorunum';
 
 const POOL: Record<string, { ad: string; dsc: string; zaman: string; flag?: string }[]> = {
   def: [
@@ -1741,6 +1750,16 @@ export default function Rite() {
   // dokununca yerinde genişliyor (bkz. gelKartListe/gelAcikId) — diğer 2 kökte ise doğrudan iki farklı satır
   // biçimi (aktKart/aktKartGenis) arasında geçiş yapıyor.
   const [havuzGorunum, setHavuzGorunum] = useState<'liste' | 'kart'>('liste');
+  // havuzGorunumToggle (2026-09-19, CardContainer genelleme — bkz. LS_HAVUZ_GORUNUM, yukarısı): havuzGorunum'un
+  // kendisi (tek, global değer) hiç değişmedi — sadece artık her değişiklik localStorage'a da yazılıyor, ki
+  // CardContainer'ın diğer tercihleri (aç/kapa, renk) gibi sayfa yenilenince kaybolmasın.
+  function havuzGorunumToggle() {
+    setHavuzGorunum((g: 'liste' | 'kart') => {
+      const nv = g === 'kart' ? 'liste' : 'kart';
+      try { localStorage.setItem(LS_HAVUZ_GORUNUM, nv); } catch (_) {}
+      return nv;
+    });
+  }
   // Ay görünümü artık ayrı bir sayfa değil, takvim ikonuyla açılan bir overlay/popup (2026-09-17, Behnan kararı:
   // "sadece bir takvim ikonu bile yeterli, çıkan aylık seçim ve navigasyon popup'ın ... dışarıda bir şeye
   // dokunduğumuzda kapanır"). ayPopupOpen açık/kapalı durumu tutar; ayCursor ise popup içinde GEZİNİLEN ay —
@@ -2047,6 +2066,10 @@ export default function Rite() {
     try {
       const cr = localStorage.getItem(LS_CONTAINER_RENK);
       if (cr) setContainerRenk(JSON.parse(cr));
+    } catch (_) {}
+    try {
+      const hg = localStorage.getItem(LS_HAVUZ_GORUNUM);
+      if (hg === 'liste' || hg === 'kart') setHavuzGorunum(hg);
     } catch (_) {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -4557,9 +4580,16 @@ export default function Rite() {
                 >🔍</span>
                 {/* Liste/Kart görünüm toggle'ı (2026-09-18, Havuz yeniden tasarımı — 5-6. adım, Behnan: "sanki
                     toggle tek olup, tüm klasörler için geçerli olsa daha uygun olur"): tek toggle, Havuz'un her
-                    3 kökünde de geçerli — bkz. havuzGorunum tanımındaki not ve gelKartListe. */}
-                <span className={'chip' + (havuzGorunum === 'liste' ? ' on' : '')} style={{ padding: '5px 10px', fontSize: 12, margin: 0 }} onClick={() => setHavuzGorunum('liste')} title="Liste görünümü">☰ Liste</span>
-                <span className={'chip' + (havuzGorunum === 'kart' ? ' on' : '')} style={{ padding: '5px 10px', fontSize: 12, margin: 0 }} onClick={() => setHavuzGorunum('kart')} title="Kart görünümü">▦ Kart</span>
+                    3 kökünde de geçerli — bkz. havuzGorunum tanımındaki not ve gelKartListe.
+                    2026-09-19 (CardContainer genelleme, bkz. LS_HAVUZ_GORUNUM): felsefe AYNEN korundu (hâlâ tek,
+                    global bir değer — container-bazlı DEĞİL), sadece UI artık iki ayrı çip yerine CardContainer'ın
+                    tek-ikon standardı, ve tercih artık kalıcı (havuzGorunumToggle). */}
+                <button
+                  type="button"
+                  title={havuzGorunum === 'kart' ? 'Liste görünümüne geç' : 'Kart görünümüne geç'}
+                  onClick={havuzGorunumToggle}
+                  style={{ background: 'none', border: 'none', padding: '0 4px', fontSize: 16, fontWeight: 700, color: '#8a8169', cursor: 'pointer', lineHeight: 1 }}
+                >{havuzGorunum === 'kart' ? '☰' : '▦'}</button>
               </div>
             </div>
             {havuzAramaAcik && (
