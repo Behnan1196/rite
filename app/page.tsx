@@ -4083,16 +4083,24 @@ export default function Rite() {
             {/* Notlar şeridi: günlerden bağımsız, hangi gün seçili olursa olsun hep aynı — Not artık habits'te
                 yer almıyor (kullanıcı isteği). ⋯ menüsünden bir tür seçilip "taşınınca" (bkz. notuTasi) o an
                 Ajanda'da görüntülenen güne (day) Yapılacak/Alışkanlık/Randevu olarak düşüyor ve doğal olarak bu
-                listeden kalkıp yukarıdaki normal gün listesine katılıyor. */}
+                listeden kalkıp yukarıdaki normal gün listesine katılıyor.
+                2026-09-19 (Behnan isteği — CardContainer standardizasyonu, 2. pilot alan): eski `.timediv` ince-
+                çizgi başlığı yerine artık CardContainer (Home'daki Odak Alanları/Ölçümler ile AYNI görsel dil) —
+                Behnan'ın kendi örneği buydu ("notlar kısmı arttığında container kapanır, ya da liste görünümü
+                olmalı"), o yüzden Notlar ve Odak Alanları bu turda birlikte olgunlaştırılacak iki pilot alan
+                (diğer container'lara, ör. Havuz'un klasör başlıklarına, henüz YAYILMADI — bilinçli). */}
             {!linkMode && notlar.length > 0 && (
-              <div style={{ marginTop: 4 }}>
-                <div className="timediv"><span className="tl">Notlar</span><span className="ln" /></div>
+              <CardContainer
+                baslik="Notlar"
+                acik={containerAcik['ajanda_notlar'] === true}
+                onToggle={() => containerToggle('ajanda_notlar')}
+              >
                 {notlar.map((rt) => (
                   <div key={rt.id} className="card" style={{ padding: '12px 14px', background: '#fdf6d3', border: 'none', borderRadius: 3, marginBottom: 8 }}>
                     <RitItem rt={rt} />
                   </div>
                 ))}
-              </div>
+              </CardContainer>
             )}
             </>
             )}
