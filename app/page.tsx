@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { DndContext, PointerSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
-import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
+import { SortableContext, verticalListSortingStrategy, rectSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Acc, EmbedVideo, renderMetin, BilgiKart } from './bilgiKart';
 
@@ -2552,6 +2552,31 @@ export default function Rite() {
     await supabase.from('dog_gruplar').update({ home_gizli: !a.home_gizli }).eq('id', a.id);
     loadGruplar(client.id);
   }
+  // homeAlanSiraKaydet + onDragEndHomeAlan (2026-09-19, Behnan isteği — CardContainer'ın 3. davranışı: sürükle-
+  // bırak sıralama, Notlar+Odak Alanları pilot turu): "Alanları yönet"deki ▲▼ TAMAMEN KALDIRILDI (Behnan kararı:
+  // "▲▼ kalksın, sadece sürükle-bırak olsun"), sıralama artık SADECE Home ekranındaki sürükle-bırak ile. Aynı
+  // `sira` alanını paylaşıyor (grupSiraDegistir'in kullandığı alanla AYNI) — sadece yazma yolu değişti: ikili
+  // takas yerine, bırakıldıktan sonraki YENİ SIRA baştan sona yeniden numaralanıyor (0..n-1).
+  // homeAlanlarGorunur sadece GİZLİ OLMAYANLARI içeriyor, ama `sira` TÜM alanlar (gizli dahil) arasında paylaşılan
+  // tek bir sıra uzayı — bu yüzden gizli alanların kendi göreli sırasını bozmamak için, sürüklemeden sonraki yeni
+  // GÖRÜNÜR sırayı `homeAlanlar`ın (tam liste, sira sıralı) içindeki görünür konumlara geri yerleştiriyoruz, gizli
+  // olanlar kendi slotlarında sabit kalıyor.
+  async function homeAlanSiraKaydet(yeniTamListe: any[]) {
+    if (!client) return;
+    await Promise.all(yeniTamListe.map((a: any, i: number) => supabase.from('dog_gruplar').update({ sira: i }).eq('id', a.id)));
+    loadGruplar(client.id);
+  }
+  function onDragEndHomeAlan(e: any) {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const oldIndex = homeAlanlarGorunur.findIndex((a: any) => a.id === active.id);
+    const newIndex = homeAlanlarGorunur.findIndex((a: any) => a.id === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+    const yeniGorunur = arrayMove(homeAlanlarGorunur, oldIndex, newIndex);
+    let vi = 0;
+    const yeniTam = homeAlanlar.map((a: any) => (a.home_gizli ? a : yeniGorunur[vi++]));
+    homeAlanSiraKaydet(yeniTam);
+  }
   function sureGun(rt: any): number { if (!rt.bitis) return 0; const b = parseD(rt.baslangic || today); const e = parseD(rt.bitis); return Math.round((e.getTime() - b.getTime()) / 86400000) + 1; }
   // Ajanda'da (tur='ritual') sadece detay.obj yamalanır — act ayrı bir kavram (bağlı Program şablonu) olabilir,
   // ona dokunmak yanlış olur. Havuz'da (tur!=='ritual') o ve act aynı nesneyi temsil ediyor (bkz. openDetay'in
@@ -3492,12 +3517,31 @@ export default function Rite() {
   // gösterimi aşağıdaki `notlar` listesi ve Ajanda'nın altındaki "Notlar" şeridi (bkz. rowbody JSX'i).
   const habits = rituals.filter((r) => !r.mezun && !isNotKart(r) && activeOn(r, day));
   // Notlar: güne bağlı değil, mezun olmamış tüm kişisel Not'lar — Ajanda'nın altında, hangi gün seçili olursa
-  // olsun hep aynı şekilde görünen ayrı bir şerit (kullanıcı isteği). Notlar SortableRow/DndContext'e hiç
-  // girmediği için elle sürükle-sıralama yok (Behnan: "sıralayamıyoruz, gerek de yok gibi, bir an önce karar
-  // verip tasnif etsin") — bunun yerine otomatik olarak en yeni not en üstte (blok_sira, Aktivite listesindeki
-  // blokSira ile aynı "oluşturulma anı" alanı — taslakKaydet'te Date.now() olarak yazılıyor), aksi hâlde DB
-  // sorgusu sadece 'zaman'a göre sıralandığı için (tüm Not'larda zaman='gün' sabit) sıra keyfi kalıyordu.
+  // olsun hep aynı şekilde görünen ayrı bir şerit (kullanıcı isteği). blok_sira ile sıralı (Aktivite listesindeki
+  // blokSira ile aynı alan) — yeni bir Not oluşunca taslakKaydet Date.now() yazıyor, bu yüzden varsayılan olarak
+  // en yeni not en üstte başlıyor.
+  // 2026-09-19 GÜNCELLEME (Behnan kararı — CardContainer'ın sürükle-bırak davranışı Notlar'a da genişletildi):
+  // ÖNCEDEN (2026-09-17 civarı) burada "Notlar sürüklenemez, gerek yok" kararı vardı (Behnan: "sıralayamıyoruz,
+  // gerek de yok gibi, bir an önce karar verip tasnif etsin"). Behnan bu kararı AÇIKÇA değiştirdi — sorulunca
+  // "Fikrim değişti, sürükle-bırak eklensin" dedi. Artık notlar.map SortableRow/DndContext ile sarılıyor (bkz.
+  // onDragEndNotlar), blok_sira sürükleme sonrası YENİDEN NUMARALANIYOR (n-i, en üsttekine en yüksek değer) —
+  // Date.now() ile karışmaması için: yeni oluşan bir not hâlâ çok daha büyük bir blok_sira alacağı için otomatik
+  // en üste düşmeye devam ediyor, elle sürüklenenler küçük tam sayılarla aynı sırada kalıyor.
   const notlar = rituals.filter((r) => !r.mezun && isNotKart(r)).sort((a, b) => (Number(b.blok_sira) || 0) - (Number(a.blok_sira) || 0));
+  async function notlarSiraKaydet(yeniSirali: any[]) {
+    if (!client) return;
+    const n = yeniSirali.length;
+    await Promise.all(yeniSirali.map((rt: any, i: number) => supabase.from('dog_rituals').update({ blok_sira: n - i }).eq('id', rt.id)));
+    loadData(client.id);
+  }
+  function onDragEndNotlar(e: any) {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const oldIndex = notlar.findIndex((r: any) => r.id === active.id);
+    const newIndex = notlar.findIndex((r: any) => r.id === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+    notlarSiraKaydet(arrayMove(notlar, oldIndex, newIndex));
+  }
   // Çalışan programlar: program kimliğine göre grupla (ilerleme + süre kontrolü için).
   const programGruplari = Object.values(rituals.filter((r) => r.program && !r.mezun).reduce((acc: any, r: any) => {
     const g = acc[r.program] || (acc[r.program] = { pid: r.program, ad: r.program_ad || 'Program', bas: r.baslangic || today, bit: r.bitis || null, n: 0 });
@@ -3792,43 +3836,62 @@ export default function Rite() {
               /* KART görünümü: 2 sütunlu ızgara (kullanıcı isteği: "her satırda 2 kart olsun"). Gösterge artık 4
                   ayrı dilim değil, dolan TEK bir pil (kullanıcı isteği) — dolu kısmın tamamı seviyeye göre tek bir
                   renk: %25 koyu kırmızı, %50 turuncu, %75 zeytin yeşili, %100 açık yeşil (bkz. HOME_SEVIYE_RENK,
-                  örnek renkler kullanıcıdan). */
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                {homeAlanlarGorunur.map((a) => {
-                  const guncel = homeGuncelDeger(a.anahtar);
-                  return (
-                    <div key={a.id} className="card" style={{ margin: 0, cursor: 'pointer' }} onClick={() => setHomeDetay(a.anahtar)}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                        <div style={{ minWidth: 0 }}>
-                          <h3 style={{ margin: 0 }}>{a.ad}</h3>
-                          <div className="note" style={{ marginTop: 4 }}>{guncel ? HOME_SEVIYE[guncel - 1] : 'Henüz değerlendirilmedi'}</div>
-                        </div>
-                        <div style={{ width: 18, height: 50, borderRadius: 6, border: '1px solid var(--line)', background: '#efe8da', display: 'flex', alignItems: 'flex-end', overflow: 'hidden', flex: '0 0 auto' }} title={guncel ? HOME_SEVIYE[guncel - 1] : 'Henüz değerlendirilmedi'}>
-                          {guncel && <div style={{ width: '100%', height: (guncel / HOME_SEVIYE.length) * 100 + '%', background: HOME_SEVIYE_RENK[guncel - 1], transition: 'height .3s' }} />}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+                  örnek renkler kullanıcıdan).
+                  2026-09-19 (Behnan isteği — CardContainer'ın 3. davranışı, sürükle-bırak): grid'e uygun
+                  `rectSortingStrategy` (verticalListSortingStrategy düz listeler için, 2 sütunlu ızgarada doğru
+                  hesaplamıyor). "Alanları yönet"deki ▲▼ kaldırıldı (Behnan kararı), sıralama artık SADECE burada,
+                  kartı basılı tutup sürükleyerek (bkz. onDragEndHomeAlan, SortableRow — Ajanda'nın gün listesiyle
+                  AYNI dokunmatik-uyumlu desen). */
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEndHomeAlan}>
+                <SortableContext items={homeAlanlarGorunur.map((a: any) => a.id)} strategy={rectSortingStrategy}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    {homeAlanlarGorunur.map((a) => {
+                      const guncel = homeGuncelDeger(a.anahtar);
+                      return (
+                        <SortableRow key={a.id} id={a.id}>
+                          <div className="card" style={{ margin: 0, cursor: 'pointer' }} onClick={() => setHomeDetay(a.anahtar)}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                              <div style={{ minWidth: 0 }}>
+                                <h3 style={{ margin: 0 }}>{a.ad}</h3>
+                                <div className="note" style={{ marginTop: 4 }}>{guncel ? HOME_SEVIYE[guncel - 1] : 'Henüz değerlendirilmedi'}</div>
+                              </div>
+                              <div style={{ width: 18, height: 50, borderRadius: 6, border: '1px solid var(--line)', background: '#efe8da', display: 'flex', alignItems: 'flex-end', overflow: 'hidden', flex: '0 0 auto' }} title={guncel ? HOME_SEVIYE[guncel - 1] : 'Henüz değerlendirilmedi'}>
+                                {guncel && <div style={{ width: '100%', height: (guncel / HOME_SEVIYE.length) * 100 + '%', background: HOME_SEVIYE_RENK[guncel - 1], transition: 'height .3s' }} />}
+                              </div>
+                            </div>
+                          </div>
+                        </SortableRow>
+                      );
+                    })}
+                  </div>
+                </SortableContext>
+              </DndContext>
               ) : (
               /* LİSTE görünümü (2026-09-19, YENİ — CardContainer'ın liste/kart davranışı): tek sütun, `.mrow`
                   (Havuz/Home'un diğer özet şeritlerinde de kullanılan standart satır deseni) — dolu seviye rengi
-                  artık uzun bir çubuk değil, küçük bir renkli nokta; her satır aynı şekilde tıklanıp detay açıyor. */
-              <div className="card">
-                {homeAlanlarGorunur.map((a: any) => {
-                  const guncel = homeGuncelDeger(a.anahtar);
-                  return (
-                    <div key={a.id} className="mrow" style={{ cursor: 'pointer' }} onClick={() => setHomeDetay(a.anahtar)}>
-                      <span>{a.ad}</span>
-                      <b style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 400 }}>
-                        {guncel && <span style={{ width: 8, height: 8, borderRadius: 4, background: HOME_SEVIYE_RENK[guncel - 1], flex: '0 0 auto' }} />}
-                        {guncel ? HOME_SEVIYE[guncel - 1] : 'Henüz değerlendirilmedi'}
-                      </b>
-                    </div>
-                  );
-                })}
-              </div>
+                  artık uzun bir çubuk değil, küçük bir renkli nokta; her satır aynı şekilde tıklanıp detay açıyor.
+                  Sürükle-bırak burada da AYNI onDragEndHomeAlan/sira — sadece strateji `verticalListSortingStrategy`
+                  (düz liste). */
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEndHomeAlan}>
+                <SortableContext items={homeAlanlarGorunur.map((a: any) => a.id)} strategy={verticalListSortingStrategy}>
+                  <div className="card">
+                    {homeAlanlarGorunur.map((a: any) => {
+                      const guncel = homeGuncelDeger(a.anahtar);
+                      return (
+                        <SortableRow key={a.id} id={a.id}>
+                          <div className="mrow" style={{ cursor: 'pointer' }} onClick={() => setHomeDetay(a.anahtar)}>
+                            <span>{a.ad}</span>
+                            <b style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 400 }}>
+                              {guncel && <span style={{ width: 8, height: 8, borderRadius: 4, background: HOME_SEVIYE_RENK[guncel - 1], flex: '0 0 auto' }} />}
+                              {guncel ? HOME_SEVIYE[guncel - 1] : 'Henüz değerlendirilmedi'}
+                            </b>
+                          </div>
+                        </SortableRow>
+                      );
+                    })}
+                  </div>
+                </SortableContext>
+              </DndContext>
               )}
             </CardContainer>
             {/* Son ölçümler (2026-09, Behnan kararı): Gelişim'in eski "Ölçümler" kartının yerini alıyor —
@@ -4165,25 +4228,36 @@ export default function Rite() {
                 gorunum={containerGorunumOf('ajanda_notlar')}
                 onGorunumToggle={() => containerGorunumToggle('ajanda_notlar')}
               >
-                {containerGorunumOf('ajanda_notlar') === 'kart' ? (
-                  notlar.map((rt) => (
-                    <div key={rt.id} className="card" style={{ padding: '12px 14px', background: '#fdf6d3', border: 'none', borderRadius: 3, marginBottom: 8 }}>
-                      <RitItem rt={rt} />
-                    </div>
-                  ))
-                ) : (
-                  /* LİSTE görünümü (2026-09-19, YENİ): tam bir yapışkan-not kutusu yerine tek bir sarı `.card`
-                      içinde art arda, aralarında ince çizgi ile ayrılan kompakt satırlar — Behnan'ın kendi
-                      örneğiydi ("notlar kısmı arttığında... liste görünümü olmalı"), RitItem zaten kompakt olduğu
-                      için içerik AYNI, sadece her notun kendi ayrı sarı kutusu/boşluğu kalkıyor. */
-                  <div className="card" style={{ background: '#fdf6d3', border: 'none' }}>
-                    {notlar.map((rt: any, i: number) => (
-                      <div key={rt.id} style={{ borderTop: i > 0 ? '1px solid rgba(0,0,0,.08)' : undefined, padding: '8px 0' }}>
-                        <RitItem rt={rt} />
+                {/* 2026-09-19 (Behnan: "Fikrim değişti, sürükle-bırak eklensin" — bkz. onDragEndNotlar, yukarısı):
+                    her iki görünüm de aynı DndContext/verticalListSortingStrategy ile sarılı, kartı basılı tutup
+                    sürükleyerek sıralamak için — Ajanda'nın gün listesiyle AYNI desen (SortableRow). */}
+                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEndNotlar}>
+                  <SortableContext items={notlar.map((rt: any) => rt.id)} strategy={verticalListSortingStrategy}>
+                    {containerGorunumOf('ajanda_notlar') === 'kart' ? (
+                      notlar.map((rt: any) => (
+                        <SortableRow key={rt.id} id={rt.id}>
+                          <div className="card" style={{ padding: '12px 14px', background: '#fdf6d3', border: 'none', borderRadius: 3, marginBottom: 8 }}>
+                            <RitItem rt={rt} />
+                          </div>
+                        </SortableRow>
+                      ))
+                    ) : (
+                      /* LİSTE görünümü (2026-09-19): tam bir yapışkan-not kutusu yerine tek bir sarı `.card`
+                          içinde art arda, aralarında ince çizgi ile ayrılan kompakt satırlar — Behnan'ın kendi
+                          örneğiydi ("notlar kısmı arttığında... liste görünümü olmalı"), RitItem zaten kompakt
+                          olduğu için içerik AYNI, sadece her notun kendi ayrı sarı kutusu/boşluğu kalkıyor. */
+                      <div className="card" style={{ background: '#fdf6d3', border: 'none' }}>
+                        {notlar.map((rt: any, i: number) => (
+                          <SortableRow key={rt.id} id={rt.id}>
+                            <div style={{ borderTop: i > 0 ? '1px solid rgba(0,0,0,.08)' : undefined, padding: '8px 0' }}>
+                              <RitItem rt={rt} />
+                            </div>
+                          </SortableRow>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                )}
+                    )}
+                  </SortableContext>
+                </DndContext>
               </CardContainer>
             )}
             </>
@@ -5705,15 +5779,15 @@ export default function Rite() {
           <div className="sheet" onMouseDown={(e) => e.stopPropagation()}>
             <div className="sheetgrip" onClick={() => setHomeYonetOpen(false)} />
             <h2>⚙️ Alanları yönet</h2>
-            <div className="note" style={{ marginTop: 0, marginBottom: 12 }}>Hangi alanların Home'da görüneceğini ve sırasını buradan ayarla. Adını, kontrol listesini ya da örneklerini değiştirmek için Kütüphane'deki "Grupları yönet" ekranını kullan.</div>
+            {/* 2026-09-19 (Behnan kararı — CardContainer'ın sürükle-bırak sıralama davranışı): ▲▼ ile sıralama
+                TAMAMEN KALDIRILDI ("▲▼ kalksın, sadece sürükle-bırak olsun") — sıra artık SADECE Home
+                ekranındaki kartı basılı tutup sürükleyerek değişiyor (bkz. onDragEndHomeAlan). Bu ekran artık
+                sadece görünürlük (home_gizli) için. */}
+            <div className="note" style={{ marginTop: 0, marginBottom: 12 }}>Hangi alanların Home'da görüneceğini buradan ayarla — sırasını Home ekranında kartı basılı tutup sürükleyerek değiştirebilirsin. Adını, kontrol listesini ya da örneklerini değiştirmek için Kütüphane'deki "Grupları yönet" ekranını kullan.</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {homeAlanlar.length === 0 && <div className="note">Henüz alan yok.</div>}
-              {homeAlanlar.map((a, i) => (
+              {homeAlanlar.map((a) => (
                 <div key={a.id} className="card" style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8, opacity: a.home_gizli ? 0.55 : 1 }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                    <button className="minlink" style={{ padding: 0, fontSize: 10 }} onClick={() => grupSiraDegistir(a, -1)} disabled={i === 0}>▲</button>
-                    <button className="minlink" style={{ padding: 0, fontSize: 10 }} onClick={() => grupSiraDegistir(a, 1)} disabled={i === homeAlanlar.length - 1}>▼</button>
-                  </div>
                   <span style={{ flex: 1 }}>{a.ad}</span>
                   <span className="minlink" onClick={() => homeAlanGizleDegistir(a)}>{a.home_gizli ? '🙈 Göster' : '👁 Gizle'}</span>
                 </div>
