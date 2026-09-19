@@ -150,13 +150,16 @@ function CardContainer({ baslik, acik, onToggle, aksiyon, tikla, gorunum, onGoru
 // Aç/kapa ikonu (📁/📂) CardContainer'daki ayrı chevron yerine kendisi durumu gösteriyor (Behnan: "klasör adına
 // basınca açılıp kapanıyor, solundaki oka gerek yok"). Sıra artık İSME GÖRE OTOMATİK (çağıran taraf sort
 // ediyor) — bu yüzden CardContainer'daki gibi sürükle-bırak/sıra prop'u da YOK.
-function HavuzKlasor({ ad, sayi, acik, onToggle, altKlasorEkle, kartEkle, yenidenAdlandirBaslat, sil, duzenleAcik, duzenleAd, onDuzenleAdChange, duzenleKaydet, duzenleVazgec, children }: {
+function HavuzKlasor({ ad, sayi, acik, onToggle, altKlasorEkle, kartEkle, yapistir, yenidenAdlandirBaslat, sil, duzenleAcik, duzenleAd, onDuzenleAdChange, duzenleKaydet, duzenleVazgec, children }: {
   ad: string;
   sayi?: number;
   acik: boolean;
   onToggle: () => void;
   altKlasorEkle?: () => void;
   kartEkle: () => void;
+  // yapistir (2026-09-19, kes-yapıştır): sadece pano doluyken çağrı yeri tarafından geçiliyor — undefined'sa
+  // menüde "Yapıştır" hiç görünmez (boş panoyla her klasörde anlamsız bir seçenek göstermemek için).
+  yapistir?: () => void;
   yenidenAdlandirBaslat: () => void;
   sil: () => void;
   duzenleAcik: boolean;
@@ -195,6 +198,9 @@ function HavuzKlasor({ ad, sayi, acik, onToggle, altKlasorEkle, kartEkle, yenide
                       <button className="minlink" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 12px', textDecoration: 'none' }} onClick={(e: any) => { e.stopPropagation(); setMenuAcik(false); altKlasorEkle(); }}>📁 Klasör ekle</button>
                     )}
                     <button className="minlink" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 12px', textDecoration: 'none' }} onClick={(e: any) => { e.stopPropagation(); setMenuAcik(false); kartEkle(); }}>📝 Kart ekle</button>
+                    {yapistir && (
+                      <button className="minlink" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 12px', textDecoration: 'none' }} onClick={(e: any) => { e.stopPropagation(); setMenuAcik(false); yapistir(); }}>📋 Yapıştır</button>
+                    )}
                     <div style={{ borderTop: '1px solid var(--line)' }} />
                     <button className="minlink" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 12px', textDecoration: 'none' }} onClick={(e: any) => { e.stopPropagation(); setMenuAcik(false); yenidenAdlandirBaslat(); }}>✎ Yeniden adlandır</button>
                     <div style={{ borderTop: '1px solid var(--line)' }} />
@@ -1801,6 +1807,16 @@ export default function Rite() {
   const [kaGrup, setKaGrup] = useState<string | null>(null);
   // kaKokMenuAcik: "🗄️ Kişisel Arşiv" başlığının kendi ⋯ menüsü (kök seviyede "📁 Klasör ekle") açık mı.
   const [kaKokMenuAcik, setKaKokMenuAcik] = useState(false);
+  // havuzPano (2026-09-19, Behnan: "vscode'a bu kadar benzettik, kes-yapıştır mantığıyla kökten çözelim") —
+  // Kişisel Arşiv içinde bir kartı bir klasörden başkasına taşımanın yolu: kesilen kartın id'si burada tutulur
+  // (null = pano boş). HavuzKlasor'un ⋯ menüsündeki "📋 Yapıştır" pano doluyken görünür, tıklanınca setAktGrup
+  // ile hedef klasöre taşır. Şimdilik SADECE Kişisel Arşiv içi — Ajandadan Kaydedilenler'e Kes eklenmedi
+  // (Behnan kararı: "hayır, şimdilik sadece Kişisel Arşiv içi"), klasörlerin kendisini taşımak da ayrı bir tur.
+  const [havuzPano, setHavuzPano] = useState<string | null>(null);
+  // aktMenuAcik: Kişisel Arşiv'deki kart satırlarının ⋯ menüsü — HavuzKlasor'daki menuAcik ile aynı görsel dil
+  // (küçük açılır panel), ama satırlar (aktKart/aktKartGenis) ayrı bir bileşen olmadığı için kendi useState'i
+  // olamaz (rules of hooks) — ritMenuFor'daki gibi "hangi öğenin menüsü açık" tek bir page-level state'te (id).
+  const [aktMenuAcik, setAktMenuAcik] = useState<string | null>(null);
   // ajKategori (2026-09-18, Havuz yeniden tasarımı — 3. adım): "📦 Ajandadan Kaydedilenler" klasörünün
   // İÇİNDEKİ hangi (önceden hazırlanmış, KART_KATEGORILER) kategoride olduğumuz — null = kategori listesi.
   // Bu klasörde kullanıcı klasör yaratamıyor/silemiyor, sadece göz atıyor, o yüzden kaGrup/kaAlt'tan ayrı,
@@ -4561,20 +4577,53 @@ export default function Rite() {
           // bir klasöre dokunmak İÇİNE girer (kaGrup/kaAlt güncellenir), breadcrumb'taki bir üst parçaya
           // dokunmak geri çıkarır. actGroup/actAltGroup (Ajanda'daki ＋'dan yeni kart eklendiğinde hangi
           // klasöre düşeceğini belirleyen "en son açılan yer" state'i) klasöre her girişte de güncelleniyor.
-          const aktKart = (a: any) => (
-            <div key={a.id} className="actcard" onClick={() => openDetay(a, 'aktivite')}>
+          // aktMenu (2026-09-19, kes-yapıştır): Kişisel Arşiv kart satırlarının ⋯ menüsü — HavuzKlasor'daki ile
+          // aynı görsel dil (küçük açılır panel). SADECE Kişisel Arşiv kartlarında çağrılıyor (aktKart/
+          // aktKartGenis içinde kisisel kontrolüyle) — Ajandadan Kaydedilenler'de bu tur için hiç yok (Behnan
+          // kararı: "hayır, şimdilik sadece Kişisel Arşiv içi"). Kes'e tekrar basmak (zaten kesiliyse) iptal
+          // eder — VSCode'daki gibi. Sil, var olan silAktivite'yi (öncesinde sadece kart detayında) buraya da
+          // taşıyor; pano bu kart üzerindeyse silmeden önce temizleniyor ki hayalet bir pano kalmasın.
+          const aktMenu = (a: any) => (
+            <span style={{ position: 'relative' }} onClick={(e: any) => e.stopPropagation()}>
+              <button
+                type="button" title="Diğer"
+                onClick={(e: any) => { e.stopPropagation(); setAktMenuAcik((o: string | null) => (o === a.id ? null : a.id)); }}
+                style={{ background: 'none', border: 'none', padding: '4px 6px', fontSize: 16, fontWeight: 700, color: '#8a8169', cursor: 'pointer', lineHeight: 1 }}
+              >⋯</button>
+              {aktMenuAcik === a.id && (
+                <>
+                  <div onClick={(e: any) => { e.stopPropagation(); setAktMenuAcik(null); }} style={{ position: 'fixed', inset: 0, zIndex: 4 }} />
+                  <div style={{ position: 'absolute', right: 0, top: 26, background: '#fff', border: '1px solid var(--line)', borderRadius: 10, boxShadow: '0 4px 14px rgba(0,0,0,.12)', zIndex: 5, minWidth: 152, overflow: 'hidden' }}>
+                    <button className="minlink" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 12px', textDecoration: 'none' }} onClick={(e: any) => { e.stopPropagation(); setAktMenuAcik(null); setHavuzPano((p: string | null) => (p === a.id ? null : a.id)); }}>{havuzPano === a.id ? '❌ Kesmeyi iptal et' : '✂️ Kes'}</button>
+                    <div style={{ borderTop: '1px solid var(--line)' }} />
+                    <button className="minlink" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 12px', textDecoration: 'none', color: 'var(--red)' }} onClick={(e: any) => { e.stopPropagation(); setAktMenuAcik(null); if (havuzPano === a.id) setHavuzPano(null); silAktivite(a); }}>🗑 Sil</button>
+                  </div>
+                </>
+              )}
+            </span>
+          );
+          const aktKart = (a: any) => {
+            const kisisel = (a.havuz_kok || 'kisisel') !== 'ajandadan';
+            return (
+            <div key={a.id} className="actcard" style={{ opacity: havuzPano === a.id ? .45 : 1 }} onClick={() => openDetay(a, 'aktivite')}>
               <div style={{ flex: 1 }}><div className="n">{a.tur === 'program' ? '🧩 ' : ''}{a.ad}{a.puan ? <span className="puanp"> {'★'.repeat(a.puan)}</span> : ''}</div><div className="o">{a.tur === 'program' ? (a.adimlar || []).length + ' adım' + (a.sure_gun ? ' · ' + a.sure_gun + ' gün' : '') : (a.kaynak_etiket === 'Mezun' ? 'Mezun · ' : '') + Array.from(new Set((a.faydalar || []).map((k: string) => faydaMap[k]?.alan).filter(Boolean))).join(' · ')}</div></div>
+              {kisisel && aktMenu(a)}
               <span className="go">›</span>
             </div>
-          );
+            );
+          };
           // aktKartGenis (2026-09-18, Havuz yeniden tasarımı — 5. adım): aktKart'ın "kart görünümü" karşılığı —
           // aynı tıklama davranışı (openDetay), ama faydalar tek satırda birleştirilmiş metin yerine ayrı ayrı
           // etiket/chip (tagp p-alan, uygulamanın başka yerlerinde de kullandığı görsel dil) olarak gösteriliyor.
           const aktKartGenis = (a: any) => {
             const alanlar = Array.from(new Set((a.faydalar || []).map((k: string) => faydaMap[k]?.alan).filter(Boolean)));
+            const kisisel = (a.havuz_kok || 'kisisel') !== 'ajandadan';
             return (
-              <div key={a.id} className="card" style={{ cursor: 'pointer' }} onClick={() => openDetay(a, 'aktivite')}>
-                <div style={{ fontSize: 13.5, fontWeight: 700 }}>{a.tur === 'program' ? '🧩 ' : ''}{a.ad}{a.puan ? <span className="puanp"> {'★'.repeat(a.puan)}</span> : ''}</div>
+              <div key={a.id} className="card" style={{ cursor: 'pointer', opacity: havuzPano === a.id ? .45 : 1 }} onClick={() => openDetay(a, 'aktivite')}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 4 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, flex: 1 }}>{a.tur === 'program' ? '🧩 ' : ''}{a.ad}{a.puan ? <span className="puanp"> {'★'.repeat(a.puan)}</span> : ''}</div>
+                  {kisisel && aktMenu(a)}
+                </div>
                 {a.tur === 'program' ? (
                   <div className="note" style={{ marginTop: 4 }}>{(a.adimlar || []).length} adım{a.sure_gun ? ' · ' + a.sure_gun + ' gün' : ''}</div>
                 ) : (
@@ -4898,6 +4947,7 @@ export default function Rite() {
                     if (!acik) containerToggle('havuz_g_' + kid);
                   }}
                   kartEkle={() => { setActGroup(grupAdi); setActAltGroup(null); yeniHavuzTaslakAc('not'); }}
+                  yapistir={havuzPano ? () => { setAktGrup(havuzPano, grupAdi, undefined); setHavuzPano(null); containerAc('havuz_g_' + kid); } : undefined}
                   yenidenAdlandirBaslat={() => { if (real) { setGrupDuzenleId(real.id); setGrupDuzenleAd(real.ad); } }}
                   sil={() => { if (real) grupSil(real); }}
                 >
@@ -4940,6 +4990,7 @@ export default function Rite() {
                             duzenleKaydet={() => { if (realAlt) grupYenidenAdlandir(realAlt.id, grupDuzenleAd); setGrupDuzenleId(null); }}
                             duzenleVazgec={() => setGrupDuzenleId(null)}
                             kartEkle={() => { setActGroup(grupAdi); setActAltGroup(altAdi); yeniHavuzTaslakAc('not'); }}
+                            yapistir={havuzPano ? () => { setAktGrup(havuzPano, grupAdi, altAdi); setHavuzPano(null); containerAc('havuz_a_' + kidAlt); } : undefined}
                             yenidenAdlandirBaslat={() => { if (realAlt) { setGrupDuzenleId(realAlt.id); setGrupDuzenleAd(realAlt.ad); } }}
                             sil={() => { if (realAlt) grupSil(realAlt); }}
                           >
