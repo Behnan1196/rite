@@ -1840,13 +1840,6 @@ export default function Rite() {
   // Bu klasörde kullanıcı klasör yaratamıyor/silemiyor, sadece göz atıyor, o yüzden kaGrup/kaAlt'tan ayrı,
   // daha basit bir tek-seviye state yeterli.
   const [ajKategori, setAjKategori] = useState<string | null>(null);
-  // gelKategori (2026-09-18, Havuz yeniden tasarımı — 4. adım, Behnan: "Devam et ama uygun görürsen önce
-  // Gelenlerde de benzeri alt klasörler yaratılabilir", sonra: "ajandadan kaydedilenler gibi boşda olsa önceden
-  // klasörleri yaratalım ve içine düşsün"): "📥 Gelenler" de "Ajandadan Kaydedilenler" ile birebir aynı
-  // kart-tipi kategorilerini (KART_KATEGORILER) kullanıyor — burada da kullanıcı klasör yaratamıyor/silemiyor,
-  // sadece göz atıyor. Ajandadan Kaydedilenler'de olduğu gibi 4 kategori de her zaman sabit gösteriliyor
-  // (boş olsalar bile), otomatik atlama yok.
-  const [gelKategori, setGelKategori] = useState<string | null>(null);
   // gelAcikId (2026-09-18, Havuz yeniden tasarımı — 6. adım): Gelenler'in liste görünümünde hangi aktivite-türü
   // satırın genişletilmiş (aksiyon butonları görünür) halde olduğu — null = hepsi daralı. bkz. gelKartListe.
   const [gelAcikId, setGelAcikId] = useState<string | null>(null);
@@ -4678,12 +4671,6 @@ export default function Rite() {
             );
           };
           const aktKartFn = havuzGorunum === 'kart' ? aktKartGenis : aktKart;
-          // gelKategoriOf/gelKart (2026-09-18, Havuz yeniden tasarımı — 4. adım): Gelenler'deki bir dog_inbox
-          // satırının hangi KART_KATEGORILER kovasına düştüğünü belirler. 'aktivite' türündekiler paylaşılan bir
-          // kartın kart_tipi'ne bakar (Ajandadan Kaydedilenler ile aynı kartKategoriOf mantığı); diğerleri
-          // (InboxNot ile gösterilen not/mesaj paylaşımları) için kart_tipi bilgisi yok, en uygun varsayılan
-          // 'notlar' kovası.
-          const gelKategoriOf = (v: any) => v.tur === 'aktivite' ? kartKategoriOf(v.payload?.kartTipi) : 'notlar';
           // gelKartIcerik (2026-09-18, Havuz yeniden tasarımı — 6. adım, Behnan: "sanki toggle tek olup, tüm
           // klasörler için geçerli olsa daha uygun olur"): bir aktivite-türü Gelenler satırının tüm içeriği
           // (başlık, faydalar, aksiyon butonları, ibGrupSec formu) — hem gelKart (kart görünümü, dıştan bir
@@ -4881,38 +4868,17 @@ export default function Rite() {
               </div>
             ) : havuzFolder === 'gelenler' ? (
               <div>
-                {/* 📥 Gelenler kategorileri (2026-09-18, Havuz yeniden tasarımı — 4. adım, Behnan: "ajandadan
-                    kaydedilenler gibi boşda olsa önceden klasörleri yaratalım ve içine düşsün"): Ajandadan
-                    Kaydedilenler ile birebir aynı desen — KART_KATEGORILER'in 4 kovası her zaman sabit olarak
-                    gösteriliyor (boş olsa bile), tek dolu kategori varsa da otomatik atlama yok, kullanıcı hep
-                    klasör listesini görür. */}
-                {gelKategori ? (
-                  <>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '8px 0 10px' }}>
-                      <span style={{ cursor: 'pointer', color: 'var(--muted)' }} onClick={() => setGelKategori(null)}>📥 Gelenler</span>
-                      <span className="note" style={{ margin: 0 }}>›</span>
-                      <span style={{ fontWeight: 700 }}>{KART_KATEGORILER.find((k: any) => k.key === gelKategori)?.ad}</span>
-                    </div>
-                    {(() => {
-                      const items = inboxAktif.filter((v: any) => gelKategoriOf(v) === gelKategori);
-                      return items.length === 0 ? <div className="note">Bu kategoride henüz kart yok.</div> : items.map(gelKartFn);
-                    })()}
-                  </>
+                {/* 📥 Gelenler (2026-09-19, Behnan: "Gelenler aslında bizim Inbox'ımız ve canlı... inbox
+                    mantığını uygulayalım"): KART_KATEGORILER'e göre sabit klasörlere bölünmüş, Ajandadan
+                    Kaydedilenler ile aynı desen ARTIK YOK — Gelenler gerçek bir inbox: düz, en yeni üstte tek
+                    liste (Silinenler'in zaten kullandığı desenle aynı). Ekstra bir sıralamaya gerek yok,
+                    inboxAktif zaten loadInbox'ta created_at DESC ile geliyor. gelKartFn/gelKartIcerik (Kaydet/
+                    Ajandama ekle/Kişisel Arşiv'e taşı/Sil, bilgi kartı önizlemesi) hiç değişmeden aynen kullanılıyor
+                    — sadece üstlerindeki kategori-tıklama katmanı kalktı. */}
+                {inboxAktif.length === 0 ? (
+                  <p className="sub" style={{ marginTop: 0 }}>Gelenler boş. Sana bir şey paylaşıldığında burada, en yeni en üstte göreceksin.</p>
                 ) : (
-                  <>
-                    {inboxAktif.length === 0 && <p className="sub" style={{ marginTop: 0 }}>Gelenler boş. Sana bir şey paylaşıldığında burada, kart tipine göre otomatik kategorilere ayrılmış halde göreceksin.</p>}
-                    {KART_KATEGORILER.map((kat: any) => {
-                      const say = inboxAktif.filter((v: any) => gelKategoriOf(v) === kat.key).length;
-                      return (
-                        <div key={kat.key} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', padding: '9px 0', borderTop: '1px solid var(--line)' }} onClick={() => setGelKategori(kat.key)}>
-                          <span>{kat.ikon}</span>
-                          <span style={{ flex: 1, fontWeight: 600 }}>{kat.ad}</span>
-                          {say > 0 && <span className="note" style={{ margin: 0 }}>{say}</span>}
-                          <span className="go">›</span>
-                        </div>
-                      );
-                    })}
-                  </>
+                  inboxAktif.map(gelKartFn)
                 )}
               </div>
             ) : (
