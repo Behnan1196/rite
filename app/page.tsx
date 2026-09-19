@@ -37,12 +37,19 @@ function SortableRow({ id, disabled, children }: { id: string; disabled?: boolea
 // açıyor) — chevron'a tıklamak bunu TETİKLEMEZ (stopPropagation), ikisi birbirinden bağımsız kalsın diye.
 // `aksiyon`: sağda chevron'un solunda duran isteğe bağlı ekstra ikon/buton (ör. Odak Alanları'ndaki ⚙️, Ölçümler'
 // deki ＋) — CardContainer bunun içeriğine karışmıyor, olduğu gibi render ediyor.
-function CardContainer({ baslik, acik, onToggle, aksiyon, tikla, children }: {
+// `gorunum`/`onGorunumToggle` (2026-09-19, Behnan isteği — CardContainer'ın 2. davranışı, Notlar+Odak Alanları
+// pilot turu): liste↔kart görünüm geçişi. Behnan'ın notu: "bence tek bir icon alanı ile halledilebilir" — Havuz'
+// daki gibi İKİ ayrı chip (☰ Liste / ▦ Kart) DEĞİL, TEK bir ikon; ikon o an AÇILACAK modu gösteriyor (kartken ☰
+// "liste'ye geç" görünür, listeyken ▦ "kart'a geç" görünür) ve tıklanınca ikisi arasında geçiş yapıyor. Chevron'un
+// SOLUNDA, aksiyon'un sağında duruyor — header'daki üçüncü/son kontrol.
+function CardContainer({ baslik, acik, onToggle, aksiyon, tikla, gorunum, onGorunumToggle, children }: {
   baslik: string;
   acik: boolean;
   onToggle: () => void;
   aksiyon?: ReactNode;
   tikla?: () => void;
+  gorunum?: 'liste' | 'kart';
+  onGorunumToggle?: () => void;
   children: ReactNode;
 }) {
   return (
@@ -53,6 +60,14 @@ function CardContainer({ baslik, acik, onToggle, aksiyon, tikla, children }: {
       >
         <span style={{ flex: 1, fontWeight: 700 }}>{baslik}</span>
         {aksiyon}
+        {onGorunumToggle && (
+          <button
+            type="button"
+            title={gorunum === 'kart' ? 'Liste görünümüne geç' : 'Kart görünümüne geç'}
+            onClick={(e: any) => { e.stopPropagation(); onGorunumToggle(); }}
+            style={{ background: 'none', border: 'none', padding: '0 2px', fontSize: 15, fontWeight: 700, color: '#8a8169', cursor: 'pointer', lineHeight: 1 }}
+          >{gorunum === 'kart' ? '☰' : '▦'}</button>
+        )}
         <button
           type="button"
           title={acik ? 'Kapat' : 'Aç'}
@@ -93,6 +108,11 @@ const LS_DEV = 'rite_dev_mode';
 // menüden seçilir bir toparlama tasarımı yaparız" — yani chevron'un şu anki tekilliği kalıcı değil, ileride bir
 // aksiyon menüsüne dönüşebilir.
 const LS_CONTAINER = 'rite_container_acik';
+// LS_CONTAINER_GORUNUM (2026-09-19, CardContainer'ın 2. davranışı — liste↔kart görünümü, bkz. CardContainer'ın
+// gorunum/onGorunumToggle prop'u): LS_CONTAINER ile AYNI kalıp (cihaza özel, { containerId: 'liste'|'kart' }
+// haritası, tek anahtar) ama AYRI bir harita/anahtar — aç/kapa durumuyla görünüm modu birbirinden bağımsız
+// tercihler. Haritada olmayan bir id 'liste' sayılır (varsayılan, bkz. containerGorunumOf).
+const LS_CONTAINER_GORUNUM = 'rite_container_gorunum';
 
 const POOL: Record<string, { ad: string; dsc: string; zaman: string; flag?: string }[]> = {
   def: [
@@ -1530,6 +1550,22 @@ export default function Rite() {
       return nv;
     });
   }
+  // containerGorunum + containerGorunumToggle (2026-09-19, bkz. CardContainer'ın gorunum/onGorunumToggle prop'u,
+  // yukarısı): aç/kapa haritasıyla AYNI kalıp (id -> değer, tek localStorage anahtarı, cihaza özel) ama ayrı bir
+  // harita/anahtar — ikisi bağımsız tercihler (bir container kapalıyken de görünüm modu hatırlanmalı). Varsayılan
+  // 'liste' (Havuz'daki "sayı arttıkça varsayılan liste görünümü olmalı" ilkesiyle tutarlı) — haritada olmayan
+  // bir id 'liste' sayılır.
+  const [containerGorunum, setContainerGorunum] = useState<Record<string, 'liste' | 'kart'>>({});
+  function containerGorunumOf(id: string): 'liste' | 'kart' {
+    return containerGorunum[id] === 'kart' ? 'kart' : 'liste';
+  }
+  function containerGorunumToggle(id: string) {
+    setContainerGorunum((m: any) => {
+      const nv = { ...m, [id]: containerGorunumOf(id) === 'kart' ? 'liste' as const : 'kart' as const };
+      try { localStorage.setItem(LS_CONTAINER_GORUNUM, JSON.stringify(nv)); } catch (_) {}
+      return nv;
+    });
+  }
   // Ayarlar başlığına 7 kez art arda (1.5sn içinde) dokununca Geliştirici modu açılır/kapanır — Android'in
   // "build number" tıklama geleneğinin aynısı, bilinçli olarak (Behnan: "gerçek mobil uygulamaya da doğal
   // geçecek" diye düşünüldü). localStorage'a yazılır ki kapatıp açınca kaybolmasın.
@@ -1911,6 +1947,10 @@ export default function Rite() {
     try {
       const ca = localStorage.getItem(LS_CONTAINER);
       if (ca) setContainerAcik(JSON.parse(ca));
+    } catch (_) {}
+    try {
+      const cg = localStorage.getItem(LS_CONTAINER_GORUNUM);
+      if (cg) setContainerGorunum(JSON.parse(cg));
     } catch (_) {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -3722,6 +3762,8 @@ export default function Rite() {
               baslik="Odak Alanları"
               acik={containerAcik['home_odak'] === true}
               onToggle={() => containerToggle('home_odak')}
+              gorunum={containerGorunumOf('home_odak')}
+              onGorunumToggle={() => containerGorunumToggle('home_odak')}
               aksiyon={
                 <button
                   type="button"
@@ -3738,11 +3780,11 @@ export default function Rite() {
                 <div className="note">Henüz sana atanmış bir alan yok — Meridyen tarafından atandığında burada görünecek.</div>
               ) : homeAlanlarGorunur.length === 0 ? (
                 <div className="note">Tüm alanları gizledin — yukarıdaki ⚙️'den geri gösterebilirsin.</div>
-              ) : (
-              /* 2 sütunlu ızgara (kullanıcı isteği: "her satırda 2 kart olsun"). Gösterge artık 4 ayrı dilim değil,
-                  dolan TEK bir pil (kullanıcı isteği) — dolu kısmın tamamı seviyeye göre tek bir renk: %25 koyu
-                  kırmızı, %50 turuncu, %75 zeytin yeşili, %100 açık yeşil (bkz. HOME_SEVIYE_RENK, örnek renkler
-                  kullanıcıdan). */
+              ) : containerGorunumOf('home_odak') === 'kart' ? (
+              /* KART görünümü: 2 sütunlu ızgara (kullanıcı isteği: "her satırda 2 kart olsun"). Gösterge artık 4
+                  ayrı dilim değil, dolan TEK bir pil (kullanıcı isteği) — dolu kısmın tamamı seviyeye göre tek bir
+                  renk: %25 koyu kırmızı, %50 turuncu, %75 zeytin yeşili, %100 açık yeşil (bkz. HOME_SEVIYE_RENK,
+                  örnek renkler kullanıcıdan). */
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 {homeAlanlarGorunur.map((a) => {
                   const guncel = homeGuncelDeger(a.anahtar);
@@ -3757,6 +3799,24 @@ export default function Rite() {
                           {guncel && <div style={{ width: '100%', height: (guncel / HOME_SEVIYE.length) * 100 + '%', background: HOME_SEVIYE_RENK[guncel - 1], transition: 'height .3s' }} />}
                         </div>
                       </div>
+                    </div>
+                  );
+                })}
+              </div>
+              ) : (
+              /* LİSTE görünümü (2026-09-19, YENİ — CardContainer'ın liste/kart davranışı): tek sütun, `.mrow`
+                  (Havuz/Home'un diğer özet şeritlerinde de kullanılan standart satır deseni) — dolu seviye rengi
+                  artık uzun bir çubuk değil, küçük bir renkli nokta; her satır aynı şekilde tıklanıp detay açıyor. */
+              <div className="card">
+                {homeAlanlarGorunur.map((a: any) => {
+                  const guncel = homeGuncelDeger(a.anahtar);
+                  return (
+                    <div key={a.id} className="mrow" style={{ cursor: 'pointer' }} onClick={() => setHomeDetay(a.anahtar)}>
+                      <span>{a.ad}</span>
+                      <b style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 400 }}>
+                        {guncel && <span style={{ width: 8, height: 8, borderRadius: 4, background: HOME_SEVIYE_RENK[guncel - 1], flex: '0 0 auto' }} />}
+                        {guncel ? HOME_SEVIYE[guncel - 1] : 'Henüz değerlendirilmedi'}
+                      </b>
                     </div>
                   );
                 })}
@@ -4094,12 +4154,28 @@ export default function Rite() {
                 baslik="Notlar"
                 acik={containerAcik['ajanda_notlar'] === true}
                 onToggle={() => containerToggle('ajanda_notlar')}
+                gorunum={containerGorunumOf('ajanda_notlar')}
+                onGorunumToggle={() => containerGorunumToggle('ajanda_notlar')}
               >
-                {notlar.map((rt) => (
-                  <div key={rt.id} className="card" style={{ padding: '12px 14px', background: '#fdf6d3', border: 'none', borderRadius: 3, marginBottom: 8 }}>
-                    <RitItem rt={rt} />
+                {containerGorunumOf('ajanda_notlar') === 'kart' ? (
+                  notlar.map((rt) => (
+                    <div key={rt.id} className="card" style={{ padding: '12px 14px', background: '#fdf6d3', border: 'none', borderRadius: 3, marginBottom: 8 }}>
+                      <RitItem rt={rt} />
+                    </div>
+                  ))
+                ) : (
+                  /* LİSTE görünümü (2026-09-19, YENİ): tam bir yapışkan-not kutusu yerine tek bir sarı `.card`
+                      içinde art arda, aralarında ince çizgi ile ayrılan kompakt satırlar — Behnan'ın kendi
+                      örneğiydi ("notlar kısmı arttığında... liste görünümü olmalı"), RitItem zaten kompakt olduğu
+                      için içerik AYNI, sadece her notun kendi ayrı sarı kutusu/boşluğu kalkıyor. */
+                  <div className="card" style={{ background: '#fdf6d3', border: 'none' }}>
+                    {notlar.map((rt: any, i: number) => (
+                      <div key={rt.id} style={{ borderTop: i > 0 ? '1px solid rgba(0,0,0,.08)' : undefined, padding: '8px 0' }}>
+                        <RitItem rt={rt} />
+                      </div>
+                    ))}
                   </div>
-                ))}
+                )}
               </CardContainer>
             )}
             </>
