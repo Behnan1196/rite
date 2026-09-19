@@ -24,6 +24,47 @@ function SortableRow({ id, disabled, children }: { id: string; disabled?: boolea
   return <div ref={setNodeRef} style={{ ...style, touchAction: 'manipulation' }} {...attributes} {...listeners}>{children}</div>;
 }
 
+// CardContainer (2026-09-19, Behnan isteği): Home'daki Odak Alanları/Ölçümler, Havuz'un klasör başlıkları,
+// Ajanda'nın Notlar şeridi gibi ekranlarda birbirinden bağımsız kodlanmış ama görsel olarak AYNI "başlık şeridi"
+// desenini tek, genel-amaçlı bir bileşende toplamanın ilk adımı. Behnan: "davranışları mümkün olduğunca
+// standartlaştırmamız lazım... belki container rengi vs gibi değiştirilebilir özellikleri de ayarlanabilir
+// yapmalıyız" — nihai hedef göster/gizle, liste/kart görünümü, sürükle-bırak sıralama, renk/stil gibi davranışları
+// da kapsamak, ama v1 BİLİNÇLİ olarak SADECE aç/kapa (collapsible) taşıyor (bkz. LS_CONTAINER). Diğer davranışlar
+// eklenene kadar bu bileşen kasıtlı olarak küçük tutuluyor — erken genelleştirme riskinden kaçınmak için.
+// `acik`/`onToggle` state'i dışarıdan (çağıran ekran) geliyor — bileşen kendi state'ini tutmuyor, çünkü
+// kalıcılık (localStorage okuma/yazma) tek bir yerde (containerToggle) kalsın istendi.
+// `tikla`: header'ın TAMAMINA tıklanınca çalışacak isteğe bağlı aksiyon (ör. Ölçümler şeridi Ölçümler ekranını
+// açıyor) — chevron'a tıklamak bunu TETİKLEMEZ (stopPropagation), ikisi birbirinden bağımsız kalsın diye.
+// `aksiyon`: sağda chevron'un solunda duran isteğe bağlı ekstra ikon/buton (ör. Odak Alanları'ndaki ⚙️, Ölçümler'
+// deki ＋) — CardContainer bunun içeriğine karışmıyor, olduğu gibi render ediyor.
+function CardContainer({ baslik, acik, onToggle, aksiyon, tikla, children }: {
+  baslik: string;
+  acik: boolean;
+  onToggle: () => void;
+  aksiyon?: ReactNode;
+  tikla?: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div
+        style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#efe8da', borderRadius: 10, padding: '10px 10px 10px 12px', cursor: tikla ? 'pointer' : 'default' }}
+        onClick={tikla}
+      >
+        <span style={{ flex: 1, fontWeight: 700 }}>{baslik}</span>
+        {aksiyon}
+        <button
+          type="button"
+          title={acik ? 'Kapat' : 'Aç'}
+          onClick={(e: any) => { e.stopPropagation(); onToggle(); }}
+          style={{ background: 'none', border: 'none', padding: '0 2px', fontSize: 13, fontWeight: 700, color: '#8a8169', cursor: 'pointer', lineHeight: 1, transform: acik ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform .15s' }}
+        >▾</button>
+      </div>
+      {acik && <div style={{ marginTop: 8 }}>{children}</div>}
+    </div>
+  );
+}
+
 type Client = { id: string; ad: string; share_code?: string; auth_id?: string | null; meridyen_bagli?: boolean; email?: string };
 const LS = 'rite_client';
 // LS_BASLANGIC (2026-09-18, Behnan isteği — "yolda yürürken falan sürekli not ekliyorum, program açık değilse
@@ -42,6 +83,16 @@ const BASLANGIC_SEKMELERI: [string, string, string][] = [
 // ileride gerçek mobil uygulamaya da doğal taşınır. Açıkken Ekle menüsünde "🧪 Lab" seçeneği beliriyor —
 // normal kullanıcılar (ileride gerçek danışanlar) bu gizli kapıyı hiç görmeyecek.
 const LS_DEV = 'rite_dev_mode';
+// LS_CONTAINER (2026-09-19, Behnan isteği — "CardContainer" standardizasyonu): Home/Ajanda/Havuz'da tekrar eden
+// başlık-şeridi desenini (bkz. CardContainer bileşeni, yukarısı) tek bir yerde toplamanın ilk adımı — v1 SADECE
+// aç/kapa (collapsible) taşıyor. Behnan: "kapalı açık durumu localstorage'da saklansın" (cihaza özel, hesaba
+// senkron DEĞİL — `LS_BASLANGIC`/`LS_DEV` ile aynı kalıp) ve "varsayılan kapalı olsun". Tek anahtar altında
+// { containerId: boolean } haritası tutuluyor (her container için ayrı localStorage anahtarı açmak yerine) —
+// haritada olmayan/false olan bir id KAPALI sayılır (varsayılan kapalı kararına uygun). Göster/gizle, liste/kart,
+// sürükle-bırak, renk gibi diğer CardContainer davranışları eklendiğinde Behnan'ın notu: "hangisi icon hangisi
+// menüden seçilir bir toparlama tasarımı yaparız" — yani chevron'un şu anki tekilliği kalıcı değil, ileride bir
+// aksiyon menüsüne dönüşebilir.
+const LS_CONTAINER = 'rite_container_acik';
 
 const POOL: Record<string, { ad: string; dsc: string; zaman: string; flag?: string }[]> = {
   def: [
@@ -1465,6 +1516,20 @@ export default function Rite() {
       return nv;
     });
   }
+  // containerAcik + containerToggle (2026-09-19, bkz. LS_CONTAINER/CardContainer, yukarısı): CardContainer'ların
+  // aç/kapa durumunu tutan TEK harita — { containerId: boolean }. Varsayılan {} (SSR/hidrasyon güvenliği için,
+  // devMode gibi, gerçek değer mount'tan sonra localStorage'dan okunuyor) — haritada olmayan bir id de zaten
+  // KAPALI sayılıyor (containerAcik[id] === true kontrolü), yani "varsayılan kapalı" kararı ekstra bir kod
+  // gerektirmiyor. containerToggle her çağrıda haritanın TAMAMINI localStorage'a yazıyor (her container için ayrı
+  // anahtar açmak yerine) — container sayısı arttıkça bu yaklaşım hâlâ tek bir okuma/yazma kalıyor.
+  const [containerAcik, setContainerAcik] = useState<Record<string, boolean>>({});
+  function containerToggle(id: string) {
+    setContainerAcik((m) => {
+      const nv = { ...m, [id]: !(m[id] === true) };
+      try { localStorage.setItem(LS_CONTAINER, JSON.stringify(nv)); } catch (_) {}
+      return nv;
+    });
+  }
   // Ayarlar başlığına 7 kez art arda (1.5sn içinde) dokununca Geliştirici modu açılır/kapanır — Android'in
   // "build number" tıklama geleneğinin aynısı, bilinçli olarak (Behnan: "gerçek mobil uygulamaya da doğal
   // geçecek" diye düşünüldü). localStorage'a yazılır ki kapatıp açınca kaybolmasın.
@@ -1842,6 +1907,10 @@ export default function Rite() {
     try {
       const dv = localStorage.getItem(LS_DEV);
       if (dv) setDevMode(true);
+    } catch (_) {}
+    try {
+      const ca = localStorage.getItem(LS_CONTAINER);
+      if (ca) setContainerAcik(JSON.parse(ca));
     } catch (_) {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -3645,49 +3714,55 @@ export default function Rite() {
             {cNot && <div className="card" style={{ marginBottom: 12 }}><h3>Koç notu</h3><p style={{ fontSize: 12, color: '#4a565c', lineHeight: 1.55 }}>{cNot}</p></div>}
             {/* Alanlar artık kendi başlıklı "penceresi" içinde (2026-09-17, Behnan kararı: "Alanları da bir
                 pencereye alalım") — Ölçümler/Havuz grup başlıklarıyla aynı şerit standardı, sağ uçta metinsiz
-                sadece ayar ikonu (eski "⚙️ Alanları yönet" metni kaldırıldı, ikon aynı işlevi görüyor). */}
-            <div
-              style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#efe8da', borderRadius: 10, padding: '10px 10px 10px 12px' }}
+                sadece ayar ikonu (eski "⚙️ Alanları yönet" metni kaldırıldı, ikon aynı işlevi görüyor).
+                2026-09-19 (Behnan isteği — CardContainer standardizasyonu, ilk uygulama): artık CardContainer
+                sarmalıyor, chevron ile aç/kapa (varsayılan KAPALI — "yanımda duran insanlar kolayca görmesin"
+                gerekçesi). ⚙️ ikonu aynen `aksiyon` prop'una taşındı, işlevi değişmedi. */}
+            <CardContainer
+              baslik="Odak Alanları"
+              acik={containerAcik['home_odak'] === true}
+              onToggle={() => containerToggle('home_odak')}
+              aksiyon={
+                <button
+                  type="button"
+                  title="Alanları yönet"
+                  onClick={(e: any) => { e.stopPropagation(); setHomeYonetOpen(true); }}
+                  style={{ background: 'none', border: 'none', padding: '0 2px', fontSize: 16, fontWeight: 700, color: '#8a8169', cursor: 'pointer', lineHeight: 1 }}
+                >⚙️</button>
+              }
             >
-              <span style={{ flex: 1, fontWeight: 700 }}>Odak Alanları</span>
-              <button
-                type="button"
-                title="Alanları yönet"
-                onClick={() => setHomeYonetOpen(true)}
-                style={{ background: 'none', border: 'none', padding: '0 2px', fontSize: 16, fontWeight: 700, color: '#8a8169', cursor: 'pointer', lineHeight: 1 }}
-              >⚙️</button>
-            </div>
-            {/* 2026-09 (Behnan kararı — "Alanlar" mimarisi): artık her danışana otomatik tüm alanlar
-                tohumlanmıyor, Rite Studio'dan atanana kadar Home boş görünebilir — bu iki durumu ayrı ayrı
-                açıklıyoruz (hiç atanmamış vs hepsi gizlenmiş). */}
-            {homeAlanlar.length === 0 ? (
-              <div className="note" style={{ marginTop: 8 }}>Henüz sana atanmış bir alan yok — Meridyen tarafından atandığında burada görünecek.</div>
-            ) : homeAlanlarGorunur.length === 0 ? (
-              <div className="note" style={{ marginTop: 8 }}>Tüm alanları gizledin — sağ üstteki ⚙️'den geri gösterebilirsin.</div>
-            ) : (
-            /* 2 sütunlu ızgara (kullanıcı isteği: "her satırda 2 kart olsun"). Gösterge artık 4 ayrı dilim değil,
-                dolan TEK bir pil (kullanıcı isteği) — dolu kısmın tamamı seviyeye göre tek bir renk: %25 koyu
-                kırmızı, %50 turuncu, %75 zeytin yeşili, %100 açık yeşil (bkz. HOME_SEVIYE_RENK, örnek renkler
-                kullanıcıdan). */
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 10 }}>
-              {homeAlanlarGorunur.map((a) => {
-                const guncel = homeGuncelDeger(a.anahtar);
-                return (
-                  <div key={a.id} className="card" style={{ margin: 0, cursor: 'pointer' }} onClick={() => setHomeDetay(a.anahtar)}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                      <div style={{ minWidth: 0 }}>
-                        <h3 style={{ margin: 0 }}>{a.ad}</h3>
-                        <div className="note" style={{ marginTop: 4 }}>{guncel ? HOME_SEVIYE[guncel - 1] : 'Henüz değerlendirilmedi'}</div>
-                      </div>
-                      <div style={{ width: 18, height: 50, borderRadius: 6, border: '1px solid var(--line)', background: '#efe8da', display: 'flex', alignItems: 'flex-end', overflow: 'hidden', flex: '0 0 auto' }} title={guncel ? HOME_SEVIYE[guncel - 1] : 'Henüz değerlendirilmedi'}>
-                        {guncel && <div style={{ width: '100%', height: (guncel / HOME_SEVIYE.length) * 100 + '%', background: HOME_SEVIYE_RENK[guncel - 1], transition: 'height .3s' }} />}
+              {/* 2026-09 (Behnan kararı — "Alanlar" mimarisi): artık her danışana otomatik tüm alanlar
+                  tohumlanmıyor, Rite Studio'dan atanana kadar Home boş görünebilir — bu iki durumu ayrı ayrı
+                  açıklıyoruz (hiç atanmamış vs hepsi gizlenmiş). */}
+              {homeAlanlar.length === 0 ? (
+                <div className="note">Henüz sana atanmış bir alan yok — Meridyen tarafından atandığında burada görünecek.</div>
+              ) : homeAlanlarGorunur.length === 0 ? (
+                <div className="note">Tüm alanları gizledin — yukarıdaki ⚙️'den geri gösterebilirsin.</div>
+              ) : (
+              /* 2 sütunlu ızgara (kullanıcı isteği: "her satırda 2 kart olsun"). Gösterge artık 4 ayrı dilim değil,
+                  dolan TEK bir pil (kullanıcı isteği) — dolu kısmın tamamı seviyeye göre tek bir renk: %25 koyu
+                  kırmızı, %50 turuncu, %75 zeytin yeşili, %100 açık yeşil (bkz. HOME_SEVIYE_RENK, örnek renkler
+                  kullanıcıdan). */
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                {homeAlanlarGorunur.map((a) => {
+                  const guncel = homeGuncelDeger(a.anahtar);
+                  return (
+                    <div key={a.id} className="card" style={{ margin: 0, cursor: 'pointer' }} onClick={() => setHomeDetay(a.anahtar)}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                        <div style={{ minWidth: 0 }}>
+                          <h3 style={{ margin: 0 }}>{a.ad}</h3>
+                          <div className="note" style={{ marginTop: 4 }}>{guncel ? HOME_SEVIYE[guncel - 1] : 'Henüz değerlendirilmedi'}</div>
+                        </div>
+                        <div style={{ width: 18, height: 50, borderRadius: 6, border: '1px solid var(--line)', background: '#efe8da', display: 'flex', alignItems: 'flex-end', overflow: 'hidden', flex: '0 0 auto' }} title={guncel ? HOME_SEVIYE[guncel - 1] : 'Henüz değerlendirilmedi'}>
+                          {guncel && <div style={{ width: '100%', height: (guncel / HOME_SEVIYE.length) * 100 + '%', background: HOME_SEVIYE_RENK[guncel - 1], transition: 'height .3s' }} />}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-            )}
+                  );
+                })}
+              </div>
+              )}
+            </CardContainer>
             {/* Son ölçümler (2026-09, Behnan kararı): Gelişim'in eski "Ölçümler" kartının yerini alıyor —
                 "home'a yerleştirsek güzel olur, son ölçümleri orada alırız". Alan/dikey gruplaması yok, sadece
                 her ölçümün en son değeri (bkz. sonOlcumler) — Meridyen'in 13 alanıyla eski fayda-kaynaklı alan
@@ -3698,28 +3773,34 @@ export default function Rite() {
                 2026-09 (aynı gün, Gelişim'in kaldırılması — Behnan kararı: "bağlam bazında başka ekranlar
                 açabiliriz"): şeridin kendisi (etiket) artık EKLEME değil, Ruh hali'nin (eskiden Gelişim'de)
                 taşındığı bağlamsal "Ölçümler" detay/analiz ekranını açıyor — ekleme sadece sağdaki ＋'da kaldı
-                (stopPropagation ile şeridin tıklamasını tetiklemiyor). */}
-            <div style={{ marginTop: 10 }}>
-              <div
-                style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', background: '#efe8da', borderRadius: 10, padding: '10px 10px 10px 12px' }}
-                onClick={() => setScreen('olcumler')}
-              >
-                <span style={{ flex: 1, fontWeight: 700 }}>Ölçümler</span>
+                (stopPropagation ile şeridin tıklamasını tetiklemiyor).
+                2026-09-19 (CardContainer standardizasyonu): `tikla` prop'una taşındı — şeride (chevron/＋ hariç)
+                dokununca hâlâ Ölçümler ekranını açıyor, chevron ise SADECE aşağıdaki "son ölçümler" önizlemesini
+                aç/kapıyor (varsayılan KAPALI, aynı gizlilik gerekçesi — "keza ölçümlerim içinde"). */}
+            <CardContainer
+              baslik="Ölçümler"
+              acik={containerAcik['home_olcumler'] === true}
+              onToggle={() => containerToggle('home_olcumler')}
+              tikla={() => setScreen('olcumler')}
+              aksiyon={
                 <button
                   type="button"
                   title="Ölçüm ekle"
-                  onClick={(e) => { e.stopPropagation(); setOlcumSecAnahtar(null); setOlcumOzelAd(''); setOlcumDeger(''); setOlcumBirim(''); setOlcumEkleOpen(true); }}
+                  onClick={(e: any) => { e.stopPropagation(); setOlcumSecAnahtar(null); setOlcumOzelAd(''); setOlcumDeger(''); setOlcumBirim(''); setOlcumEkleOpen(true); }}
                   style={{ background: 'none', border: 'none', padding: '0 2px', fontSize: 16, fontWeight: 700, color: '#8a8169', cursor: 'pointer', lineHeight: 1 }}
                 >＋</button>
-              </div>
-              {sonOlcumler.length > 0 && (
-                <div className="card" style={{ marginTop: 8 }}>
+              }
+            >
+              {sonOlcumler.length > 0 ? (
+                <div className="card">
                   {sonOlcumler.map((o) => (
                     <div key={o.k} className="mrow"><span>{o.etiket}</span><b>{o.deger} {o.birim}</b></div>
                   ))}
                 </div>
+              ) : (
+                <div className="note">Henüz ölçüm eklenmedi.</div>
               )}
-            </div>
+            </CardContainer>
             {/* Kapsama (eski Gelişim'in ana kartı — haftalık alan-dokunma analizi) 2026-09'da (Behnan kararı)
                 bottom_nav'dan çıkarılıp Home'dan erişilen, bağlama girmeyen genel bir "Analiz" ekranına taşındı
                 — Behnan'ın deyişiyle "bottom nav'da görünmeyen ama home'dan ulaşabiliriz". İçerik/mantık hiç
