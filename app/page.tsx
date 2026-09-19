@@ -49,7 +49,27 @@ function SortableRow({ id, disabled, children }: { id: string; disabled?: boolea
 // edilmiyor. Verilirse kapalıyken içerik yine render ediliyor ama sabit yükseklikte kırpılıyor (overflow hidden)
 // + alt kenarda hafif bir gölge (arka plan rengi ne olursa olsun çalışsın diye gradient yerine inset shadow) —
 // "daha var" hissi versin diye.
-function CardContainer({ baslik, acik, onToggle, aksiyon, tikla, gorunum, onGorunumToggle, kapaliOnizleme, children }: {
+// RENK_TEMALARI (2026-09-19, Behnan isteği — CardContainer'ın 5. davranışı, renk/stil): [key, etiket, renk] —
+// tek bir pastel ton hem başlık şeridinde hem içerikte (Behnan: "başlık + içerik teması birlikte") kullanılıyor,
+// ayrı ayrı iki ton yerine TEK renk her yerde (en basit, en tutarlı okuma). 'varsayilan' özel: başlık `#efe8da`
+// (eski sabit renk, DEĞİŞMEDİ), içerik `#fff` (`.card`'ın zaten varsayılan rengi) — yani renk hiç seçilmemiş bir
+// container'ın görünümü birebir eskisiyle AYNI kalıyor. Diğerleri uygulamanın zaten kullandığı tonlardan seçildi
+// (sarı = Notlar'ın eski sabit sticky-note rengi `#fdf6d3`, yeşil = `--green2`) — yeni, yabancı renkler icat
+// edilmedi. `renkIcerik`/`renkBaslik` çağıran ekranların (Odak Alanları/Notlar) kendi kart arka planlarını AYNI
+// paletten okuyabilmesi için ayrı helper'lar — CardContainer children'ın içine karışamadığı için (opak ReactNode),
+// "tema birlikte" ilkesi children'ı render eden kod bu paleti KENDİSİ de okuyarak sağlanıyor.
+const RENK_TEMALARI: [string, string, string, string][] = [
+  ['varsayilan', 'Bej', '#efe8da', '#ffffff'],
+  ['sari', 'Sarı', '#fdf6d3', '#fdf6d3'],
+  ['yesil', 'Yeşil', '#eaf5ee', '#eaf5ee'],
+  ['mavi', 'Mavi', '#e6eef9', '#e6eef9'],
+  ['pembe', 'Pembe', '#fbe9ee', '#fbe9ee'],
+  ['lavanta', 'Lavanta', '#efe9f7', '#efe9f7'],
+];
+function renkTema(key?: string) { return RENK_TEMALARI.find((r) => r[0] === key) || RENK_TEMALARI[0]; }
+function renkBaslik(key?: string) { return renkTema(key)[2]; }
+function renkIcerik(key?: string) { return renkTema(key)[3]; }
+function CardContainer({ baslik, acik, onToggle, aksiyon, tikla, gorunum, onGorunumToggle, kapaliOnizleme, renk, onRenkSec, children }: {
   baslik: string;
   acik: boolean;
   onToggle: () => void;
@@ -58,16 +78,29 @@ function CardContainer({ baslik, acik, onToggle, aksiyon, tikla, gorunum, onGoru
   gorunum?: 'liste' | 'kart';
   onGorunumToggle?: () => void;
   kapaliOnizleme?: number;
+  renk?: string;
+  onRenkSec?: (renk: string) => void;
   children: ReactNode;
 }) {
+  // renkAcik: renk paleti şeridinin aç/kapa durumu — SADECE bu bileşenin kendi geçici UI state'i (aç/kapa,
+  // görünüm gibi kalıcı bir tercih değil, o yüzden dışarıdan değil burada tutuluyor).
+  const [renkAcik, setRenkAcik] = useState(false);
   return (
     <div style={{ marginTop: 10 }}>
       <div
-        style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#efe8da', borderRadius: 10, padding: '10px 10px 10px 12px', cursor: tikla ? 'pointer' : 'default' }}
+        style={{ display: 'flex', alignItems: 'center', gap: 8, background: renkBaslik(renk), borderRadius: 10, padding: '10px 10px 10px 12px', cursor: tikla ? 'pointer' : 'default' }}
         onClick={tikla}
       >
         <span style={{ flex: 1, fontWeight: 700 }}>{baslik}</span>
         {aksiyon}
+        {onRenkSec && (
+          <button
+            type="button"
+            title="Renk seç"
+            onClick={(e: any) => { e.stopPropagation(); setRenkAcik((o: boolean) => !o); }}
+            style={{ width: 14, height: 14, borderRadius: 7, border: '1px solid rgba(0,0,0,.2)', background: renkBaslik(renk), padding: 0, cursor: 'pointer', flex: '0 0 auto' }}
+          />
+        )}
         {onGorunumToggle && (
           <button
             type="button"
@@ -83,6 +116,18 @@ function CardContainer({ baslik, acik, onToggle, aksiyon, tikla, gorunum, onGoru
           style={{ background: 'none', border: 'none', padding: '0 2px', fontSize: 13, fontWeight: 700, color: '#8a8169', cursor: 'pointer', lineHeight: 1, transform: acik ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform .15s' }}
         >▾</button>
       </div>
+      {onRenkSec && renkAcik && (
+        <div style={{ display: 'flex', gap: 8, marginTop: 6, padding: '2px 2px' }} onClick={(e: any) => e.stopPropagation()}>
+          {RENK_TEMALARI.map((r) => (
+            <span
+              key={r[0]}
+              onClick={() => { onRenkSec(r[0]); setRenkAcik(false); }}
+              title={r[1]}
+              style={{ width: 22, height: 22, borderRadius: 11, background: r[2], border: r[0] === (renk || 'varsayilan') ? '2px solid var(--ink)' : '1px solid rgba(0,0,0,.15)', cursor: 'pointer' }}
+            />
+          ))}
+        </div>
+      )}
       {acik ? (
         <div style={{ marginTop: 8 }}>{children}</div>
       ) : kapaliOnizleme ? (
@@ -127,6 +172,14 @@ const LS_CONTAINER = 'rite_container_acik';
 // haritası, tek anahtar) ama AYRI bir harita/anahtar — aç/kapa durumuyla görünüm modu birbirinden bağımsız
 // tercihler. Haritada olmayan bir id 'liste' sayılır (varsayılan, bkz. containerGorunumOf).
 const LS_CONTAINER_GORUNUM = 'rite_container_gorunum';
+// LS_CONTAINER_RENK (2026-09-19, CardContainer'ın 5. davranışı — renk/stil, bkz. RENK_TEMALARI ve CardContainer'ın
+// renk/onRenkSec prop'u): LS_CONTAINER ile AYNI kalıp (cihaza özel, { containerId: renkKey } haritası, tek anahtar).
+// Behnan'ın iki kararı: (1) kapsam "Başlık + içerik teması birlikte" — yani tek bir renk seçimi hem başlık şeridini
+// hem de içerik/kart temasını birlikte belirliyor (bkz. renkBaslik/renkIcerik); (2) "Kullanıcı seçebilsin" — bu,
+// kapaliOnizleme'nin aksine dev-config değil, kullanıcının panelden seçtiği ve kalıcı olan bir tercih. Haritada
+// olmayan bir id 'varsayilan' sayılır (bkz. containerRenkOf), her container kendi varsayılanını verebilir (Notlar
+// mevcut sarı görünümünü korumak için 'sari' varsayılanıyla çağrılır).
+const LS_CONTAINER_RENK = 'rite_container_renk';
 
 const POOL: Record<string, { ad: string; dsc: string; zaman: string; flag?: string }[]> = {
   def: [
@@ -1588,6 +1641,23 @@ export default function Rite() {
       return nv;
     });
   }
+  // containerRenk + containerRenkOf + containerRenkSec (2026-09-19, bkz. LS_CONTAINER_RENK/RENK_TEMALARI/
+  // CardContainer'ın renk/onRenkSec prop'u, yukarısı): aynı kalıp (id -> değer, tek localStorage anahtarı, cihaza
+  // özel) ama diğerlerinden farklı olarak bu bir TOGGLE değil, doğrudan bir SET (kullanıcı paletten bir renk
+  // seçiyor). Behnan: "Kullanıcı seçebilsin" — kapaliOnizleme'nin aksine dev-config değil, kalıcı kullanıcı
+  // tercihi. Haritada olmayan bir id 'varsayilan' sayılır, ama her çağıran kendi varsayılanını verebilir
+  // (containerAcikOf ile aynı ikinci-parametre deseni) — örn. Notlar 'sari' varsayılanıyla çağrılır.
+  const [containerRenk, setContainerRenk] = useState<Record<string, string>>({});
+  function containerRenkOf(id: string, varsayilan?: string): string {
+    return containerRenk[id] || varsayilan || 'varsayilan';
+  }
+  function containerRenkSec(id: string, renk: string) {
+    setContainerRenk((m: any) => {
+      const nv = { ...m, [id]: renk };
+      try { localStorage.setItem(LS_CONTAINER_RENK, JSON.stringify(nv)); } catch (_) {}
+      return nv;
+    });
+  }
   // Ayarlar başlığına 7 kez art arda (1.5sn içinde) dokununca Geliştirici modu açılır/kapanır — Android'in
   // "build number" tıklama geleneğinin aynısı, bilinçli olarak (Behnan: "gerçek mobil uygulamaya da doğal
   // geçecek" diye düşünüldü). localStorage'a yazılır ki kapatıp açınca kaybolmasın.
@@ -1973,6 +2043,10 @@ export default function Rite() {
     try {
       const cg = localStorage.getItem(LS_CONTAINER_GORUNUM);
       if (cg) setContainerGorunum(JSON.parse(cg));
+    } catch (_) {}
+    try {
+      const cr = localStorage.getItem(LS_CONTAINER_RENK);
+      if (cr) setContainerRenk(JSON.parse(cr));
     } catch (_) {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -3823,13 +3897,18 @@ export default function Rite() {
                 sadece ayar ikonu (eski "⚙️ Alanları yönet" metni kaldırıldı, ikon aynı işlevi görüyor).
                 2026-09-19 (Behnan isteği — CardContainer standardizasyonu, ilk uygulama): artık CardContainer
                 sarmalıyor, chevron ile aç/kapa (varsayılan KAPALI — "yanımda duran insanlar kolayca görmesin"
-                gerekçesi). ⚙️ ikonu aynen `aksiyon` prop'una taşındı, işlevi değişmedi. */}
+                gerekçesi). ⚙️ ikonu aynen `aksiyon` prop'una taşındı, işlevi değişmedi.
+                2026-09-19 (CardContainer'ın 5. davranışı, renk/stil): `renk`/`onRenkSec` eklendi — varsayılan
+                'varsayilan' (mevcut bej/beyaz görünüm aynen korunuyor, kullanıcı seçmediği sürece hiçbir şey
+                değişmiyor). */}
             <CardContainer
               baslik="Odak Alanları"
               acik={containerAcik['home_odak'] === true}
               onToggle={() => containerToggle('home_odak')}
               gorunum={containerGorunumOf('home_odak')}
               onGorunumToggle={() => containerGorunumToggle('home_odak')}
+              renk={containerRenkOf('home_odak')}
+              onRenkSec={(r) => containerRenkSec('home_odak', r)}
               aksiyon={
                 <button
                   type="button"
@@ -3863,7 +3942,7 @@ export default function Rite() {
                       const guncel = homeGuncelDeger(a.anahtar);
                       return (
                         <SortableRow key={a.id} id={a.id}>
-                          <div className="card" style={{ margin: 0, cursor: 'pointer' }} onClick={() => setHomeDetay(a.anahtar)}>
+                          <div className="card" style={{ margin: 0, cursor: 'pointer', background: renkIcerik(containerRenkOf('home_odak')) }} onClick={() => setHomeDetay(a.anahtar)}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                               <div style={{ minWidth: 0 }}>
                                 <h3 style={{ margin: 0 }}>{a.ad}</h3>
@@ -3888,7 +3967,7 @@ export default function Rite() {
                   (düz liste). */
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEndHomeAlan}>
                 <SortableContext items={homeAlanlarGorunur.map((a: any) => a.id)} strategy={verticalListSortingStrategy}>
-                  <div className="card">
+                  <div className="card" style={{ background: renkIcerik(containerRenkOf('home_odak')) }}>
                     {homeAlanlarGorunur.map((a: any) => {
                       const guncel = homeGuncelDeger(a.anahtar);
                       return (
@@ -4242,16 +4321,22 @@ export default function Rite() {
                 gorunum={containerGorunumOf('ajanda_notlar')}
                 onGorunumToggle={() => containerGorunumToggle('ajanda_notlar')}
                 kapaliOnizleme={90}
+                renk={containerRenkOf('ajanda_notlar', 'sari')}
+                onRenkSec={(r) => containerRenkSec('ajanda_notlar', r)}
               >
                 {/* 2026-09-19 (Behnan: "Fikrim değişti, sürükle-bırak eklensin" — bkz. onDragEndNotlar, yukarısı):
                     her iki görünüm de aynı DndContext/verticalListSortingStrategy ile sarılı, kartı basılı tutup
-                    sürükleyerek sıralamak için — Ajanda'nın gün listesiyle AYNI desen (SortableRow). */}
+                    sürükleyerek sıralamak için — Ajanda'nın gün listesiyle AYNI desen (SortableRow).
+                    2026-09-19 (CardContainer'ın 5. davranışı, renk/stil): hardcoded '#fdf6d3' yerine artık
+                    renkIcerik(containerRenkOf('ajanda_notlar', 'sari')) — varsayılan 'sari' ile mevcut sarı
+                    yapışkan-not görünümü AYNEN korunuyor, kullanıcı paletten başka bir renk seçmediği sürece
+                    hiçbir şey değişmiyor. */}
                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEndNotlar}>
                   <SortableContext items={notlar.map((rt: any) => rt.id)} strategy={verticalListSortingStrategy}>
                     {containerGorunumOf('ajanda_notlar') === 'kart' ? (
                       notlar.map((rt: any) => (
                         <SortableRow key={rt.id} id={rt.id}>
-                          <div className="card" style={{ padding: '12px 14px', background: '#fdf6d3', border: 'none', borderRadius: 3, marginBottom: 8 }}>
+                          <div className="card" style={{ padding: '12px 14px', background: renkIcerik(containerRenkOf('ajanda_notlar', 'sari')), border: 'none', borderRadius: 3, marginBottom: 8 }}>
                             <RitItem rt={rt} />
                           </div>
                         </SortableRow>
@@ -4261,7 +4346,7 @@ export default function Rite() {
                           içinde art arda, aralarında ince çizgi ile ayrılan kompakt satırlar — Behnan'ın kendi
                           örneğiydi ("notlar kısmı arttığında... liste görünümü olmalı"), RitItem zaten kompakt
                           olduğu için içerik AYNI, sadece her notun kendi ayrı sarı kutusu/boşluğu kalkıyor. */
-                      <div className="card" style={{ background: '#fdf6d3', border: 'none' }}>
+                      <div className="card" style={{ background: renkIcerik(containerRenkOf('ajanda_notlar', 'sari')), border: 'none' }}>
                         {notlar.map((rt: any, i: number) => (
                           <SortableRow key={rt.id} id={rt.id}>
                             <div style={{ borderTop: i > 0 ? '1px solid rgba(0,0,0,.08)' : undefined, padding: '8px 0' }}>
