@@ -150,7 +150,7 @@ function CardContainer({ baslik, acik, onToggle, aksiyon, tikla, gorunum, onGoru
 // Aç/kapa ikonu (📁/📂) CardContainer'daki ayrı chevron yerine kendisi durumu gösteriyor (Behnan: "klasör adına
 // basınca açılıp kapanıyor, solundaki oka gerek yok"). Sıra artık İSME GÖRE OTOMATİK (çağıran taraf sort
 // ediyor) — bu yüzden CardContainer'daki gibi sürükle-bırak/sıra prop'u da YOK.
-function HavuzKlasor({ ad, sayi, acik, onToggle, altKlasorEkle, kartEkle, yapistir, yenidenAdlandirBaslat, sil, duzenleAcik, duzenleAd, onDuzenleAdChange, duzenleKaydet, duzenleVazgec, children }: {
+function HavuzKlasor({ ad, sayi, acik, onToggle, altKlasorEkle, kartEkle, yapistir, kes, kesildi, yenidenAdlandirBaslat, sil, duzenleAcik, duzenleAd, onDuzenleAdChange, duzenleKaydet, duzenleVazgec, children }: {
   ad: string;
   sayi?: number;
   acik: boolean;
@@ -160,6 +160,11 @@ function HavuzKlasor({ ad, sayi, acik, onToggle, altKlasorEkle, kartEkle, yapist
   // yapistir (2026-09-19, kes-yapıştır): sadece pano doluyken çağrı yeri tarafından geçiliyor — undefined'sa
   // menüde "Yapıştır" hiç görünmez (boş panoyla her klasörde anlamsız bir seçenek göstermemek için).
   yapistir?: () => void;
+  // kes/kesildi (2026-09-19, "alt klasörleri ana klasörler arasında taşıma"): SADECE Alt Grup çağrı yerinden
+  // geçiliyor — Grup (üst seviye) satırları klasör olarak kesilemiyor, sadece kartların/alt klasörlerin
+  // yapıştırılacağı hedef oluyorlar. kesildi true'yken satır kartlardaki gibi soluklaşıyor.
+  kes?: () => void;
+  kesildi?: boolean;
   yenidenAdlandirBaslat: () => void;
   sil: () => void;
   duzenleAcik: boolean;
@@ -171,7 +176,7 @@ function HavuzKlasor({ ad, sayi, acik, onToggle, altKlasorEkle, kartEkle, yapist
 }) {
   const [menuAcik, setMenuAcik] = useState(false);
   return (
-    <div style={{ borderTop: '1px solid var(--line)' }}>
+    <div style={{ borderTop: '1px solid var(--line)', opacity: kesildi ? .45 : 1 }}>
       {duzenleAcik ? (
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '9px 0' }}>
           <input autoFocus value={duzenleAd} onChange={(e: any) => onDuzenleAdChange(e.target.value)} style={{ flex: 1 }} />
@@ -200,6 +205,12 @@ function HavuzKlasor({ ad, sayi, acik, onToggle, altKlasorEkle, kartEkle, yapist
                     <button className="minlink" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 12px', textDecoration: 'none' }} onClick={(e: any) => { e.stopPropagation(); setMenuAcik(false); kartEkle(); }}>📝 Kart ekle</button>
                     {yapistir && (
                       <button className="minlink" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 12px', textDecoration: 'none' }} onClick={(e: any) => { e.stopPropagation(); setMenuAcik(false); yapistir(); }}>📋 Yapıştır</button>
+                    )}
+                    {kes && (
+                      <>
+                        <div style={{ borderTop: '1px solid var(--line)' }} />
+                        <button className="minlink" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 12px', textDecoration: 'none' }} onClick={(e: any) => { e.stopPropagation(); setMenuAcik(false); kes(); }}>{kesildi ? '❌ Kesmeyi iptal et' : '✂️ Kes'}</button>
+                      </>
                     )}
                     <div style={{ borderTop: '1px solid var(--line)' }} />
                     <button className="minlink" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 12px', textDecoration: 'none' }} onClick={(e: any) => { e.stopPropagation(); setMenuAcik(false); yenidenAdlandirBaslat(); }}>✎ Yeniden adlandır</button>
@@ -1813,6 +1824,13 @@ export default function Rite() {
   // ile hedef klasöre taşır. Şimdilik SADECE Kişisel Arşiv içi — Ajandadan Kaydedilenler'e Kes eklenmedi
   // (Behnan kararı: "hayır, şimdilik sadece Kişisel Arşiv içi"), klasörlerin kendisini taşımak da ayrı bir tur.
   const [havuzPano, setHavuzPano] = useState<string | null>(null);
+  // havuzKlasorPano (2026-09-19, Behnan: "klasör taşımayı da hazırlayabiliriz, zaten sadece Kişisel'de geçerli
+  // gibi duruyor") — kes-yapıştırın klasör (SADECE Alt Grup) karşılığı: bir Alt Grup'u bulunduğu Grup'tan
+  // çıkarıp başka bir Grup'un altına taşımak. Kartlardaki havuzPano'dan AYRI bir state — ikisi aynı anda dolu
+  // olamaz (biri kesilince diğeri temizlenir, tek bir "pano" hissi için). realAltId: alt grubun dog_gruplar'da
+  // gerçek bir satırı varsa id'si (bkz. altGrupTasi) — yoksa null (sadece aktivitelerin alt_grup metninden
+  // türeyen "sanal" bir klasör).
+  const [havuzKlasorPano, setHavuzKlasorPano] = useState<{ grupAdi: string; altAdi: string; realAltId: string | null } | null>(null);
   // aktMenuAcik: Kişisel Arşiv'deki kart satırlarının ⋯ menüsü — HavuzKlasor'daki menuAcik ile aynı görsel dil
   // (küçük açılır panel), ama satırlar (aktKart/aktKartGenis) ayrı bir bileşen olmadığı için kendi useState'i
   // olamaz (rules of hooks) — ritMenuFor'daki gibi "hangi öğenin menüsü açık" tek bir page-level state'te (id).
@@ -2724,6 +2742,31 @@ export default function Rite() {
     if (!client || !ad.trim()) return;
     await supabase.from('dog_gruplar').update({ ad: ad.trim() }).eq('id', id);
     loadGruplar(client.id);
+  }
+  // altGrupTasi (2026-09-19, Behnan: "klasör taşımayı da hazırlayabiliriz, zaten sadece Kişisel'de geçerli gibi
+  // duruyor") — bir Alt Grup'u (altAdi) bulunduğu Grup'tan (eskiGrupAdi) başka bir Grup'un (yeniGrupAdi) altına
+  // taşır; havuzKlasorPano'nun "Yapıştır"ı buradan çağırıyor. İki parça: (1) o alt grubun İÇİNDEKİ tüm
+  // aktivitelerin grup alanı toplu güncellenir (alt_grup aynı kalır — Alt Grup'un kendi adı değişmiyor, sadece
+  // ebeveyni), (2) alt grubun dog_gruplar'da gerçek bir satırı varsa (realAltId — boş bir alt klasör de olabilir,
+  // hiç kartı olmadan) onun ust_id'si yeni Grup'a çevrilir (grupUstIdGaranti ile hedef gerekirse gerçek satıra
+  // yükseltilir, "+ Alt grup"taki gibi). Hedefte AYNI isimde bir alt grup zaten varsa (isim çakışması), ust_id'yi
+  // değiştirip aynı isimde İKİNCİ bir dog_gruplar satırı yaratmak yerine (bu altGruplarOf'ta yinelenen isim/
+  // React key çakışmasına yol açardı) kaynak satır silinir — aktiviteler zaten yukarıda hedefle aynı (grup,
+  // alt_grup) çiftine taşındığı için otomatik aynı klasörde görünmeye devam eder, veri kaybı olmaz.
+  async function altGrupTasi(eskiGrupAdi: string, altAdi: string, yeniGrupAdi: string, realAltId: string | null) {
+    if (!client || eskiGrupAdi === yeniGrupAdi) return;
+    const hedefte = altGruplarOf(yeniGrupAdi).some((x) => x === altAdi);
+    await supabase.from('dog_activities').update({ grup: yeniGrupAdi }).eq('client_id', client.id).eq('grup', eskiGrupAdi).eq('alt_grup', altAdi);
+    if (realAltId) {
+      if (hedefte) {
+        await supabase.from('dog_gruplar').delete().eq('id', realAltId);
+      } else {
+        const yeniUstId = await grupUstIdGaranti(yeniGrupAdi);
+        if (yeniUstId) await supabase.from('dog_gruplar').update({ ust_id: yeniUstId }).eq('id', realAltId);
+      }
+    }
+    loadGruplar(client.id);
+    loadActivities();
   }
   async function grupSil(g: any) {
     if (!client) return;
@@ -4594,7 +4637,7 @@ export default function Rite() {
                 <>
                   <div onClick={(e: any) => { e.stopPropagation(); setAktMenuAcik(null); }} style={{ position: 'fixed', inset: 0, zIndex: 4 }} />
                   <div style={{ position: 'absolute', right: 0, top: 26, background: '#fff', border: '1px solid var(--line)', borderRadius: 10, boxShadow: '0 4px 14px rgba(0,0,0,.12)', zIndex: 5, minWidth: 152, overflow: 'hidden' }}>
-                    <button className="minlink" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 12px', textDecoration: 'none' }} onClick={(e: any) => { e.stopPropagation(); setAktMenuAcik(null); setHavuzPano((p: string | null) => (p === a.id ? null : a.id)); }}>{havuzPano === a.id ? '❌ Kesmeyi iptal et' : '✂️ Kes'}</button>
+                    <button className="minlink" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 12px', textDecoration: 'none' }} onClick={(e: any) => { e.stopPropagation(); setAktMenuAcik(null); setHavuzKlasorPano(null); setHavuzPano((p: string | null) => (p === a.id ? null : a.id)); }}>{havuzPano === a.id ? '❌ Kesmeyi iptal et' : '✂️ Kes'}</button>
                     <div style={{ borderTop: '1px solid var(--line)' }} />
                     <button className="minlink" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 12px', textDecoration: 'none', color: 'var(--red)' }} onClick={(e: any) => { e.stopPropagation(); setAktMenuAcik(null); if (havuzPano === a.id) setHavuzPano(null); silAktivite(a); }}>🗑 Sil</button>
                   </div>
@@ -4947,7 +4990,11 @@ export default function Rite() {
                     if (!acik) containerToggle('havuz_g_' + kid);
                   }}
                   kartEkle={() => { setActGroup(grupAdi); setActAltGroup(null); yeniHavuzTaslakAc('not'); }}
-                  yapistir={havuzPano ? () => { setAktGrup(havuzPano, grupAdi, undefined); setHavuzPano(null); containerAc('havuz_g_' + kid); } : undefined}
+                  yapistir={(havuzPano || havuzKlasorPano) ? () => {
+                    if (havuzPano) { setAktGrup(havuzPano, grupAdi, undefined); setHavuzPano(null); }
+                    else if (havuzKlasorPano) { altGrupTasi(havuzKlasorPano.grupAdi, havuzKlasorPano.altAdi, grupAdi, havuzKlasorPano.realAltId); setHavuzKlasorPano(null); }
+                    containerAc('havuz_g_' + kid);
+                  } : undefined}
                   yenidenAdlandirBaslat={() => { if (real) { setGrupDuzenleId(real.id); setGrupDuzenleAd(real.ad); } }}
                   sil={() => { if (real) grupSil(real); }}
                 >
@@ -4991,6 +5038,11 @@ export default function Rite() {
                             duzenleVazgec={() => setGrupDuzenleId(null)}
                             kartEkle={() => { setActGroup(grupAdi); setActAltGroup(altAdi); yeniHavuzTaslakAc('not'); }}
                             yapistir={havuzPano ? () => { setAktGrup(havuzPano, grupAdi, altAdi); setHavuzPano(null); containerAc('havuz_a_' + kidAlt); } : undefined}
+                            kes={() => {
+                              setHavuzPano(null);
+                              setHavuzKlasorPano((p: { grupAdi: string; altAdi: string; realAltId: string | null } | null) => (p && p.grupAdi === grupAdi && p.altAdi === altAdi ? null : { grupAdi, altAdi, realAltId: realAlt ? realAlt.id : null }));
+                            }}
+                            kesildi={!!(havuzKlasorPano && havuzKlasorPano.grupAdi === grupAdi && havuzKlasorPano.altAdi === altAdi)}
                             yenidenAdlandirBaslat={() => { if (realAlt) { setGrupDuzenleId(realAlt.id); setGrupDuzenleAd(realAlt.ad); } }}
                             sil={() => { if (realAlt) grupSil(realAlt); }}
                           >
