@@ -350,29 +350,12 @@ const KART_LAB: { tip: string; ornekConfig: any }[] = [
   { tip: 'video', ornekConfig: {} },
   { tip: 'standart', ornekConfig: {} },
 ];
-// KART_KATEGORI / KART_KATEGORILER (2026-09-18, Havuz yeniden tasarımı — 3. adım, "📦 Ajandadan Kaydedilenler"):
-// Ajanda'dan "Kendi Havuzuma al" ile gelen kartların otomatik düştüğü, ÖNCEDEN HAZIRLANMIŞ birkaç geniş
-// kategori — Behnan: "kart tiplerine göre oluşturursak çok fazla olur, bir kaç kategoride yapalım, pilot
-// çalışma sonunda tekrar bakarız". Kasıtlı olarak kart_tipi başına DEĞİL, bu 4 geniş kovaya göre. Kategori
-// dog_activities.grup alanına da yazılıyor (DB hijyeni / sıralama için), ama okuma tarafı hep kart_tipi'nden
-// CANLI hesaplıyor (bkz. kartKategoriOf) — pilot sonrası kovalar değişirse eski kartlar migration'sız
-// kendiliğinden doğru yere düşer.
-const KART_KATEGORILER: { key: string; ad: string; ikon: string }[] = [
-  { key: 'notlar', ad: 'Notlar & Aktiviteler', ikon: '📝' },
-  { key: 'zihin_beden', ad: 'Zihin & Beden', ikon: '🧘' },
-  { key: 'beslenme_olcum', ad: 'Beslenme & Ölçüm', ikon: '📏' },
-  { key: 'diger', ad: 'Diğer', ikon: '🧪' },
-];
-const KART_KATEGORI: Record<string, string> = {
-  bilgi: 'notlar',
-  nefes: 'zihin_beden', topraklama: 'zihin_beden', sukran: 'zihin_beden', niyet: 'zihin_beden',
-  beden: 'zihin_beden', uykuoncesi: 'zihin_beden', ruhhali: 'zihin_beden', pomodoro: 'zihin_beden', workout: 'zihin_beden',
-  diyet: 'beslenme_olcum', tarif: 'beslenme_olcum', su: 'beslenme_olcum', olcum: 'beslenme_olcum', anket: 'beslenme_olcum', coktan: 'beslenme_olcum', maruz: 'beslenme_olcum',
-  video: 'diger', randevu: 'diger', standart: 'diger',
-};
-function kartKategoriOf(kartTipi?: string | null): string {
-  return KART_KATEGORI[kartTipi || 'standart'] || 'diger';
-}
+// KART_KATEGORI / KART_KATEGORILER / kartKategoriOf (2026-09-18 → 2026-09-19): "📦 Ajandadan Kaydedilenler"in
+// (ve eski Gelenler'in) kart-tipine göre otomatik 4-kovalı kategorileme pilotu — Behnan'ın kendi notuyla baştan
+// "pilot çalışma, sonra tekrar bakarız" olarak işaretlenmişti. Gelenler'i düz/kronolojik yaptığımızda (bkz.
+// Gelenler'in üstündeki not) bu pilottan çoktan çıkmıştı; Ajandadan Kaydedilenler de Kişisel Arşiv'in içinde
+// düz bir "Kaydedilenler" klasörüne dönüşünce (bkz. kaydedilenlerGocur, ritHavuzaAl) hiçbir çağrı yeri kalmadı
+// — blok tamamen kaldırıldı, artık dead code bırakılmadı.
 // Ölçüm anahtarları için okunur etiketler (Gelişim grafiği + kart). Bilinmeyen anahtar ham gösterilir.
 const OLCU_ETIKET: Record<string, string> = { kilo: 'Kilo', boy: 'Boy', bel: 'Bel', kalca: 'Kalça', gogus: 'Göğüs', kol: 'Kol', bacak: 'Bacak', vucut_yagi: 'Vücut yağı', kas: 'Kas kütlesi', bel_kalca: 'Bel/Kalça', vki: 'VKİ', ruh_hali: 'Ruh hali', odak_dk: 'Odak (dk)', su: 'Su (bardak)' };
 // Ölçüm anahtarı → varsayılan alan (statik tahmin; Meridyen'deki OLCU_INFO ile aynı). Kart_config.dikey varsa (bkz anahtarDikey) ONA öncelik verilir.
@@ -1804,7 +1787,7 @@ export default function Rite() {
   // sanki seçilenleri sil fonksiyonuna benziyor"): 🗑️ Silinenler artık bir header ikonu değil, Havuz'un
   // 4. kök klasörü — Ajanda'nın kendi 🗑️ ikonu kaldırıldı, TEK çöp kutusu var ve sadece buradan (Havuz'dan)
   // erişiliyor (bkz. cop tanımındaki not — artık ajandaCop'u da (dog_rituals) içine alıyor).
-  const [havuzFolder, setHavuzFolder] = useState<'gelenler' | 'kisisel' | 'ajandadan' | 'silinenler'>('kisisel');
+  const [havuzFolder, setHavuzFolder] = useState<'gelenler' | 'kisisel' | 'silinenler'>('kisisel');
   // kaGrup (2026-09-18, Havuz yeniden tasarımı — 2. adım; 2026-09-19 CardContainer genellemesi ile anlamı
   // DEĞİŞTİ): eskiden "içinde bulunduğumuz klasör" (breadcrumb navigasyonu) idi — Behnan'ın uzun bir mockup
   // turu sonunda kararı ("gayet güzel duruyor") ile Kişisel Arşiv artık breadcrumb'lı "içine gir" değil,
@@ -1835,19 +1818,14 @@ export default function Rite() {
   // (küçük açılır panel), ama satırlar (aktKart/aktKartGenis) ayrı bir bileşen olmadığı için kendi useState'i
   // olamaz (rules of hooks) — ritMenuFor'daki gibi "hangi öğenin menüsü açık" tek bir page-level state'te (id).
   const [aktMenuAcik, setAktMenuAcik] = useState<string | null>(null);
-  // ajKategori (2026-09-18, Havuz yeniden tasarımı — 3. adım): "📦 Ajandadan Kaydedilenler" klasörünün
-  // İÇİNDEKİ hangi (önceden hazırlanmış, KART_KATEGORILER) kategoride olduğumuz — null = kategori listesi.
-  // Bu klasörde kullanıcı klasör yaratamıyor/silemiyor, sadece göz atıyor, o yüzden kaGrup/kaAlt'tan ayrı,
-  // daha basit bir tek-seviye state yeterli.
-  const [ajKategori, setAjKategori] = useState<string | null>(null);
   // gelAcikId (2026-09-18, Havuz yeniden tasarımı — 6. adım): Gelenler'in liste görünümünde hangi aktivite-türü
   // satırın genişletilmiş (aksiyon butonları görünür) halde olduğu — null = hepsi daralı. bkz. gelKartListe.
   const [gelAcikId, setGelAcikId] = useState<string | null>(null);
   // havuzAramaAcik/havuzArama (2026-09-18, Havuz yeniden tasarımı — 7. adım, Behnan: "hem havuzda, hem ajanda
   // da klasik, mercek ikonlu serbest bir metin yazarak içinde bu kelimelerin geçtiği yerleri görmek isterim...
   // Ajanda ve havuz da farklı sonuç listesi olacaktır"): Havuz'un global araması — başlık(ad/baslik) VE
-  // içerik(aciklama) alanında, case-insensitive, basit bir substring eşleşmesi; Havuz'un 3 kökünün TAMAMINI
-  // tarıyor (personalActs, ajandaActs, inbox), sonuçlar kök etiketiyle (📥/📦/🗄️) birlikte listeleniyor.
+  // içerik(aciklama) alanında, case-insensitive, basit bir substring eşleşmesi; Havuz'un köklerinin TAMAMINI
+  // tarıyor (personalActs, inbox), sonuçlar kök etiketiyle (📥/🗄️) birlikte listeleniyor.
   // Gelişmiş filtre yok (v1). Arama açıkken normal klasör gezinme UI'ı (kök şeridi + breadcrumb) gizleniyor.
   const [havuzAramaAcik, setHavuzAramaAcik] = useState(false);
   const [havuzArama, setHavuzArama] = useState('');
@@ -2224,7 +2202,19 @@ export default function Rite() {
   useEffect(() => {
     if (!client || (screen !== 'havuz' && screen !== 'ajanda')) return;
     copKutusuTemizle(client.id);
+    kaydedilenlerGocur(client.id);
   }, [client, screen]);
+
+  // kaydedilenlerGocur (2026-09-19, Behnan: "acaba bunu Kişisel Arşiv içinde bir Kaydedilenler klasörü mü
+  // yapsak" → "Gerçekten birleşsin"): eski "📦 Ajandadan Kaydedilenler" kökünün altındaki (havuz_kok='ajandadan')
+  // satırları Kişisel Arşiv ağacının sıradan bir "Kaydedilenler" Grubu'na taşıyan, TEK SEFERLİK toplu güncelleme
+  // — copKutusuTemizle'nin "lazy purge" deseniyle aynı: Havuz/Ajanda'ya her girişte çağrılıyor ama taşınacak
+  // satır kalmayınca (WHERE havuz_kok='ajandadan' boş döner) hiçbir şey yapmıyor, tamamen zararsız/idempotent.
+  // Kategori Alt Grup'ları YOK artık (Behnan: "düz bir klasör olsun") — hepsi doğrudan "Kaydedilenler" Grubu'na.
+  async function kaydedilenlerGocur(cid: string) {
+    const r = await supabase.from('dog_activities').update({ havuz_kok: null, grup: 'Kaydedilenler', alt_grup: null }).eq('client_id', cid).eq('havuz_kok', 'ajandadan').select('id');
+    if (r.data && r.data.length) loadActivities();
+  }
 
   async function loadInbox(cid: string) {
     const r = await supabase.from('dog_inbox').select('*').eq('client_id', cid).order('created_at', { ascending: false });
@@ -2633,19 +2623,17 @@ export default function Rite() {
   // Ajanda'da doğrudan yaratılmış bir kartı (isRit) kimseye göndermeden kendi Havuzuna al — Paylaş penceresindeki
   // ikinci bir seçenek (kullanıcı isteği). dog_inbox yerine doğrudan dog_activities'e yazıyor (alıcı/kabul adımı
   // yok). Randevu hariç — tek bir tarihe/saate bağlı olduğu için Havuz'un tarihsiz şablon kavramına uymuyor.
-  // 2026-09-18 (Havuz yeniden tasarımı — 3. adım, "📦 Ajandadan Kaydedilenler"): Behnan kararı — bu yoldan
-  // gelen kartlar artık kullanıcıya klasör SORULMADAN, kart tipine göre önceden hazırlanmış birkaç geniş
-  // kategoriye otomatik düşüyor (bkz. KART_KATEGORI/kartKategoriOf) — eski alan-bazlı `grup` ataması (Kişisel
-  // Arşiv'in kendi Grup/Alt-grup ağacına karışıyordu) kaldırıldı; havuz_kok='ajandadan' bu satırı Kişisel
-  // Arşiv'den ayırıyor. `grup` alanına kategori adı YİNE de yazılıyor (DB hijyeni/sıralama için) ama okuma
-  // tarafı hep kart_tipi'nden canlı hesaplıyor, bu alana güvenmiyor.
+  // 2026-09-19 (Behnan: "acaba bunu Kişisel Arşiv içinde bir Kaydedilenler klasörü mü yapsak" → "Gerçekten
+  // birleşsin"/"düz bir klasör olsun"): ayrı bir "📦 Ajandadan Kaydedilenler" kökü ve kart-tipine göre otomatik
+  // 4-kovalı kategorileme (KART_KATEGORILER, bkz. kaydırılmış not) KALKTI — bu yoldan gelen kartlar artık
+  // sıradan bir kişisel kart: doğrudan Kişisel Arşiv ağacındaki "Kaydedilenler" Grubu'na düşüyor (havuz_kok
+  // hiç yazılmıyor, null kalıyor → personalGroupOf/personalActs zaten onu normal bir kişisel kart sayıyor).
+  // Alt grup yok, sade — istersen kes-yapıştır ile istediğin başka klasöre taşıyabilirsin.
   async function ritHavuzaAl(o: any) {
     if (!client || paylasBusy) return;
     setPaylasBusy(true);
-    const kategoriAdi = KART_KATEGORILER.find((k: any) => k.key === kartKategoriOf(o.kart_tipi))?.ad || 'Diğer';
     const ins = await supabase.from('dog_activities').insert({
-      client_id: client.id, tur: 'aktivite', ad: o.ad, grup: kategoriAdi, alt_grup: null,
-      havuz_kok: 'ajandadan',
+      client_id: client.id, tur: 'aktivite', ad: o.ad, grup: 'Kaydedilenler', alt_grup: null,
       faydalar: o.faydalar || [], aciklama: o.aciklama || null,
       videolar: o.url ? [{ baslik: o.ad, url: o.url }] : [],
       zaman: o.zaman || 'gün', zamanlar: null, gunler: o.gunler || null,
@@ -3844,24 +3832,24 @@ export default function Rite() {
   // çöp kutusu listesini kurarken kullanılıyor, gerisi hep inboxAktif üzerinden.
   const inboxAktif = inbox.filter((v: any) => !v.silindi_tarih);
   const ibBadge = inboxAktif.filter((x) => x.durum === 'yeni').length;
-  // personalActs = Kişisel Arşiv'in ağacı. 2026-09-18 (Havuz yeniden tasarımı — 3. adım): havuz_kok==='ajandadan'
-  // olan satırlar artık BURADAN değil, ayrı "📦 Ajandadan Kaydedilenler" klasöründen (ajandaActs) geliyor —
-  // (a.havuz_kok || 'kisisel') !== 'ajandadan': bu alan eklenmeden ÖNCE oluşmuş tüm eski kartların havuz_kok'u
-  // NULL, bilerek 'kisisel' kabul ediliyor ki var olan Kişisel Arşiv düzeni hiç bozulmasın/hiçbir kart aniden
-  // yer değiştirmesin — sadece BUNDAN SONRA "Kendi Havuzuma al" ile gelenler yeni klasöre düşüyor.
-  // 8. adım: !a.silindi_tarih eklendi — çöp kutusundaki kartlar artık buradan (dolayısıyla klasör
-  // gezinmesinden) düşüyor, sadece 🗑️ Çöp kutusu'nda görünüyorlar.
+  // personalActs = Kişisel Arşiv'in ağacı. 2026-09-19 (Behnan: "acaba bunu Kişisel Arşiv içinde bir
+  // Kaydedilenler klasörü mü yapsak" → "Gerçekten birleşsin"): eski "📦 Ajandadan Kaydedilenler" kökü kalktı,
+  // o kartlar artık BURADAN geliyor — sıradan bir "Kaydedilenler" klasörü olarak (bkz. ritHavuzaAl,
+  // kaydedilenlerGocur). (a.havuz_kok || 'kisisel') !== 'ajandadan' kontrolü SADECE geçiş güvenliği için
+  // kalıyor — kaydedilenlerGocur her Havuz/Ajanda girişinde havuz_kok='ajandadan' kalan satırları temizliyor,
+  // ama o toplu güncelleme tamamlanana kadarki kısa an için bir kart burada YANLIŞLIKLA görünmesin diye.
+  // !a.silindi_tarih: çöp kutusundaki kartlar artık buradan (dolayısıyla klasör gezinmesinden) düşüyor, sadece
+  // 🗑️ Çöp kutusu'nda görünüyorlar.
   const personalActs = activities.filter((a: any) => a.client_id === client.id && (a.havuz_kok || 'kisisel') !== 'ajandadan' && !a.silindi_tarih);
-  const ajandaActs = activities.filter((a: any) => a.client_id === client.id && a.havuz_kok === 'ajandadan' && !a.silindi_tarih);
-  // cop (2026-09-18, 8. adım; 8c'de genişletildi — Behnan: "Tek olsun ve sadece havuzda"): artık Havuz'un 3
-  // kökü + Ajanda'nın (dog_rituals/ajandaCop) TAMAMINDAN çöp kutusuna taşınmış satırlar, TEK düz liste — en
+  // cop (2026-09-18, 8. adım; 8c'de genişletildi — Behnan: "Tek olsun ve sadece havuzda"): artık Havuz'un
+  // kökleri + Ajanda'nın (dog_rituals/ajandaCop) TAMAMINDAN çöp kutusuna taşınmış satırlar, TEK düz liste — en
   // son silinen en üstte. Her satır kendi geri-alma fonksiyonunu taşıyor (aktiviteGeriAl/inboxGeriAl/ritGeriAl)
-  // ki render tarafı kök tipine göre dallanmak zorunda kalmasın. Havuz'un "Silinenler" klasöründen (bkz.
+  // ki render tarafı kök tipine göre dallanmak zorunda kalmasın. Havuz'un "Çöp Kutusu" klasöründen (bkz.
   // havuzFolder) görüntüleniyor — Ajanda'nın artık kendi ayrı çöp kutusu YOK.
   const cop = [
     ...activities.filter((a: any) => a.client_id === client.id && a.silindi_tarih).map((a: any) => ({
       id: 'a:' + a.id, tarih: a.silindi_tarih,
-      kok: a.havuz_kok === 'ajandadan' ? '📦 Ajandadan Kaydedilenler' : '🗄️ Kişisel Arşiv' + (a.grup ? ' · ' + a.grup + (a.alt_grup ? ' › ' + a.alt_grup : '') : ''),
+      kok: '🗄️ Kişisel Arşiv' + (a.grup ? ' · ' + a.grup + (a.alt_grup ? ' › ' + a.alt_grup : '') : ''),
       ikon: a.tur === 'program' ? '🧩' : (KARTLAR.find((k) => k[0] === (a.kart_tipi || 'standart'))?.[2] || '•'),
       tip: a.tur === 'program' ? 'Program' : (KARTLAR.find((k) => k[0] === (a.kart_tipi || 'standart'))?.[1] || 'Standart'),
       ad: a.ad, geriAl: () => aktiviteGeriAl(a),
@@ -4614,11 +4602,12 @@ export default function Rite() {
           // dokunmak geri çıkarır. actGroup/actAltGroup (Ajanda'daki ＋'dan yeni kart eklendiğinde hangi
           // klasöre düşeceğini belirleyen "en son açılan yer" state'i) klasöre her girişte de güncelleniyor.
           // aktMenu (2026-09-19, kes-yapıştır): Kişisel Arşiv kart satırlarının ⋯ menüsü — HavuzKlasor'daki ile
-          // aynı görsel dil (küçük açılır panel). SADECE Kişisel Arşiv kartlarında çağrılıyor (aktKart/
-          // aktKartGenis içinde kisisel kontrolüyle) — Ajandadan Kaydedilenler'de bu tur için hiç yok (Behnan
-          // kararı: "hayır, şimdilik sadece Kişisel Arşiv içi"). Kes'e tekrar basmak (zaten kesiliyse) iptal
-          // eder — VSCode'daki gibi. Sil, var olan silAktivite'yi (öncesinde sadece kart detayında) buraya da
-          // taşıyor; pano bu kart üzerindeyse silmeden önce temizleniyor ki hayalet bir pano kalmasın.
+          // aynı görsel dil (küçük açılır panel). aktKart/aktKartGenis artık HER ZAMAN Kişisel Arşiv kartı
+          // gösteriyor (eski "📦 Ajandadan Kaydedilenler" kökü kalktı, o kartlar da buraya taşındı — bkz.
+          // personalActs), o yüzden eskiden burada olan "kisisel" koşullu render'ı kalktı, aktMenu her satırda
+          // koşulsuz çağrılıyor. Kes'e tekrar basmak (zaten kesiliyse) iptal eder — VSCode'daki gibi. Sil, var
+          // olan silAktivite'yi (öncesinde sadece kart detayında) buraya da taşıyor; pano bu kart üzerindeyse
+          // silmeden önce temizleniyor ki hayalet bir pano kalmasın.
           const aktMenu = (a: any) => (
             <span style={{ position: 'relative' }} onClick={(e: any) => e.stopPropagation()}>
               <button
@@ -4638,26 +4627,22 @@ export default function Rite() {
               )}
             </span>
           );
-          const aktKart = (a: any) => {
-            const kisisel = (a.havuz_kok || 'kisisel') !== 'ajandadan';
-            return (
+          const aktKart = (a: any) => (
             <div key={a.id} className="actcard" style={{ opacity: havuzPano === a.id ? .45 : 1 }} onClick={() => openDetay(a, 'aktivite')}>
               <div style={{ flex: 1 }}><div className="n">{a.tur === 'program' ? '🧩 ' : ''}{a.ad}{a.puan ? <span className="puanp"> {'★'.repeat(a.puan)}</span> : ''}</div><div className="o">{a.tur === 'program' ? (a.adimlar || []).length + ' adım' + (a.sure_gun ? ' · ' + a.sure_gun + ' gün' : '') : (a.kaynak_etiket === 'Mezun' ? 'Mezun · ' : '') + Array.from(new Set((a.faydalar || []).map((k: string) => faydaMap[k]?.alan).filter(Boolean))).join(' · ')}</div></div>
-              {kisisel && aktMenu(a)}
+              {aktMenu(a)}
             </div>
-            );
-          };
+          );
           // aktKartGenis (2026-09-18, Havuz yeniden tasarımı — 5. adım): aktKart'ın "kart görünümü" karşılığı —
           // aynı tıklama davranışı (openDetay), ama faydalar tek satırda birleştirilmiş metin yerine ayrı ayrı
           // etiket/chip (tagp p-alan, uygulamanın başka yerlerinde de kullandığı görsel dil) olarak gösteriliyor.
           const aktKartGenis = (a: any) => {
             const alanlar = Array.from(new Set((a.faydalar || []).map((k: string) => faydaMap[k]?.alan).filter(Boolean)));
-            const kisisel = (a.havuz_kok || 'kisisel') !== 'ajandadan';
             return (
               <div key={a.id} className="card" style={{ cursor: 'pointer', opacity: havuzPano === a.id ? .45 : 1 }} onClick={() => openDetay(a, 'aktivite')}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 4 }}>
                   <div style={{ fontSize: 13.5, fontWeight: 700, flex: 1 }}>{a.tur === 'program' ? '🧩 ' : ''}{a.ad}{a.puan ? <span className="puanp"> {'★'.repeat(a.puan)}</span> : ''}</div>
-                  {kisisel && aktMenu(a)}
+                  {aktMenu(a)}
                 </div>
                 {a.tur === 'program' ? (
                   <div className="note" style={{ marginTop: 4 }}>{(a.adimlar || []).length} adım{a.sure_gun ? ' · ' + a.sure_gun + ' gün' : ''}</div>
@@ -4782,7 +4767,6 @@ export default function Rite() {
               const eslesir = (baslik?: string | null, aciklama?: string | null) => (baslik || '').toLowerCase().includes(q) || (aciklama || '').toLowerCase().includes(q);
               const sonuclar: { kok: string; el: any }[] = [];
               personalActs.filter((a: any) => eslesir(a.ad, a.aciklama)).forEach((a: any) => sonuclar.push({ kok: '🗄️ Kişisel Arşiv', el: aktKartFn(a) }));
-              ajandaActs.filter((a: any) => eslesir(a.ad, a.aciklama)).forEach((a: any) => sonuclar.push({ kok: '📦 Ajandadan Kaydedilenler', el: aktKartFn(a) }));
               inboxAktif.filter((v: any) => eslesir(v.baslik || v.payload?.ad, v.payload?.aciklama)).forEach((v: any) => sonuclar.push({ kok: '📥 Gelenler', el: gelKartFn(v) }));
               return sonuclar.length === 0 ? (
                 <div className="note" style={{ textAlign: 'center', marginTop: 10 }}>&quot;{havuzArama}&quot; için sonuç bulunamadı.</div>
@@ -4803,13 +4787,21 @@ export default function Rite() {
                 kartı kalktı, Inbox artık burada bir klasör (📥 Gelenler) — paylaşılan bir şey geldiği an zaten
                 Havuz'un içinde, ayrı bir "kabul et" adımına gerek yok. */}
             <div style={{ display: 'flex', gap: 8, margin: '10px 0 4px', flexWrap: 'wrap' }}>
-              <span className={'chip' + (havuzFolder === 'gelenler' ? ' on' : '')} onClick={() => setHavuzFolder('gelenler')}>📥 Gelenler{ibBadge > 0 ? ' · ' + ibBadge : ''}</span>
-              <span className={'chip' + (havuzFolder === 'ajandadan' ? ' on' : '')} onClick={() => setHavuzFolder('ajandadan')}>📦 Ajandadan Kaydedilenler{ajandaActs.length > 0 ? ' · ' + ajandaActs.length : ''}</span>
+              {/* 📥 Gelenler (2026-09-19, Behnan: "bir inbox ikonuna indirgeyelim"): çip satırının telefonda 2
+                  satıra taşmasını azaltmak için metin kalktı, sadece ikon + (varsa) rozet sayısı kaldı — title
+                  ile hover/erişilebilirlik için etiket hâlâ duruyor. Chip'in kendi içeriği (Gelenler ekranındaki
+                  başlık, arama sonuçları, çöp kutusu kaynağı vb.) buna dokunulmadı, hâlâ tam "Gelenler" yazıyor
+                  — sadece bu dar çip satırındaki metin kısaldı. */}
+              <span className={'chip' + (havuzFolder === 'gelenler' ? ' on' : '')} onClick={() => setHavuzFolder('gelenler')} title="Gelenler">📥{ibBadge > 0 ? ' ' + ibBadge : ''}</span>
               <span className={'chip' + (havuzFolder === 'kisisel' ? ' on' : '')} onClick={() => setHavuzFolder('kisisel')}>🗄️ Kişisel Arşiv</span>
-              {/* 🗑️ Silinenler (2026-09-18, 8c. adım, Behnan: "Silinenler diye bir klasör yaratırsın diye
-                  düşünmüştüm, hem havuz yapısına uygun düşer"): 4. kök — Havuz'un 3 kökü + Ajanda'nın TÜM
-                  silinenleri (bkz. cop tanımındaki not), TEK çöp kutusu. */}
-              <span className={'chip' + (havuzFolder === 'silinenler' ? ' on' : '')} onClick={() => setHavuzFolder('silinenler')}>🗑️ Silinenler{cop.length > 0 ? ' · ' + cop.length : ''}</span>
+              {/* 🗑️ Çöp Kutusu (2026-09-18, 8c. adım, Behnan: "Silinenler diye bir klasör yaratırsın diye
+                  düşünmüştüm, hem havuz yapısına uygun düşer"; 2026-09-19, Behnan: "Silinenlere de Çöp Kutusu
+                  diyelim, çünkü sildiğimizde zaten çöp kutusuna gider diye söylüyoruz" — kendi içindeki "Çöp
+                  kutusu boş." gibi metinlerle tutarlı hale getirildi): eski 4. kök — "📦 Ajandadan Kaydedilenler"
+                  kalkınca (bkz. personalActs'in üstündeki not) Havuz'un 2 kökü + Ajanda'nın TÜM silinenleri
+                  (bkz. cop tanımındaki not), TEK çöp kutusu. İç state/id hâlâ 'silinenler' (kod tarafında
+                  dokunulmadı), sadece görünen etiket değişti. */}
+              <span className={'chip' + (havuzFolder === 'silinenler' ? ' on' : '')} onClick={() => setHavuzFolder('silinenler')}>🗑️ Çöp Kutusu{cop.length > 0 ? ' · ' + cop.length : ''}</span>
             </div>
             {havuzFolder === 'silinenler' ? (
               // Sadece liste görünümü — silinme tarihi, tipi, geldiği yer, Geri al. Kalıcı sil butonu YOK
@@ -4829,40 +4821,6 @@ export default function Rite() {
                         <button className="btn ghost sm" onClick={c.geriAl}>Geri al</button>
                       </div>
                     ))}
-                  </>
-                )}
-              </div>
-            ) : havuzFolder === 'ajandadan' ? (
-              <div>
-                {/* 📦 Ajandadan Kaydedilenler (2026-09-18, Havuz yeniden tasarımı — 3. adım): sabit, kullanıcının
-                    yeniden adlandıramayacağı/silemeyeceği bir kök — Gelenler/Kişisel Arşiv'in aksine burada
-                    "＋ Yeni klasör" yok, kategoriler KART_KATEGORILER'den geliyor, kart tipine göre otomatik. */}
-                {ajKategori ? (
-                  <>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '8px 0 10px' }}>
-                      <span style={{ cursor: 'pointer', color: 'var(--muted)' }} onClick={() => setAjKategori(null)}>📦 Ajandadan Kaydedilenler</span>
-                      <span className="note" style={{ margin: 0 }}>›</span>
-                      <span style={{ fontWeight: 700 }}>{KART_KATEGORILER.find((k: any) => k.key === ajKategori)?.ad}</span>
-                    </div>
-                    {(() => {
-                      const items = ajandaActs.filter((a: any) => kartKategoriOf(a.kart_tipi) === ajKategori);
-                      return items.length === 0 ? <div className="note">Bu kategoride henüz kart yok.</div> : items.map(aktKartFn);
-                    })()}
-                  </>
-                ) : (
-                  <>
-                    <p className="sub" style={{ marginTop: 0 }}>Ajanda&apos;dan &quot;📥 Kendi Havuzuma al&quot; ile eklediğin kartlar, kart tipine göre otomatik olarak burada kategorilere ayrılır.</p>
-                    {KART_KATEGORILER.map((kat: any) => {
-                      const say = ajandaActs.filter((a: any) => kartKategoriOf(a.kart_tipi) === kat.key).length;
-                      return (
-                        <div key={kat.key} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', padding: '9px 0', borderTop: '1px solid var(--line)' }} onClick={() => setAjKategori(kat.key)}>
-                          <span>{kat.ikon}</span>
-                          <span style={{ flex: 1, fontWeight: 600 }}>{kat.ad}</span>
-                          {say > 0 && <span className="note" style={{ margin: 0 }}>{say}</span>}
-                          <span className="go">›</span>
-                        </div>
-                      );
-                    })}
                   </>
                 )}
               </div>
