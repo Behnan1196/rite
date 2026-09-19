@@ -4651,7 +4651,6 @@ export default function Rite() {
             <div key={a.id} className="actcard" style={{ opacity: havuzPano === a.id ? .45 : 1 }} onClick={() => openDetay(a, 'aktivite')}>
               <div style={{ flex: 1 }}><div className="n">{a.tur === 'program' ? '🧩 ' : ''}{a.ad}{a.puan ? <span className="puanp"> {'★'.repeat(a.puan)}</span> : ''}</div><div className="o">{a.tur === 'program' ? (a.adimlar || []).length + ' adım' + (a.sure_gun ? ' · ' + a.sure_gun + ' gün' : '') : (a.kaynak_etiket === 'Mezun' ? 'Mezun · ' : '') + Array.from(new Set((a.faydalar || []).map((k: string) => faydaMap[k]?.alan).filter(Boolean))).join(' · ')}</div></div>
               {kisisel && aktMenu(a)}
-              <span className="go">›</span>
             </div>
             );
           };
