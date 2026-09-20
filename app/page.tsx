@@ -257,6 +257,34 @@ function SiraliListe({ ogeler, idAlani, strateji, onSirala, onDragEnd, devreDisi
   );
 }
 
+// Widget (2026-09-20, Behnan isteği — Home/CardContainer/Havuz planlama oturumu, "esneklik" kararı: "home'daki
+// her şey tek card container olmak zorunda değil, bir de widget diyebileceğimiz elemanları da tanımlayalım").
+// CardContainer'dan bilinçli olarak FARKLI bir Home ilkeli: aç/kapa durumu YOK, dokununca ilgili ekranı TAM
+// SAYFA açan geniş bir şerit/buton — üzerinde CANLI bir gösterge metni (`bilgi`, ör. Inbox'ın okunmamış sayısı,
+// ya da Ölçümler'in "en son ne zaman kaydedildi"si). CardContainer'ın başlık şeridiyle AYNI görsel dili
+// kullanıyor (aynı bej zemin, aynı köşe/boşluk) ki Home'da iki farklı eleman türü (container + widget) tutarlı
+// görünsün, ama chevron/eylemler/renk/gorunum/children YOK — bilinçli olarak sade tutuldu, Ölçümler ilk somut
+// örnek, çeşitlenmesi (farklı widget "tipleri") ileride gerçek örneklerden sonra ele alınacak (Behnan: "widget'
+// larında çeşitleri olacak, onu yapacağımız bir kaç örnekten sonra anlarız").
+// 2026-09-20 (Ölçümler'in ilk uygulaması, Behnan kararı: "Ölçümleri widget'a tam çevirmek değil de... içine
+// statik, 'En son ölçüm 3 gün önce kaydedildi' yazabiliriz"): `bilgi` bilinçli olarak GERÇEK DEĞER değil, göreli
+// bir zaman metni — Ölçümler'in eski chevron-ile-aç gizlilik gerekçesi (bkz. eski CardContainer kullanımı) burada
+// hâlâ geçerli, sadece farklı bir biçimde korunuyor: widget asla gerçek ölçüm değerini göstermiyor.
+function Widget({ ikon, baslik, bilgi, onClick }: { ikon?: string; baslik: string; bilgi?: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', background: '#efe8da', border: 'none', borderRadius: 10, padding: '10px 10px 10px 12px', marginTop: 10, cursor: 'pointer', font: 'inherit', color: 'inherit', textAlign: 'left' }}
+    >
+      {ikon && <span style={{ fontSize: 15, flex: '0 0 auto' }}>{ikon}</span>}
+      <span style={{ flex: 1, fontWeight: 700 }}>{baslik}</span>
+      {bilgi && <span className="note" style={{ margin: 0 }}>{bilgi}</span>}
+      <span style={{ color: '#8a8169', fontSize: 13, flex: '0 0 auto' }}>›</span>
+    </button>
+  );
+}
+
 // HavuzKlasor (2026-09-19, Behnan isteği — CardContainer'ın Havuz'a ilk genellemesi, uzun bir mockup turu
 // sonunda karara bağlandı): Kişisel Arşiv'in Grup VE Alt Grup satırları için ORTAK bileşen — CardContainer'a
 // çok benzer (yerinde aç/kapa, dış state), ama Behnan'ın kararıyla BİLİNÇLİ olarak tam CardContainer değil:
@@ -3960,6 +3988,13 @@ export default function Rite() {
     const etiket = OLCU_ETIKET[k] || (k.startsWith('ozel_') ? k.slice(5).replace(/_/g, ' ') : k);
     return { k, etiket, deger: l.deger, birim: l.birim || '' };
   }).sort((a, b) => a.etiket.localeCompare(b.etiket, 'tr'));
+  // sonOlcumBilgi (2026-09-20, Behnan isteği — Widget'ın ilk somut örneği): Home'daki Ölçümler artık gerçek
+  // değerleri değil (gizlilik gerekçesi hâlâ geçerli — "yanımda duran insanlar görmesin"), SADECE göreli bir
+  // "canlı gösterge" metni gösteriyor — hangi ölçümün ne olduğunu değil, en son NE ZAMAN bir ölçüm eklendiğini
+  // (tüm ölçüm türleri dahil, ruh_hali/home_* de içinde — burada tür ayrımı önemsiz, sadece "en güncel" ne zaman).
+  const sonOlcumTarih = meas.length ? meas.reduce((mx: string, m: any) => (m.tarih > mx ? m.tarih : mx), meas[0].tarih) : null;
+  const sonOlcumGunFark = sonOlcumTarih ? Math.round((parseD(today).getTime() - parseD(sonOlcumTarih).getTime()) / 86400000) : null;
+  const sonOlcumBilgi = sonOlcumTarih == null ? 'Henüz ölçüm eklenmedi' : sonOlcumGunFark === 0 ? 'Bugün kaydedildi' : sonOlcumGunFark === 1 ? 'Dün kaydedildi' : `${sonOlcumGunFark} gün önce kaydedildi`;
   const days7 = lastDays(7);
   const last30 = lastDays(30);
   const weekArr = weekDays(day);
@@ -4280,44 +4315,16 @@ export default function Rite() {
               </div>
               )}
             </CardContainer>
-            {/* Son ölçümler (2026-09, Behnan kararı): Gelişim'in eski "Ölçümler" kartının yerini alıyor —
-                "home'a yerleştirsek güzel olur, son ölçümleri orada alırız". Alan/dikey gruplaması yok, sadece
-                her ölçümün en son değeri (bkz. sonOlcumler) — Meridyen'in 13 alanıyla eski fayda-kaynaklı alan
-                sözlüğü arasında bir eşleme gerektirmiyor.
-                2026-09 (Behnan kararı, WhatsApp-esinli sadeleştirme): Home'da ölçüm eklemek artık bottom_nav'ın
-                genel ＋'sından değil, buradaki başlık şeridinden — Havuz'daki Grup şeridiyle aynı görsel
-                standart (bkz. aktKart üstündeki grup başlığı). Boşken de bu şerit tek başına görünüyor.
-                2026-09 (aynı gün, Gelişim'in kaldırılması — Behnan kararı: "bağlam bazında başka ekranlar
-                açabiliriz"): şeridin kendisi (etiket) artık EKLEME değil, Ruh hali'nin (eskiden Gelişim'de)
-                taşındığı bağlamsal "Ölçümler" detay/analiz ekranını açıyor — ekleme sadece sağdaki ＋'da kaldı
-                (stopPropagation ile şeridin tıklamasını tetiklemiyor).
-                2026-09-19 (CardContainer standardizasyonu): `tikla` prop'una taşındı — şeride (chevron/＋ hariç)
-                dokununca hâlâ Ölçümler ekranını açıyor, chevron ise SADECE aşağıdaki "son ölçümler" önizlemesini
-                aç/kapıyor (varsayılan KAPALI, aynı gizlilik gerekçesi — "keza ölçümlerim içinde"). */}
-            <CardContainer
-              baslik="Ölçümler"
-              acik={containerAcik['home_olcumler'] === true}
-              onToggle={() => containerToggle('home_olcumler')}
-              tikla={() => setScreen('olcumler')}
-              aksiyon={
-                <button
-                  type="button"
-                  title="Ölçüm ekle"
-                  onClick={(e: any) => { e.stopPropagation(); setOlcumSecAnahtar(null); setOlcumOzelAd(''); setOlcumDeger(''); setOlcumBirim(''); setOlcumEkleOpen(true); }}
-                  style={{ background: 'none', border: 'none', padding: '0 2px', fontSize: 16, fontWeight: 700, color: '#8a8169', cursor: 'pointer', lineHeight: 1 }}
-                >＋</button>
-              }
-            >
-              {sonOlcumler.length > 0 ? (
-                <div className="card">
-                  {sonOlcumler.map((o) => (
-                    <div key={o.k} className="mrow"><span>{o.etiket}</span><b>{o.deger} {o.birim}</b></div>
-                  ))}
-                </div>
-              ) : (
-                <div className="note">Henüz ölçüm eklenmedi.</div>
-              )}
-            </CardContainer>
+            {/* Ölçümler (2026-09-20, Behnan kararı — Widget'ın ilk somut örneği: "Ölçümün widget olmasına hemen
+                hemen karar verdik"): CardContainer DEĞİL artık, Widget (bkz. tanımı, SiraliListe'nin hemen
+                altında). Eski chevron-ile-aç "son ölçümler" önizlemesi (varsayılan KAPALI, gizlilik gerekçesi —
+                "keza ölçümlerim içinde") artık gereksiz: Widget zaten gerçek değeri GÖSTERMİYOR, sadece göreli
+                bir "canlı gösterge" (`sonOlcumBilgi`, bkz. tanımı yukarıda). Dokununca (Widget'ın tek davranışı)
+                aynı 'olcumler' ekranı açılıyor — o ekran artık hem Ruh hali analizini hem de gerçek değerleri
+                (eski "son ölçümler" listesi, taşındı) hem de ＋ ile ölçüm eklemeyi barındırıyor (bkz. aşağısı).
+                Gelişim'in eski "Ölçümler" kartının yerini alan asıl veri (sonOlcumler) DEĞİŞMEDİ, sadece Home'daki
+                sunumu (özet mi, gerçek değer mi) değişti. */}
+            <Widget ikon="📊" baslik="Ölçümler" bilgi={sonOlcumBilgi} onClick={() => setScreen('olcumler')} />
             {/* Kapsama (eski Gelişim'in ana kartı — haftalık alan-dokunma analizi) 2026-09'da (Behnan kararı)
                 bottom_nav'dan çıkarılıp Home'dan erişilen, bağlama girmeyen genel bir "Analiz" ekranına taşındı
                 — Behnan'ın deyişiyle "bottom nav'da görünmeyen ama home'dan ulaşabiliriz". İçerik/mantık hiç
@@ -4462,7 +4469,20 @@ export default function Rite() {
                 <div className="msg">{msg}</div>
               </div>
             ) : (
-              <div>
+              // 2026-09-20 GÜNCELLEME (Behnan: "sürükle bırak davranışı standart hale gelmiş olabilir... ve bir de
+              // başlığı görünmeyen cardcontainer'ımız bile olabilir" — sonra netleştirme: "headless olmadan
+              // saralım, ... ile tüm seçenekler görünsün, belki fikir verir ve sürükle bırak düzgün mü onu da
+              // görürüz"): gün listesi artık `baslikGizli` DEĞİL, görünür başlıklı bir CardContainer — Notlar/Odak
+              // Alanları ile AYNI desen (headerToggle, chevron yok). Henüz taşınacak somut bir `eylemler` yok, o
+              // yüzden ⋯ menüsü şimdilik görünmüyor (bkz. CardContainer: hiç `hizli` olmayan eylem yoksa ⋯ hiç
+              // render edilmiyor) — adaylar ortaya çıktıkça buraya eklenir. Varsayılan AÇIK (`ajanda_gunler`,
+              // Notlar'daki 'ajanda_notlar' ile aynı ikinci-parametre deseni), yani mevcut davranış DEĞİŞMEDİ.
+              <CardContainer
+                baslik="Aktiviteler"
+                acik={containerAcikOf('ajanda_gunler', true)}
+                onToggle={() => containerToggle('ajanda_gunler', true)}
+                headerToggle
+              >
                 {habits.length === 0 && <div className="empty">Bugün için kart yok. Aşağıdaki ＋ ile ekleyebilirsin.</div>}
                 {habits.length > 0 && (() => {
                   // Artık sabit zaman dilimi ayracı yok — kartlar (ve kullanıcının eklediği ayraçlar) TEK düz,
@@ -4595,7 +4615,7 @@ export default function Rite() {
                 })()}
 
                 {pushMsg && <div className="msg">{pushMsg}</div>}
-              </div>
+              </CardContainer>
             ))}
 
             {/* Notlar şeridi: günlerden bağımsız, hangi gün seçili olursa olsun hep aynı — Not artık habits'te
@@ -5137,13 +5157,26 @@ export default function Rite() {
         )}
 
         {/* ---------- ÖLÇÜMLER (detay/analiz, eski Gelişim'in Ruh hali'si, 2026-09 Behnan kararı) ---------- */}
-        {/* Home'daki "Ölçümler" başlık şeridine dokununca açılan bağlamsal ekran (Behnan: "onun grafiğine ve
+        {/* Home'daki "Ölçümler" widget'ına dokununca açılan bağlamsal ekran (Behnan: "onun grafiğine ve
             analizine yine ölçümler kısmının header şeridinden ulaşabiliriz"). Ruh hali'nin kodu/mantığı AYNEN
             taşındı (measByKey['ruh_hali'] yoksa hiç görünmez) — henüz yeni bir grafik/trend eklenmedi, bu ilk
-            turda sadece yer değiştirdi. */}
+            turda sadece yer değiştirdi.
+            2026-09-20 GÜNCELLEME (Widget'ın ilk uygulaması — Ölçümler artık Home'da CardContainer değil, gerçek
+            değer göstermeyen bir Widget, bkz. Home'daki `sonOlcumBilgi` kullanımı): eskiden Home'un CardContainer
+            'ının `aksiyon` ikonu olan "＋ Ölçüm ekle" ve chevron'la açılan "son ölçümler" (gerçek değerler)
+            listesi buraya taşındı — Widget'ta bu ikisinin yeri yok (aç/kapa/aksiyon prop'u taşımıyor, bilinçli
+            olarak sade). Gerçek değerler Home'da değil ama hâlâ bir dokunuş uzakta. */}
         {screen === 'olcumler' && (
           <div>
-            <button className="linkbtn" onClick={() => setScreen('home')}>‹ Home</button>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <button className="linkbtn" onClick={() => setScreen('home')}>‹ Home</button>
+              <button
+                type="button"
+                title="Ölçüm ekle"
+                onClick={() => { setOlcumSecAnahtar(null); setOlcumOzelAd(''); setOlcumDeger(''); setOlcumBirim(''); setOlcumEkleOpen(true); }}
+                style={{ background: 'none', border: 'none', padding: '0 2px', fontSize: 18, fontWeight: 700, color: '#8a8169', cursor: 'pointer', lineHeight: 1 }}
+              >＋</button>
+            </div>
             <h2 style={{ marginTop: 6 }}>Ölçümler</h2>
             {measByKey['ruh_hali'] ? (
               <div className="card"><h3>Ruh hali (son 7 gün)</h3>
@@ -5152,6 +5185,16 @@ export default function Rite() {
               </div>
             ) : (
               <div className="note">Henüz ölçüm analizi için yeterli veri yok.</div>
+            )}
+            <h3 style={{ marginTop: 18 }}>Son ölçümler</h3>
+            {sonOlcumler.length > 0 ? (
+              <div className="card">
+                {sonOlcumler.map((o) => (
+                  <div key={o.k} className="mrow"><span>{o.etiket}</span><b>{o.deger} {o.birim}</b></div>
+                ))}
+              </div>
+            ) : (
+              <div className="note">Henüz ölçüm eklenmedi.</div>
             )}
           </div>
         )}
