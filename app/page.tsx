@@ -3542,6 +3542,17 @@ export default function Rite() {
     patchDetay(patch);
     loadData(client.id);
   }
+  // kartKisayolDegistir (2026-09-20, Behnan isteği — "ben home'a bu kart için bir kısayol yükleyebilir miyim,
+  // direk o kartın detayını açıp videoları izlemeye devam edeceğim"): herhangi bir kişisel kartı Home'a
+  // sabitleme/kaldırma — `kart_config.home_kisayol` (JSONB, migration gerektirmiyor, home_gizli ile AYNI ilke:
+  // DB'de, cihazlar arası senkron). setRandevuBildirim ile AYNI kalıp (kart_config'i eskisiyle birleştirip
+  // update). Home'daki render'ı bkz. `homeKisayolKartlari`.
+  async function kartKisayolDegistir(rt: any) {
+    if (!client) return;
+    const cfg = { ...(rt.kart_config || {}), home_kisayol: !rt.kart_config?.home_kisayol };
+    await supabase.from('dog_rituals').update({ kart_config: cfg }).eq('id', rt.id);
+    loadData(client.id);
+  }
   async function ritSil(id: string) {
     if (!client) return;
     const rt = rituals.find((r) => r.id === id);
@@ -4084,6 +4095,11 @@ export default function Rite() {
     .sort((a: any, b: any) => (a.baslangic === b.baslangic ? ((a.hatirlatma_saat || '') < (b.hatirlatma_saat || '') ? -1 : 1) : (a.baslangic < b.baslangic ? -1 : 1)));
   const yaklasanAktivite = yaklasanAktiviteler[0] || null;
   const yaklasanBilgi = yaklasanAktivite ? `${yaklasanAktivite.ad} · ${parseD(yaklasanAktivite.baslangic).getDate()} ${MONTHS[parseD(yaklasanAktivite.baslangic).getMonth()]}` : 'Yaklaşan aktivite yok';
+  // homeKisayolKartlari (2026-09-20, bkz. kartKisayolDegistir/ritMenuFor, yukarısı): "📌 Home kısayolu" ile
+  // işaretlenmiş kişisel kartlar — WIDGET_KATALOG'daki sabit tiplerden FARKLI, kullanıcının KENDİ seçtiği,
+  // sayısı değişken bir liste olduğu için widgetSira'nın (sabit 4 anahtarlı) DIŞINDA, ayrı render ediliyor —
+  // v1'de sürüklenerek sıralanmıyor (Home'daki widget sırasına eklemek ayrı bir adım, bkz. proje hafızası).
+  const homeKisayolKartlari = rituals.filter((r: any) => !r.mezun && r.kart_config?.home_kisayol);
   const days7 = lastDays(7);
   const last30 = lastDays(30);
   const weekArr = weekDays(day);
@@ -4421,6 +4437,15 @@ export default function Rite() {
                 return null;
               }}
             </SiraliListe>
+            {/* Home kısayolları (2026-09-20, bkz. homeKisayolKartlari/kartKisayolDegistir, yukarısı): kullanıcının
+                "📌 Home kısayolu" ile işaretlediği kişisel kartlar — Widget'la AYNI görünüm (tutarlılık), ama
+                sabit widgetSira listesinin DIŞINDA, kendi sırasında (oluşturulma sırası) render ediliyor.
+                Video sayısı varsa (çoklu-video kartları — bkz. kart_config.videolar) bilgi satırında gösteriliyor,
+                yoksa nötr "Aç" — burada da gerçek İÇERİK değil sadece "kaç video var" gösteriliyor. */}
+            {homeKisayolKartlari.map((r: any) => {
+              const videoSayisi = (r.kart_config?.videolar || []).length;
+              return <Widget key={r.id} ikon={kartIkon(r.kart_tipi) || '📌'} baslik={r.ad} bilgi={videoSayisi > 0 ? `${videoSayisi} video` : 'Aç'} onClick={() => openRit(r)} />;
+            })}
             {/* Kapsama (eski Gelişim'in ana kartı — haftalık alan-dokunma analizi) 2026-09'da (Behnan kararı)
                 bottom_nav'dan çıkarılıp Home'dan erişilen, bağlama girmeyen genel bir "Analiz" ekranına taşındı
                 — Behnan'ın deyişiyle "bottom nav'da görünmeyen ama home'dan ulaşabiliriz". İçerik/mantık hiç
@@ -6234,6 +6259,13 @@ export default function Rite() {
               )}
               {rmKisisel && (
                 <button className="btn ghost sm" onClick={() => { setPuanDeger(ritMenuFor.puan || 0); setPuanModal(ritMenuFor); setRitMenuFor(null); }}>⭐ Puanla{ritMenuFor.puan ? ' (' + ritMenuFor.puan + '★)' : ''}</button>
+              )}
+              {/* 📌 Home kısayolu (2026-09-20, Behnan isteği — "ben home'a bu kart için bir kısayol yükleyebilir
+                  miyim... direk o kartın detayını açıp videoları izlemeye devam edeceğim"): rmKisisel'e bağlı
+                  kalıyor (⭐ Puanla ile aynı kapsam) — asıl kullanım örneği, birkaç gün süren çoklu-videolu bir
+                  Aktivite kartına hızlı geri dönüş. Home'daki görünümü bkz. homeKisayolKartlari. */}
+              {rmKisisel && (
+                <button className="btn ghost sm" onClick={() => { kartKisayolDegistir(ritMenuFor); setRitMenuFor(null); }}>{ritMenuFor.kart_config?.home_kisayol ? '📌 Home kısayolunu kaldır' : '📌 Home kısayolu ekle'}</button>
               )}
               {rmPaylasIzin && !ritMenuFor.sablon_id && (
                 <button className="btn ghost sm" onClick={() => { const r = ritMenuFor; setRitMenuFor(null); openRit(r); setPaylasOpen(true); setKMsg(''); }}>↪️ Paylaş / Havuza kaydet</button>
