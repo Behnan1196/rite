@@ -4148,23 +4148,23 @@ export default function Rite() {
                 gerekçesi). ⚙️ ikonu aynen `aksiyon` prop'una taşındı, işlevi değişmedi.
                 2026-09-19 (CardContainer'ın 5. davranışı, renk/stil): `renk`/`onRenkSec` eklendi — varsayılan
                 'varsayilan' (mevcut bej/beyaz görünüm aynen korunuyor, kullanıcı seçmediği sürece hiçbir şey
-                değişmiyor). */}
+                değişmiyor).
+                2026-09-20 (Behnan isteği — Home/CardContainer/Havuz planlama oturumu, 2. uygulama, Notlar'dan
+                SONRA bilinçli bir fark): `headerToggle` eklendi (chevron kalktı, başlığa basınca aç/kapa). ⚙️
+                artık `aksiyon` değil `eylemler` içinde — ama Notlar'daki "Tam ekran"ın aksine `hizli` DEĞİL
+                (Behnan: "sadece ⋯ menüsünü koy, hızlı alanlara sonradan karar veririz") — yani ⋯ menüsü içinde
+                tek satır olarak duruyor, kendi başına ikon olarak dışarı çıkmıyor. Hangi eylemlerin hızlı
+                olacağına henüz karar verilmedi, bu bilinçli olarak ertelendi. */}
             <CardContainer
               baslik="Odak Alanları"
               acik={containerAcik['home_odak'] === true}
               onToggle={() => containerToggle('home_odak')}
+              headerToggle
               gorunum={containerGorunumOf('home_odak')}
               onGorunumToggle={() => containerGorunumToggle('home_odak')}
               renk={containerRenkOf('home_odak')}
               onRenkSec={(r) => containerRenkSec('home_odak', r)}
-              aksiyon={
-                <button
-                  type="button"
-                  title="Alanları yönet"
-                  onClick={(e: any) => { e.stopPropagation(); setHomeYonetOpen(true); }}
-                  style={{ background: 'none', border: 'none', padding: '0 2px', fontSize: 16, fontWeight: 700, color: '#8a8169', cursor: 'pointer', lineHeight: 1 }}
-                >⚙️</button>
-              }
+              eylemler={[{ key: 'yonet', ikon: '⚙️', etiket: 'Alanları yönet', onClick: () => setHomeYonetOpen(true) }]}
             >
               {/* 2026-09 (Behnan kararı — "Alanlar" mimarisi): artık her danışana otomatik tüm alanlar
                   tohumlanmıyor, Rite Studio'dan atanana kadar Home boş görünebilir — bu iki durumu ayrı ayrı
