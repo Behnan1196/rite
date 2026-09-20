@@ -392,6 +392,33 @@ const BASLANGIC_SEKMELERI: [string, string, string][] = [
 // ileride gerçek mobil uygulamaya da doğal taşınır. Açıkken Ekle menüsünde "🧪 Lab" seçeneği beliriyor —
 // normal kullanıcılar (ileride gerçek danışanlar) bu gizli kapıyı hiç görmeyecek.
 const LS_DEV = 'rite_dev_mode';
+// WIDGET_KATALOG (2026-09-20, Behnan isteği — "fikirler zamanla gelecek, bunları nerede topladığımız önemli"):
+// Home widget/tool/kısayol fikirlerinin TEK, kalıcı listesi — Ayarlar'dan "Widget kataloğu" ekranıyla erişiliyor.
+// Widget'lar (CardContainer'ın aksine) kod gerektiren özellikler, kullanıcı kendi widget'ını YARATAMIYOR — bu
+// yüzden liste kullanıcı verisi değil, sabit bir kod-seviyesi kayıt (`uygulandi: false` olanlar henüz kod
+// tarafında yok, sadece fikir olarak burada duruyor ki kaybolmasın). `uygulandi: true` olanlar için kataloğun
+// kendisi Home'da göster/gizle anahtarı sunuyor (bkz. widgetGorunurMu/widgetGorunurDegistir, LS_WIDGET_GORUNUR).
+const WIDGET_KATALOG: { anahtar: string; ad: string; aciklama: string; uygulandi: boolean }[] = [
+  { anahtar: 'olcumler', ad: 'Ölçümler', aciklama: 'En son ne zaman bir ölçüm eklendiğini gösterir, dokununca Ölçümler ekranını açar.', uygulandi: true },
+  { anahtar: 'randevular', ad: 'Yaklaşan randevular', aciklama: 'En yakın randevu(lar)ı özetler, dokununca ilgili günü Ajanda’da açar.', uygulandi: false },
+  { anahtar: 'gelenler', ad: 'Gelenler (Inbox)', aciklama: 'Okunmamış sayısını gösterir, dokununca Gelenler’i tam sayfa açar.', uygulandi: false },
+  { anahtar: 'notlar_widget', ad: 'Notlar', aciklama: 'Ajanda’ya girmeden Notlar’a Home’dan hızlı erişim.', uygulandi: false },
+  { anahtar: 'gun_ozeti', ad: 'Bugünün özeti', aciklama: '"5/8 aktivite tamamlandı" gibi bir ilerleme göstergesi, dokununca bugünkü Ajanda’yı açar.', uygulandi: false },
+  { anahtar: 'seri', ad: 'Alışkanlık serisi', aciklama: 'Bir rutinin kaç gündür kesintisiz yapıldığını gösterir.', uygulandi: false },
+  { anahtar: 'biriktirme', ad: 'Su / Pomodoro toplamı', aciklama: 'Bugünkü biriktirmeli ölçüm (su, pomodoro) toplamlarını gösterir.', uygulandi: false },
+  { anahtar: 'ozlu_soz', ad: 'Günün sözü', aciklama: 'Günlük bir özlü söz/alıntı gösterir, Odak Alanları’yla uyumlu.', uygulandi: false },
+  { anahtar: 'ilac_hatirlatici', ad: 'İlaç hatırlatıcı', aciklama: 'Ajanda’da her gün yer kaplamadan ilaç hatırlatmaları.', uygulandi: false },
+  { anahtar: 'dil_kartlari', ad: 'Dil öğrenme kartları', aciklama: 'AI ile üretilen günlük kelime/örnek cümle önerileri — bir Odak Alanı/Proje Kartı’yla eşleşir.', uygulandi: false },
+  { anahtar: 'home_assistant', ad: 'Home Assistant', aciklama: 'Ev otomasyonu entegrasyonu (ör. Raspberry Pi üzerindeki Home Assistant).', uygulandi: false },
+  { anahtar: 'harici_db', ad: 'Harici veritabanı widget’ı', aciklama: 'Kullanıcının kendi veritabanından (ör. Hostinger) günlük görev çeker — "çek" modeli, kimlik kasası gerektirir.', uygulandi: false },
+  { anahtar: 'greentask_mevzuat', ad: 'Greentask mevzuat özeti', aciklama: 'Haftalık Resmi Gazete taramasının özetini gösterir — "it" modeli, dış otomasyon besliyor.', uygulandi: false },
+];
+// LS_WIDGET_GORUNUR (2026-09-20, WIDGET_KATALOG'un görünürlük tarafı): LS_CONTAINER ile AYNI kalıp — cihaza özel
+// (hesaba senkron değil, ileride Home_gizli gibi DB'ye taşınabilir ama v1 bilerek küçük tutuluyor), tek anahtar
+// altında `{ widgetAnahtari: boolean }` haritası. Haritada olmayan bir anahtar VARSAYILAN GÖRÜNÜR sayılır (Home
+// Alanları'nın "varsayılan gizli"sinin TERSİ — widget'lar zaten `uygulandi:true` olmadan hiç Home'a çıkmıyor,
+// çıktıklarında görünür başlamaları daha doğal, home_gizli'nin gizlilik gerekçesi burada yok).
+const LS_WIDGET_GORUNUR = 'rite_widget_gorunur';
 // LS_CONTAINER (2026-09-19, Behnan isteği — "CardContainer" standardizasyonu): Home/Ajanda/Havuz'da tekrar eden
 // başlık-şeridi desenini (bkz. CardContainer bileşeni, yukarısı) tek bir yerde toplamanın ilk adımı — v1 SADECE
 // aç/kapa (collapsible) taşıyor. Behnan: "kapalı açık durumu localstorage'da saklansın" (cihaza özel, hesaba
@@ -1864,6 +1891,20 @@ export default function Rite() {
       return nv;
     });
   }
+  // widgetGorunur + widgetGorunurMu + widgetGorunurDegistir (2026-09-20, bkz. LS_WIDGET_GORUNUR/WIDGET_KATALOG,
+  // yukarısı): Home'daki UYGULANMIŞ widget'ların göster/gizle tercihini tutan harita — containerAcik ile AYNI
+  // kalıp, ama TERS varsayılan (haritada olmayan bir anahtar GÖRÜNÜR sayılır, bkz. yukarıdaki not).
+  const [widgetGorunur, setWidgetGorunur] = useState<Record<string, boolean>>({});
+  function widgetGorunurMu(anahtar: string): boolean {
+    return widgetGorunur[anahtar] === undefined ? true : widgetGorunur[anahtar];
+  }
+  function widgetGorunurDegistir(anahtar: string) {
+    setWidgetGorunur((m: Record<string, boolean>) => {
+      const nv = { ...m, [anahtar]: !(m[anahtar] === undefined ? true : m[anahtar]) };
+      try { localStorage.setItem(LS_WIDGET_GORUNUR, JSON.stringify(nv)); } catch (_) {}
+      return nv;
+    });
+  }
   // containerGorunum + containerGorunumToggle (2026-09-19, bkz. CardContainer'ın gorunum/onGorunumToggle prop'u,
   // yukarısı): aç/kapa haritasıyla AYNI kalıp (id -> değer, tek localStorage anahtarı, cihaza özel) ama ayrı bir
   // harita/anahtar — ikisi bağımsız tercihler (bir container kapalıyken de görünüm modu hatırlanmalı). Varsayılan
@@ -2178,6 +2219,9 @@ export default function Rite() {
   // (sira)" taşıyan ince bir satır; eski zengin düzenleme formu (alanFormFor, homeAlanEkle/Guncelle/Sil/
   // Sifirla) bu yüzden tamamen kaldırıldı. Home'un KENDİ ekranı (homeYonetOpen) hâlâ sadece görünürlük+sıra.
   const [homeYonetOpen, setHomeYonetOpen] = useState(false);
+  // widgetKatalogOpen (2026-09-20, bkz. WIDGET_KATALOG/LS_WIDGET_GORUNUR, yukarısı): Ayarlar'dan açılan, tüm
+  // widget fikirlerinin (uygulanmış/uygulanmamış) listelendiği modal — homeYonetOpen ile AYNI kalıp (sheet modal).
+  const [widgetKatalogOpen, setWidgetKatalogOpen] = useState(false);
   const [remMenuFor, setRemMenuFor] = useState<any>(null);
   const [urlInput, setUrlInput] = useState('');
   const [adInput, setAdInput] = useState('');
@@ -2307,6 +2351,10 @@ export default function Rite() {
     try {
       const cr = localStorage.getItem(LS_CONTAINER_RENK);
       if (cr) setContainerRenk(JSON.parse(cr));
+    } catch (_) {}
+    try {
+      const wg = localStorage.getItem(LS_WIDGET_GORUNUR);
+      if (wg) setWidgetGorunur(JSON.parse(wg));
     } catch (_) {}
     try {
       const hg = localStorage.getItem(LS_HAVUZ_GORUNUM);
@@ -4324,7 +4372,7 @@ export default function Rite() {
                 (eski "son ölçümler" listesi, taşındı) hem de ＋ ile ölçüm eklemeyi barındırıyor (bkz. aşağısı).
                 Gelişim'in eski "Ölçümler" kartının yerini alan asıl veri (sonOlcumler) DEĞİŞMEDİ, sadece Home'daki
                 sunumu (özet mi, gerçek değer mi) değişti. */}
-            <Widget ikon="📊" baslik="Ölçümler" bilgi={sonOlcumBilgi} onClick={() => setScreen('olcumler')} />
+            {widgetGorunurMu('olcumler') && <Widget ikon="📊" baslik="Ölçümler" bilgi={sonOlcumBilgi} onClick={() => setScreen('olcumler')} />}
             {/* Kapsama (eski Gelişim'in ana kartı — haftalık alan-dokunma analizi) 2026-09'da (Behnan kararı)
                 bottom_nav'dan çıkarılıp Home'dan erişilen, bağlama girmeyen genel bir "Analiz" ekranına taşındı
                 — Behnan'ın deyişiyle "bottom nav'da görünmeyen ama home'dan ulaşabiliriz". İçerik/mantık hiç
@@ -5360,6 +5408,14 @@ export default function Rite() {
               </div>
             </div>
 
+            {/* Widget kataloğu (2026-09-20, Behnan isteği — "fikirler zamanla gelecek, bunları nerede topladığımız
+                önemli"): aklımıza gelen tüm Home widget/tool/kısayol fikirlerinin tek listesi (bkz. WIDGET_KATALOG),
+                hem henüz uygulanmamışları kaybetmemek hem de uygulanmışları Home'da göster/gizle amacıyla. */}
+            <div className="card"><h3>🧩 Widget kataloğu</h3>
+              <p className="note" style={{ marginTop: 0 }}>Home'a eklenebilecek widget/kısayol fikirleri ve hangilerinin uygulandığı.</p>
+              <div className="rowbtns"><button className="btn ghost sm" onClick={() => setWidgetKatalogOpen(true)}>Görüntüle</button></div>
+            </div>
+
             <div className="card"><h3>Test</h3>
               <div className="note" style={{ marginTop: 0 }}>Ajandayı sıfırla: tüm ritüeller ve işaretler silinir (kişisel aktiviteler havuzda kalır).</div>
               <div className="rowbtns"><button className="btn ghost sm" style={{ color: 'var(--red)', borderColor: '#e6c4bd' }} onClick={resetAjanda}>Ajandayı sıfırla</button></div>
@@ -6265,6 +6321,36 @@ export default function Rite() {
               ))}
             </div>
             <button className="btn ghost sm" style={{ width: '100%', marginTop: 14 }} onClick={() => setHomeYonetOpen(false)}>Kapat</button>
+          </div>
+        </div>
+      )}
+
+      {/* Widget kataloğu (2026-09-20, bkz. WIDGET_KATALOG/widgetKatalogOpen, yukarısı): homeYonetOpen ile AYNI
+          sheet-modal kalıbı. Uygulanmış (`uygulandi:true`) satırlar home_gizli'deki gibi bir 👁/🙈 anahtarı
+          taşıyor (bkz. widgetGorunurMu/widgetGorunurDegistir) — henüz uygulanmamışlar sadece açıklamasıyla,
+          soluk bir "Yakında" etiketiyle duruyor ki fikir kaybolmasın ama kullanıcı onu aktif bir kontrol sanmasın. */}
+      {widgetKatalogOpen && (
+        <div className="modal" onMouseDown={() => setWidgetKatalogOpen(false)}>
+          <div className="sheet" onMouseDown={(e: any) => e.stopPropagation()}>
+            <div className="sheetgrip" onClick={() => setWidgetKatalogOpen(false)} />
+            <h2>🧩 Widget kataloğu</h2>
+            <div className="note" style={{ marginTop: 0, marginBottom: 12 }}>Home'a eklenebilecek widget/kısayol fikirleri. Uygulanmış olanları buradan Home'da göster/gizle yapabilirsin, henüz uygulanmamışlar "Yakında" etiketiyle duruyor.</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {WIDGET_KATALOG.map((w) => (
+                <div key={w.anahtar} className="card" style={{ padding: '8px 12px', opacity: w.uygulandi ? 1 : 0.6 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ flex: 1, fontWeight: 700 }}>{w.ad}</span>
+                    {w.uygulandi ? (
+                      <span className="minlink" onClick={() => widgetGorunurDegistir(w.anahtar)}>{widgetGorunurMu(w.anahtar) ? '🙈 Gizle' : '👁 Göster'}</span>
+                    ) : (
+                      <span className="note" style={{ margin: 0, fontSize: 12 }}>Yakında</span>
+                    )}
+                  </div>
+                  <div className="note" style={{ marginTop: 4 }}>{w.aciklama}</div>
+                </div>
+              ))}
+            </div>
+            <button className="btn ghost sm" style={{ width: '100%', marginTop: 14 }} onClick={() => setWidgetKatalogOpen(false)}>Kapat</button>
           </div>
         </div>
       )}
