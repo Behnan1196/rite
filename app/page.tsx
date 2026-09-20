@@ -5388,22 +5388,15 @@ export default function Rite() {
         {/* Koçluk chat + görüntülü görüşme için ayrılmış sekme — henüz sadece yer tutucu, hiçbir backend/chat
             mantığı yok (gerçek entegrasyon, ör. kendi chat altyapımız, ayrı bir iş). Inbox artık burada değil —
             2026-09-18 Havuz yeniden tasarımı 1. adımıyla Havuz'un kendi "📥 Gelenler" klasörüne taşındı (bkz.
-            screen==='havuz', havuzFolder==='gelenler'): paylaşılan bir kart geldiği an zaten Havuz'un içinde,
-            ayrı bir "kabul et" adımı yok. Sohbet gerçek chat olarak açıldığında, o akıştan paylaşılan bir şeyi
+            screen==='havuz', havuzFolder==='gelenler'). Sohbet ekranındaki geçici "📥 Gelenler" kısayol kartı
+            2026-09-20'de KALDIRILDI (Behnan kararı, "artık sohbet'ten inbox'ı kaldırabiliriz") — rozet zaten
+            Havuz nav butonunda (bkz. aşağısı) ve Home'un Gelenler widget'ında gösteriliyor, burada ayrıca
+            tekrarlanmasına gerek yok. Sohbet gerçek chat olarak açıldığında, o akıştan paylaşılan bir şeyi
             Havuz'a almak yine elle "Havuza al" ile olacak (bkz. proje hafızası, karar #3) — otomatik değil. */}
         {screen === 'iletisim' && (
           <div>
             <h2>💬 Sohbet</h2>
             <div className="empty" style={{ marginTop: 10 }}>Yakında — koçunla sohbet ve görüntülü görüşme burada olacak.</div>
-            {ibBadge > 0 && (
-              <div className="card" style={{ marginTop: 14, cursor: 'pointer' }} onClick={() => { setHavuzFolder('gelenler'); setScreen('havuz'); }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                  <div><b>📥 Gelenler</b> — {ibBadge} yeni paylaşım</div>
-                  <span className="go">›</span>
-                </div>
-                <div className="note" style={{ marginTop: 2 }}>Paylaşılanlar artık Havuz&apos;un Gelenler klasöründe.</div>
-              </div>
-            )}
           </div>
         )}
 
@@ -5526,13 +5519,11 @@ export default function Rite() {
             (bkz. aşağısı), artık SADECE Ajanda'nın yeni yerel ＋'sından açılıyor. */}
         {/* İletişim/Sohbet (2026-09, Behnan kararı — WhatsApp-esinli 3. madde): koçluk sohbet/görüntülü görüşme
             sekmesi için şimdilik yer tutucu — chat/video altyapısı (stream.io vb.) ayrı, daha büyük bir iş,
-            henüz ele alınmadı. Inbox de (eski üst header'daki 📥 butonu/modalı) artık burada, sayfa içi bir kart
-            olarak (bkz. İLETİŞİM ekranı) — rozet (ibBadge) de header'daki ibtn'den buraya taşındı. Sohbet/Ayarlar
-            sırası (2026-09, Behnan kararı) yer değiştirildi — Sohbet artık Ayarlar'dan önce. Rozet span'i eskiden
-            "bdg" class'ına güveniyordu ama o CSS kuralı (.ibtn .bdg) sadece .ibtn atası içinde geçerliydi; burada
-            öyle bir ata yok, o yüzden position:absolute hiç uygulanmıyordu ve rakam "Sohbet1" gibi satır içine
-            akıyordu — konumlandırma artık doğrudan inline style ile veriliyor. */}
-        <button key="iletisim" className={screen === 'iletisim' ? 'on' : ''} onClick={() => { setScreen('iletisim'); if (client) loadInbox(client.id); }}>
+            henüz ele alınmadı. Sohbet/Ayarlar sırası (2026-09, Behnan kararı) yer değiştirildi — Sohbet artık
+            Ayarlar'dan önce. Inbox artık bu sekmede yok (2026-09-20'de kaldırıldı, bkz. İLETİŞİM ekranı) — bu
+            yüzden buton tıklamasında artık loadInbox çağrılmıyor; ibBadge zaten mount'ta ve Havuz/diğer
+            aksiyonlarda tazeleniyor (bkz. loadInbox çağrıları). */}
+        <button key="iletisim" className={screen === 'iletisim' ? 'on' : ''} onClick={() => setScreen('iletisim')}>
           <span className="ic">💬</span>Sohbet
         </button>
         <button className={screen === 'bilgi' ? 'on' : ''} onClick={() => setScreen('bilgi')}><span className="ic">⚙</span>Ayarlar</button>
