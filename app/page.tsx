@@ -69,7 +69,13 @@ const RENK_TEMALARI: [string, string, string, string][] = [
 function renkTema(key?: string) { return RENK_TEMALARI.find((r) => r[0] === key) || RENK_TEMALARI[0]; }
 function renkBaslik(key?: string) { return renkTema(key)[2]; }
 function renkIcerik(key?: string) { return renkTema(key)[3]; }
-function CardContainer({ baslik, acik, onToggle, aksiyon, tikla, gorunum, onGorunumToggle, kapaliOnizleme, renk, onRenkSec, children }: {
+// ContainerEylem (2026-09-20, Behnan isteği — Home/CardContainer/Havuz planlama oturumu, "esneklik" kararı):
+// gorunum/renk'in dışında container'a özel ekstra eylemler (ör. "Tam ekranda aç") artık sabit prop'lar yerine
+// bir liste — `hizli:true` olanlar kendi ikonlarıyla doğrudan header'da görünür (⋯'a hiç girmez), `hizli`
+// olmayanlar ⋯ menüsüne düşer. Hiç `hizli olmayan` eylem yoksa ⋯ hiç render edilmiyor (Behnan: "bazı
+// containerlar da ... menüsü olmayıp sadece istediğimiz bir ya da iki fonksiyonun ikonunu gösterebiliriz").
+type ContainerEylem = { key: string; ikon: string; etiket: string; onClick: () => void; hizli?: boolean };
+function CardContainer({ baslik, acik, onToggle, aksiyon, tikla, gorunum, onGorunumToggle, kapaliOnizleme, renk, onRenkSec, headerToggle, eylemler, children }: {
   baslik: string;
   acik: boolean;
   onToggle: () => void;
@@ -80,16 +86,30 @@ function CardContainer({ baslik, acik, onToggle, aksiyon, tikla, gorunum, onGoru
   kapaliOnizleme?: number;
   renk?: string;
   onRenkSec?: (renk: string) => void;
+  // headerToggle (2026-09-20, Behnan isteği — "sadece başlığa basarak container'ı tamamen açıp
+  // kapatabiliyoruz" örneği, Notlar): true olunca HavuzKlasor'daki gibi header'ın TAMAMINA basınca aç/kapa
+  // tetiklenir, ayrı chevron'a gerek kalmaz (chevron hiç render edilmez). Verilmezse (undefined/false) eski
+  // davranış AYNEN sürüyor: chevron aç/kapa yapar, `tikla` (verilmişse) header'a basınca AYRI bir ekran açar
+  // (ör. Ölçümler) — geriye dönük tam uyumlu, mevcut çağrı yerleri (Odak Alanları/Ölçümler) hiç değişmedi.
+  headerToggle?: boolean;
+  eylemler?: ContainerEylem[];
   children: ReactNode;
 }) {
   // renkAcik: renk paleti şeridinin aç/kapa durumu — SADECE bu bileşenin kendi geçici UI state'i (aç/kapa,
   // görünüm gibi kalıcı bir tercih değil, o yüzden dışarıdan değil burada tutuluyor).
   const [renkAcik, setRenkAcik] = useState(false);
+  // menuAcik (2026-09-20, Behnan isteği — GEÇİCİ bir tasarım/gözden geçirme tercihi: "şu an ...'nın hep
+  // durmasını istiyorum ki hangi seçeneklerin olduğunu ve olabileceğini sürekli gözlemleyebileyim"): bu yüzden
+  // varsayılan AÇIK (true) — normal/nihai davranışta (kapalı başlayıp tıklayınca açılan menü) `false` olması
+  // beklenir, bu dönem bitince tek satır değişir. Yine de tıklanınca kapanabiliyor (davranış tamamen kayıp değil).
+  const [menuAcik, setMenuAcik] = useState(true);
+  const hizliEylemler = (eylemler || []).filter((e) => e.hizli);
+  const menuEylemler = (eylemler || []).filter((e) => !e.hizli);
   return (
     <div style={{ marginTop: 10 }}>
       <div
-        style={{ display: 'flex', alignItems: 'center', gap: 8, background: renkBaslik(renk), borderRadius: 10, padding: '10px 10px 10px 12px', cursor: tikla ? 'pointer' : 'default' }}
-        onClick={tikla}
+        style={{ display: 'flex', alignItems: 'center', gap: 8, background: renkBaslik(renk), borderRadius: 10, padding: '10px 10px 10px 12px', cursor: (tikla || headerToggle) ? 'pointer' : 'default' }}
+        onClick={headerToggle ? onToggle : tikla}
       >
         <span style={{ flex: 1, fontWeight: 700 }}>{baslik}</span>
         {aksiyon}
@@ -109,12 +129,46 @@ function CardContainer({ baslik, acik, onToggle, aksiyon, tikla, gorunum, onGoru
             style={{ background: 'none', border: 'none', padding: '0 2px', fontSize: 15, fontWeight: 700, color: '#8a8169', cursor: 'pointer', lineHeight: 1 }}
           >{gorunum === 'kart' ? '☰' : '▦'}</button>
         )}
-        <button
-          type="button"
-          title={acik ? 'Kapat' : 'Aç'}
-          onClick={(e: any) => { e.stopPropagation(); onToggle(); }}
-          style={{ background: 'none', border: 'none', padding: '0 2px', fontSize: 13, fontWeight: 700, color: '#8a8169', cursor: 'pointer', lineHeight: 1, transform: acik ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform .15s' }}
-        >▾</button>
+        {hizliEylemler.map((e) => (
+          <button
+            key={e.key}
+            type="button"
+            title={e.etiket}
+            onClick={(ev: any) => { ev.stopPropagation(); e.onClick(); }}
+            style={{ background: 'none', border: 'none', padding: '0 2px', fontSize: 15, fontWeight: 700, color: '#8a8169', cursor: 'pointer', lineHeight: 1 }}
+          >{e.ikon}</button>
+        ))}
+        {menuEylemler.length > 0 && (
+          <span style={{ position: 'relative' }}>
+            <button
+              type="button"
+              title="Diğer"
+              onClick={(ev: any) => { ev.stopPropagation(); setMenuAcik((o: boolean) => !o); }}
+              style={{ background: 'none', border: 'none', padding: '0 2px', fontSize: 16, fontWeight: 700, color: '#8a8169', cursor: 'pointer', lineHeight: 1 }}
+            >⋯</button>
+            {menuAcik && (
+              <>
+                <div onClick={(ev: any) => { ev.stopPropagation(); setMenuAcik(false); }} style={{ position: 'fixed', inset: 0, zIndex: 4 }} />
+                <div style={{ position: 'absolute', right: 0, top: 26, background: '#fff', border: '1px solid var(--line)', borderRadius: 10, boxShadow: '0 4px 14px rgba(0,0,0,.12)', zIndex: 5, minWidth: 152, overflow: 'hidden' }}>
+                  {menuEylemler.map((e, i) => (
+                    <div key={e.key}>
+                      {i > 0 && <div style={{ borderTop: '1px solid var(--line)' }} />}
+                      <button className="minlink" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 12px', textDecoration: 'none' }} onClick={(ev: any) => { ev.stopPropagation(); setMenuAcik(false); e.onClick(); }}>{e.ikon} {e.etiket}</button>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </span>
+        )}
+        {!headerToggle && (
+          <button
+            type="button"
+            title={acik ? 'Kapat' : 'Aç'}
+            onClick={(e: any) => { e.stopPropagation(); onToggle(); }}
+            style={{ background: 'none', border: 'none', padding: '0 2px', fontSize: 13, fontWeight: 700, color: '#8a8169', cursor: 'pointer', lineHeight: 1, transform: acik ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform .15s' }}
+          >▾</button>
+        )}
       </div>
       {onRenkSec && renkAcik && (
         <div style={{ display: 'flex', gap: 8, marginTop: 6, padding: '2px 2px' }} onClick={(e: any) => e.stopPropagation()}>
@@ -3793,6 +3847,37 @@ export default function Rite() {
     if (oldIndex < 0 || newIndex < 0) return;
     notlarSiraKaydet(arrayMove(notlar, oldIndex, newIndex));
   }
+  // notlarIcerik (2026-09-20, Behnan isteği — CardContainer'ın "Tam ekranda aç" eylemi, ilk somut örnek: Notlar):
+  // Notlar'ın kart/liste görünümlü, sürükle-bırak'lı içeriği artık ayrı bir fonksiyon — hem Ajanda'daki gömülü
+  // CardContainer'ın children'ı, hem de aşağıdaki `screen === 'notlar'` tam sayfa ekranı AYNI içeriği kullanıyor,
+  // kod tekrarı olmasın diye. İçerik/mantık hiç değişmedi, sadece iki yerden çağrılabilir hale geldi.
+  function notlarIcerik() {
+    return (
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEndNotlar}>
+        <SortableContext items={notlar.map((rt: any) => rt.id)} strategy={verticalListSortingStrategy}>
+          {containerGorunumOf('ajanda_notlar') === 'kart' ? (
+            notlar.map((rt: any) => (
+              <SortableRow key={rt.id} id={rt.id}>
+                <div className="card" style={{ padding: '12px 14px', background: renkIcerik(containerRenkOf('ajanda_notlar', 'sari')), border: 'none', borderRadius: 3, marginBottom: 8 }}>
+                  <RitItem rt={rt} />
+                </div>
+              </SortableRow>
+            ))
+          ) : (
+            <div className="card" style={{ background: renkIcerik(containerRenkOf('ajanda_notlar', 'sari')), border: 'none' }}>
+              {notlar.map((rt: any, i: number) => (
+                <SortableRow key={rt.id} id={rt.id}>
+                  <div style={{ borderTop: i > 0 ? '1px solid rgba(0,0,0,.08)' : undefined, padding: '8px 0' }}>
+                    <RitItem rt={rt} />
+                  </div>
+                </SortableRow>
+              ))}
+            </div>
+          )}
+        </SortableContext>
+      </DndContext>
+    );
+  }
   // Çalışan programlar: program kimliğine göre grupla (ilerleme + süre kontrolü için).
   const programGruplari = Object.values(rituals.filter((r) => r.program && !r.mezun).reduce((acc: any, r: any) => {
     const g = acc[r.program] || (acc[r.program] = { pid: r.program, ad: r.program_ad || 'Program', bas: r.baslangic || today, bit: r.bitis || null, n: 0 });
@@ -4475,52 +4560,28 @@ export default function Rite() {
                 çizgi başlığı yerine artık CardContainer (Home'daki Odak Alanları/Ölçümler ile AYNI görsel dil) —
                 Behnan'ın kendi örneği buydu ("notlar kısmı arttığında container kapanır, ya da liste görünümü
                 olmalı"), o yüzden Notlar ve Odak Alanları bu turda birlikte olgunlaştırılacak iki pilot alan
-                (diğer container'lara, ör. Havuz'un klasör başlıklarına, henüz YAYILMADI — bilinçli). */}
+                (diğer container'lara, ör. Havuz'un klasör başlıklarına, henüz YAYILMADI — bilinçli).
+                2026-09-20 (Behnan isteği — Home/CardContainer/Havuz planlama oturumu, ilk somut uygulama):
+                Notlar artık `headerToggle` kullanıyor — başlığa (chevron'a değil) basınca açılıp kapanıyor,
+                ayrı chevron kalktı. `eylemler`de TEK bir hızlı eylem var: "↗ Tam ekran" (screen='notlar'yı açar,
+                bkz. aşağısı) — başka gizli/⋯'ya düşecek bir eylem olmadığı için ⋯ menüsü hiç render edilmiyor,
+                Behnan'ın "bazı containerlar da ... menüsü olmayıp sadece istediğimiz ikonu gösterebiliriz"
+                senaryosunun ilk canlı örneği. İçerik artık notlarIcerik() içinde (bkz. onDragEndNotlar'ın
+                altı) — aynı içerik aşağıdaki tam sayfa ekranında da tekrar kullanılıyor. */}
             {!linkMode && notlar.length > 0 && (
               <CardContainer
                 baslik="Notlar"
                 acik={containerAcikOf('ajanda_notlar', true)}
                 onToggle={() => containerToggle('ajanda_notlar', true)}
+                headerToggle
                 gorunum={containerGorunumOf('ajanda_notlar')}
                 onGorunumToggle={() => containerGorunumToggle('ajanda_notlar')}
                 kapaliOnizleme={90}
                 renk={containerRenkOf('ajanda_notlar', 'sari')}
                 onRenkSec={(r) => containerRenkSec('ajanda_notlar', r)}
+                eylemler={[{ key: 'tamEkran', ikon: '↗', etiket: 'Tam ekran', onClick: () => setScreen('notlar'), hizli: true }]}
               >
-                {/* 2026-09-19 (Behnan: "Fikrim değişti, sürükle-bırak eklensin" — bkz. onDragEndNotlar, yukarısı):
-                    her iki görünüm de aynı DndContext/verticalListSortingStrategy ile sarılı, kartı basılı tutup
-                    sürükleyerek sıralamak için — Ajanda'nın gün listesiyle AYNI desen (SortableRow).
-                    2026-09-19 (CardContainer'ın 5. davranışı, renk/stil): hardcoded '#fdf6d3' yerine artık
-                    renkIcerik(containerRenkOf('ajanda_notlar', 'sari')) — varsayılan 'sari' ile mevcut sarı
-                    yapışkan-not görünümü AYNEN korunuyor, kullanıcı paletten başka bir renk seçmediği sürece
-                    hiçbir şey değişmiyor. */}
-                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEndNotlar}>
-                  <SortableContext items={notlar.map((rt: any) => rt.id)} strategy={verticalListSortingStrategy}>
-                    {containerGorunumOf('ajanda_notlar') === 'kart' ? (
-                      notlar.map((rt: any) => (
-                        <SortableRow key={rt.id} id={rt.id}>
-                          <div className="card" style={{ padding: '12px 14px', background: renkIcerik(containerRenkOf('ajanda_notlar', 'sari')), border: 'none', borderRadius: 3, marginBottom: 8 }}>
-                            <RitItem rt={rt} />
-                          </div>
-                        </SortableRow>
-                      ))
-                    ) : (
-                      /* LİSTE görünümü (2026-09-19): tam bir yapışkan-not kutusu yerine tek bir sarı `.card`
-                          içinde art arda, aralarında ince çizgi ile ayrılan kompakt satırlar — Behnan'ın kendi
-                          örneğiydi ("notlar kısmı arttığında... liste görünümü olmalı"), RitItem zaten kompakt
-                          olduğu için içerik AYNI, sadece her notun kendi ayrı sarı kutusu/boşluğu kalkıyor. */
-                      <div className="card" style={{ background: renkIcerik(containerRenkOf('ajanda_notlar', 'sari')), border: 'none' }}>
-                        {notlar.map((rt: any, i: number) => (
-                          <SortableRow key={rt.id} id={rt.id}>
-                            <div style={{ borderTop: i > 0 ? '1px solid rgba(0,0,0,.08)' : undefined, padding: '8px 0' }}>
-                              <RitItem rt={rt} />
-                            </div>
-                          </SortableRow>
-                        ))}
-                      </div>
-                    )}
-                  </SortableContext>
-                </DndContext>
+                {notlarIcerik()}
               </CardContainer>
             )}
             </>
@@ -5046,6 +5107,22 @@ export default function Rite() {
             ) : (
               <div className="note">Henüz ölçüm analizi için yeterli veri yok.</div>
             )}
+          </div>
+        )}
+
+        {/* ---------- NOTLAR (tam sayfa, 2026-09-20 Behnan kararı) ---------- */}
+        {/* Notlar CardContainer'ının "↗ Tam ekran" eylemiyle açılan bağlamsal ekran — Ölçümler'in Home'dan aynı
+            desende açılması gibi, buradaki geri linki de doğal evi olan Ajanda'ya dönüyor. İçerik notlarIcerik()
+            ile Ajanda'daki gömülü haliyle BİREBİR aynı (bkz. onDragEndNotlar'ın altındaki tanım) — kod tekrarı
+            yok, sürükle-bırak/görünüm/renk tercihleri iki yerde de aynı state'i paylaşıyor. Bu, Home'dan bir
+            container'ı tam sayfa açan kısayol (widget) fikrinin ilk canlı örneği: bugün sadece Notlar'ın kendi
+            "↗ Tam ekran" eyleminden açılıyor, ama Home bir widget sistemi kazandığında aynı screen='notlar'
+            hedefine oradan da gidilebilir. */}
+        {screen === 'notlar' && (
+          <div>
+            <button className="linkbtn" onClick={() => setScreen('ajanda')}>‹ Ajanda</button>
+            <h2 style={{ marginTop: 6 }}>Notlar</h2>
+            {notlar.length === 0 ? <div className="note">Henüz not yok.</div> : notlarIcerik()}
           </div>
         )}
 
