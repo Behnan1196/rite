@@ -2214,6 +2214,29 @@ export default function Rite() {
   const [grupEditVal, setGrupEditVal] = useState('');
   const [grupEditAltVal, setGrupEditAltVal] = useState('');
   const [paylasOpen, setPaylasOpen] = useState(false);
+  // Sohbet mockup (2026-09-20, Behnan isteği — "sohbet ve video ekranını bir çeşit mockup olarak oluşturalım,
+  // özellikle sohbette neyi nasıl paylaşacağımızı düşünelim"): GERÇEK bir chat altyapısı (Stream.io ya da kendi
+  // VPS'i, bkz. proje hafızası) henüz seçilmedi — bu SADECE cihazda yaşayan, hiçbir backend'e/dog_inbox'a
+  // yazmayan bir format denemesi (mesajlar sayfa yenilenince sıfırlanır). Mesaj şekli ('metin'|'kart'|'anket')
+  // ileride gerçek bir mesajlaşma tablosuna taşınacak "aday" format — 'kart' tipi BİLEREK paylas()'ın ürettiği
+  // payload şeklini (ad/faydalar/kartTipi/kartConfig/aciklama/from_ad) aynen kullanıyor, yeni bir şema icat
+  // edilmedi. 'anket' kartı gerçek AnketKart bileşenini balonun İÇİNE embed ediyor — Behnan'ın tarif ettiği
+  // "anket kartı sohbette dolduruluyor" senaryosunun somut denemesi.
+  const [sohbetMesajlar, setSohbetMesajlar] = useState<any[]>(() => {
+    const su = Date.now();
+    return [
+      { id: 'm1', yon: 'gelen', t: su - 3600_000 * 3, tip: 'metin', metin: 'Merhaba Behnan! Bu haftaki hedeflerini birlikte gözden geçirelim mi?' },
+      { id: 'm2', yon: 'giden', t: su - 3600_000 * 3 + 60_000, tip: 'metin', metin: 'Olur, başlayalım.' },
+      { id: 'm3', yon: 'gelen', t: su - 3600_000 * 2, tip: 'kart', kart: { ad: 'Bu haftanın nefes egzersizi', kartTipi: 'nefes', kartConfig: { saniye: 240 }, aciklama: 'Günde bir kez, tercihen sabah.', from_ad: 'Koç' } },
+      { id: 'm4', yon: 'gelen', t: su - 3600_000, tip: 'kart', kart: { ad: 'Haftalık check-in', kartTipi: 'anket', kartConfig: { sorular: ['Bu hafta enerjin 1-10 arası kaç?', 'En çok neye zaman ayırdın?'] }, from_ad: 'Koç' } },
+    ];
+  });
+  const [sohbetInput, setSohbetInput] = useState('');
+  const [sohbetKartSecOpen, setSohbetKartSecOpen] = useState(false);
+  const [sohbetAnketDurum, setSohbetAnketDurum] = useState<Record<string, boolean>>({});
+  const [videoAcik, setVideoAcik] = useState(false);
+  const [videoMikAcik, setVideoMikAcik] = useState(true);
+  const [videoKamAcik, setVideoKamAcik] = useState(true);
   // "Mezun et" kavramı 2026-09-17'de (Behnan kararı) TAMAMEN kaldırıldı — mezunModal/mezunEt/Mezunlar ekranı
   // silindi (bkz. o değişikliklerin yanındaki notlar). puanModal/puanDeger: "Puanla" eylemi için (bkz.
   // ritPuanla) — puanModal o an puanlanan rt'yi tutuyor, puanDeger seçilen yıldızın yerel arabelleği.
@@ -5384,21 +5407,113 @@ export default function Rite() {
         {/* Mezunlar arşiv ekranı 2026-09-17'de (Behnan kararı, "mezun et tamamen kalksın") TAMAMEN kaldırıldı —
             zaten UI'da ona giden aktif bir link kalmamıştı (bkz. bir önceki turun notu). */}
 
-        {/* ---------- İLETİŞİM / SOHBET (2026-09 Behnan kararı) ---------- */}
-        {/* Koçluk chat + görüntülü görüşme için ayrılmış sekme — henüz sadece yer tutucu, hiçbir backend/chat
-            mantığı yok (gerçek entegrasyon, ör. kendi chat altyapımız, ayrı bir iş). Inbox artık burada değil —
-            2026-09-18 Havuz yeniden tasarımı 1. adımıyla Havuz'un kendi "📥 Gelenler" klasörüne taşındı (bkz.
-            screen==='havuz', havuzFolder==='gelenler'). Sohbet ekranındaki geçici "📥 Gelenler" kısayol kartı
-            2026-09-20'de KALDIRILDI (Behnan kararı, "artık sohbet'ten inbox'ı kaldırabiliriz") — rozet zaten
-            Havuz nav butonunda (bkz. aşağısı) ve Home'un Gelenler widget'ında gösteriliyor, burada ayrıca
-            tekrarlanmasına gerek yok. Sohbet gerçek chat olarak açıldığında, o akıştan paylaşılan bir şeyi
-            Havuz'a almak yine elle "Havuza al" ile olacak (bkz. proje hafızası, karar #3) — otomatik değil. */}
-        {screen === 'iletisim' && (
-          <div>
-            <h2>💬 Sohbet</h2>
-            <div className="empty" style={{ marginTop: 10 }}>Yakında — koçunla sohbet ve görüntülü görüşme burada olacak.</div>
-          </div>
-        )}
+        {/* ---------- İLETİŞİM / SOHBET (2026-09 Behnan kararı, 2026-09-20 mockup) ---------- */}
+        {/* Koçluk chat + görüntülü görüşme için ayrılmış sekme. Gerçek chat/video altyapısı (Stream.io vb. ya da
+            kendi VPS'i — bkz. proje hafızası, henüz karar verilmedi) YOK — burası SADECE cihazda yaşayan bir
+            mockup, "neyi nasıl paylaşacağız" formatını denemek için (bkz. sohbetMesajlar tanımı, yukarısı).
+            Inbox artık burada değil — 2026-09-18 Havuz yeniden tasarımı 1. adımıyla Havuz'un kendi
+            "📥 Gelenler" klasörüne taşındı (screen==='havuz', havuzFolder==='gelenler'); Sohbet'teki geçici
+            "📥 Gelenler" kısayol kartı 2026-09-20'de kaldırıldı. Gerçek chat açıldığında, o akıştan paylaşılan
+            bir şeyi Havuz'a almak yine elle "Havuza al" ile olacak (proje hafızası, karar #3) — otomatik değil. */}
+        {screen === 'iletisim' && (() => {
+          // Paylaşılabilecek kişisel kart adayları — rmPaylasIzin ile AYNI koşul (kaynak='Kendi' ve kart_tipi='bilgi',
+          // ya da devMode açıkken Kart Laboratuvarı kartları da — anket örneğini denemek kolaylaşsın diye).
+          const sohbetKartAdaylari = rituals.filter((r: any) => !r.mezun && r.kaynak === 'Kendi' && (r.kart_tipi === 'bilgi' || devMode));
+          const saatFmt = (t: number) => new Date(t).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+          function sohbetMetinGonder() {
+            const metin = sohbetInput.trim();
+            if (!metin) return;
+            setSohbetMesajlar((m: any[]) => [...m, { id: 'm' + Date.now(), yon: 'giden', t: Date.now(), tip: 'metin', metin }]);
+            setSohbetInput('');
+          }
+          // Gerçek bir kişisel kartı sohbete "ekle" — paylas()'taki isRit payload'ıyla BİLEREK aynı alan adları
+          // (kartTipi/kartConfig/from_ad), format tutarlılığını test edebilelim diye. Hiçbir yere gönderilmiyor,
+          // sadece yerel sohbetMesajlar dizisine ekleniyor.
+          function sohbetKartEkle(o: any) {
+            const kart: any = { ad: o.ad, faydalar: o.faydalar || [], kartTipi: o.kart_tipi || null, kartConfig: o.kart_config || null, aciklama: o.aciklama || null, from_ad: profilAd.trim() || client?.ad || '' };
+            setSohbetMesajlar((m: any[]) => [...m, { id: 'm' + Date.now(), yon: 'giden', t: Date.now(), tip: 'kart', kart, kaynakId: o.id }]);
+            setSohbetKartSecOpen(false);
+          }
+          const sohbetBalon = (m: any) => {
+            const giden = m.yon === 'giden';
+            const kaynakKart = m.kaynakId ? rituals.find((r: any) => r.id === m.kaynakId) : null;
+            return (
+              <div key={m.id} style={{ display: 'flex', justifyContent: giden ? 'flex-end' : 'flex-start', margin: '6px 0' }}>
+                <div style={{ maxWidth: '82%', background: giden ? 'var(--green2)' : '#fff', border: '1px solid var(--line)', borderRadius: 14, padding: '8px 11px' }}>
+                  {m.tip === 'metin' && <div style={{ fontSize: 14, whiteSpace: 'pre-wrap' }}>{m.metin}</div>}
+                  {m.tip === 'kart' && (
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 700 }}>{kartIkon(m.kart?.kartTipi) || '📄'} {m.kart?.ad}</div>
+                      {m.kart?.from_ad && <div className="note" style={{ margin: '2px 0' }}>Kimden: {m.kart.from_ad}</div>}
+                      {m.kart?.aciklama && <div className="note" style={{ margin: '2px 0' }}>{m.kart.aciklama}</div>}
+                      {m.kart?.kartTipi === 'anket' ? (
+                        <div style={{ marginTop: 6 }}>
+                          <AnketKart cfg={m.kart.kartConfig} done={!!sohbetAnketDurum[m.id]} onGonder={() => setSohbetAnketDurum((d: Record<string, boolean>) => ({ ...d, [m.id]: true }))} />
+                        </div>
+                      ) : kaynakKart ? (
+                        <div className="note" style={{ margin: '4px 0 0', fontWeight: 700, cursor: 'pointer' }} onClick={() => openRit(kaynakKart)}>👁 Kartı gör</div>
+                      ) : (
+                        <div className="note" style={{ margin: '4px 0 0', fontStyle: 'italic' }}>(örnek paylaşım — gerçek kart değil)</div>
+                      )}
+                    </div>
+                  )}
+                  <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4, textAlign: 'right' }}>{saatFmt(m.t)}</div>
+                </div>
+              </div>
+            );
+          };
+
+          if (videoAcik) {
+            return (
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <span style={{ color: '#8a8169', fontSize: 20, transform: 'rotate(180deg)', cursor: 'pointer' }} onClick={() => setVideoAcik(false)}>›</span>
+                  <h2 style={{ margin: 0 }}>🎥 Görüntülü görüşme</h2>
+                </div>
+                <div className="note" style={{ marginTop: 0, marginBottom: 10 }}>🧪 Mockup — gerçek görüntü/ses akışı yok, sadece arayüz denemesi.</div>
+                <div style={{ position: 'relative', width: '100%', aspectRatio: '3 / 4', background: '#26241f', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#e7e0d2', fontSize: 14 }}>
+                  Koç · bağlanıyor…
+                  <div style={{ position: 'absolute', bottom: 10, right: 10, width: 74, height: 100, background: '#3a382f', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#cfcabb', fontSize: 11 }}>Sen</div>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'center', gap: 14, marginTop: 16 }}>
+                  <span onClick={() => setVideoMikAcik((v: boolean) => !v)} style={{ width: 48, height: 48, borderRadius: 24, background: '#fff', border: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, cursor: 'pointer' }}>{videoMikAcik ? '🎤' : '🔇'}</span>
+                  <span onClick={() => setVideoKamAcik((v: boolean) => !v)} style={{ width: 48, height: 48, borderRadius: 24, background: '#fff', border: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, cursor: 'pointer' }}>{videoKamAcik ? '📷' : '📵'}</span>
+                  <span onClick={() => setVideoAcik(false)} style={{ width: 48, height: 48, borderRadius: 24, background: 'var(--red)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, cursor: 'pointer' }}>📞</span>
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <h2 style={{ margin: 0 }}>💬 Sohbet</h2>
+                <span onClick={() => setVideoAcik(true)} style={{ fontSize: 20, cursor: 'pointer' }} title="Görüntülü görüşme">🎥</span>
+              </div>
+              <div className="note" style={{ marginTop: 2, marginBottom: 10 }}>🧪 Mockup — mesajlar sadece bu cihazda tutuluyor, gerçek bir chat altyapısına henüz bağlı değil.</div>
+              <div>{sohbetMesajlar.map(sohbetBalon)}</div>
+              {sohbetKartSecOpen && (
+                <div className="card" style={{ marginTop: 8 }}>
+                  <div className="note" style={{ marginTop: 0, fontWeight: 700 }}>Hangi kartı paylaşmak istersin?</div>
+                  {sohbetKartAdaylari.length === 0 ? (
+                    <div className="note">Paylaşılabilecek kişisel kartın yok.</div>
+                  ) : sohbetKartAdaylari.map((r: any) => (
+                    <div key={r.id} className="actcard" onClick={() => sohbetKartEkle(r)}>
+                      <div style={{ flex: 1, minWidth: 0 }}><div className="n">{kartIkon(r.kart_tipi) || '📄'} {r.ad}</div></div>
+                      <span className="go">›</span>
+                    </div>
+                  ))}
+                  <button className="btn ghost sm" style={{ marginTop: 6 }} onClick={() => setSohbetKartSecOpen(false)}>Vazgeç</button>
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                <span onClick={() => setSohbetKartSecOpen((v: boolean) => !v)} style={{ width: 40, height: 40, borderRadius: 20, background: '#fff', border: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, cursor: 'pointer', flex: '0 0 auto' }} title="Kart paylaş">📎</span>
+                <input value={sohbetInput} onChange={(e: any) => setSohbetInput(e.target.value)} onKeyDown={(e: any) => { if (e.key === 'Enter') sohbetMetinGonder(); }} placeholder="Mesaj yaz…" style={{ flex: 1 }} />
+                <button className="btn sm" style={{ width: 'auto', padding: '0 16px' }} onClick={sohbetMetinGonder}>Gönder</button>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* ---------- BİLGİ ---------- */}
         {screen === 'bilgi' && (
