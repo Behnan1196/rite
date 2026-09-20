@@ -75,7 +75,7 @@ function renkIcerik(key?: string) { return renkTema(key)[3]; }
 // olmayanlar ⋯ menüsüne düşer. Hiç `hizli olmayan` eylem yoksa ⋯ hiç render edilmiyor (Behnan: "bazı
 // containerlar da ... menüsü olmayıp sadece istediğimiz bir ya da iki fonksiyonun ikonunu gösterebiliriz").
 type ContainerEylem = { key: string; ikon: string; etiket: string; onClick: () => void; hizli?: boolean };
-function CardContainer({ baslik, acik, onToggle, aksiyon, tikla, gorunum, onGorunumToggle, kapaliOnizleme, renk, onRenkSec, headerToggle, eylemler, children }: {
+function CardContainer({ baslik, acik, onToggle, aksiyon, tikla, gorunum, onGorunumToggle, kapaliOnizleme, renk, onRenkSec, headerToggle, eylemler, baslikGizli, children }: {
   baslik: string;
   acik: boolean;
   onToggle: () => void;
@@ -93,11 +93,25 @@ function CardContainer({ baslik, acik, onToggle, aksiyon, tikla, gorunum, onGoru
   // (ör. Ölçümler) — geriye dönük tam uyumlu, mevcut çağrı yerleri (Odak Alanları/Ölçümler) hiç değişmedi.
   headerToggle?: boolean;
   eylemler?: ContainerEylem[];
+  // baslikGizli (2026-09-20, Behnan isteği — "başlığı görünmeyen cardcontainer'ımız bile olabilir", Ajanda'nın
+  // gün listesi tartışması): true olunca header şeridi (baslik/aksiyon/renk/gorunum/eylemler/chevron) HİÇ
+  // render edilmiyor — CardContainer sadece `acik`'e göre children'ı gösterip göstermeme işini yapıyor. Ajanda'nın
+  // gün listesi gibi, kendi üst başlığı zaten başka yerde olan ama yine de "bu bir container" diyebileceğimiz
+  // yerler için. `acik` yine de zorunlu prop (genelde `true` sabit + `onToggle={() => {}}` ile kullanılır, bkz.
+  // Notlar'ın tam ekran hâli).
+  baslikGizli?: boolean;
   children: ReactNode;
 }) {
   // renkAcik: renk paleti şeridinin aç/kapa durumu — SADECE bu bileşenin kendi geçici UI state'i (aç/kapa,
   // görünüm gibi kalıcı bir tercih değil, o yüzden dışarıdan değil burada tutuluyor).
   const [renkAcik, setRenkAcik] = useState(false);
+  if (baslikGizli) {
+    return acik ? <>{children}</> : kapaliOnizleme ? (
+      <div style={{ maxHeight: kapaliOnizleme, overflow: 'hidden', borderRadius: 10, boxShadow: 'inset 0 -18px 14px -14px rgba(0,0,0,.12)' }}>
+        {children}
+      </div>
+    ) : null;
+  }
   // menuAcik (2026-09-20, Behnan isteği — GEÇİCİ bir tasarım/gözden geçirme tercihi: "şu an ...'nın hep
   // durmasını istiyorum ki hangi seçeneklerin olduğunu ve olabileceğini sürekli gözlemleyebileyim"): bu yüzden
   // varsayılan AÇIK (true) — normal/nihai davranışta (kapalı başlayıp tıklayınca açılan menü) `false` olması
@@ -190,6 +204,56 @@ function CardContainer({ baslik, acik, onToggle, aksiyon, tikla, gorunum, onGoru
         </div>
       ) : null}
     </div>
+  );
+}
+
+// SiraliListe (2026-09-20, Behnan isteği — "sürükle bırak davranışı standart hale gelmiş olabilir, kodları da
+// standartlaştırmaya yardımcı olabilir mi": CardContainer'IN İÇİNE gömmek yerine AYRI, küçük bir yardımcı —
+// Behnan'ın kendi tercihi: "cevap belli gibi, ikincisi"): DndContext/SortableContext/sensors kurulumunu ve her
+// öğenin SortableRow'a sarılmasını tek yerde toplar. Notlar, Home Alanları (kart+liste) ve Ajanda'nın gün
+// listesinde AYRI AYRI yazılan bu boilerplate artık tek yerden geliyor. Dış düzeni (grid mi, tek sütun liste
+// mi, ortak bir .card mı) KENDİSİ belirlemiyor — ne SiraliListe ne DndContext ne SortableContext kendi DOM
+// sarmalayıcısını ekliyor, çağıran taraf SiraliListe'yi istediği dış kaba (div/grid/.card) koyabiliyor.
+// İki kullanım modu var: (1) basit mod — `onSirala` verilirse, sürükleme bitince YENİ sıralı diziyi hesaplayıp
+// verir (Notlar, Home Alanları gibi "düz sırala ve kaydet" durumları için — kaydetme mantığı yine çağıranın
+// işi, SiraliListe sadece diziyi hesaplıyor). (2) ham mod — Ajanda'nın gün listesi gibi, sürüklemenin sonucu
+// basit bir yeniden sıralamadan fazlası olduğunda (rutine katılma, zaman dilimi değişimi, "gün sırası" kaydı
+// vb. — bkz. onDragEndDay) `onDragEnd` ham dnd-kit event'ini alır, TÜM mantık çağıranda kalır, SiraliListe
+// sadece iskeleti kurar. `idAlani` (varsayılan `.id`) öğeden id çıkarır — Ajanda'nın satırları `.id` değil
+// `.key` kullandığı için bu özelleştirilebilir. `children(oge, i)` her öğeyi render eder — SortableRow'u
+// KENDİSİ sarmıyor, SiraliListe sarıyor; ikinci parametre (i) sıradaki index, bazı görünümlerin (ör. Notlar'ın
+// liste modundaki ayırıcı çizgi) ihtiyacı olan sıra bilgisi için.
+function SiraliListe({ ogeler, idAlani, strateji, onSirala, onDragEnd, devreDisi, children }: {
+  ogeler: any[];
+  idAlani?: (o: any) => string;
+  strateji?: 'liste' | 'izgara';
+  onSirala?: (yeniSirali: any[]) => void;
+  onDragEnd?: (e: any) => void;
+  devreDisi?: (o: any) => boolean;
+  children: (o: any, i: number) => ReactNode;
+}) {
+  const idOf = idAlani || ((o: any) => o.id);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { delay: 300, tolerance: 6 } }));
+  function handleDragEnd(e: any) {
+    if (onDragEnd) { onDragEnd(e); return; }
+    if (!onSirala) return;
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const oldIndex = ogeler.findIndex((o: any) => idOf(o) === active.id);
+    const newIndex = ogeler.findIndex((o: any) => idOf(o) === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+    onSirala(arrayMove(ogeler, oldIndex, newIndex));
+  }
+  return (
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      <SortableContext items={ogeler.map(idOf)} strategy={strateji === 'izgara' ? rectSortingStrategy : verticalListSortingStrategy}>
+        {ogeler.map((o: any, i: number) => (
+          <SortableRow key={idOf(o)} id={idOf(o)} disabled={devreDisi ? devreDisi(o) : undefined}>
+            {children(o, i)}
+          </SortableRow>
+        ))}
+      </SortableContext>
+    </DndContext>
   );
 }
 
@@ -2093,9 +2157,10 @@ export default function Rite() {
   const [kisiselNotInput, setKisiselNotInput] = useState('');
   const [kartUrlInput, setKartUrlInput] = useState('');
   const [sureInput, setSureInput] = useState('21');
-  // Artık ayrı bir tutamaç yok, kartın tamamı basılı tutulunca taşınıyor — bu yüzden gecikme (delay) daha önceki
-  // (küçük tutamaca özel) 180ms'den daha uzun: kısa bir "aç/işaretle" dokunuşuyla yanlışlıkla sürüklemeyi karıştırmasın.
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { delay: 300, tolerance: 6 } }));
+  // 2026-09-20 GÜNCELLEME: bu sayfa-seviyesi `sensors` kaldırıldı — sürükle-bırak artık her yerde SiraliListe
+  // üzerinden gidiyor, kendi `sensors`'ını kendisi kuruyor (bkz. SiraliListe tanımı, dosyanın başı). Eski not
+  // ("ayrı bir tutamaç yok, kartın tamamı basılı tutulunca taşınıyor, delay 300ms/tolerance 6px") SiraliListe'nin
+  // kendi sensors satırına AYNEN taşındı.
   const [faydaList, setFaydaList] = useState<any[]>([]);
   const [alanList, setAlanList] = useState<string[]>([]);
   const [meridyenAlanlarLib, setMeridyenAlanlarLib] = useState<any[]>([]);
@@ -2849,8 +2914,8 @@ export default function Rite() {
     await supabase.from('dog_gruplar').update({ home_gizli: !a.home_gizli }).eq('id', a.id);
     loadGruplar(client.id);
   }
-  // homeAlanSiraKaydet + onDragEndHomeAlan (2026-09-19, Behnan isteği — CardContainer'ın 3. davranışı: sürükle-
-  // bırak sıralama, Notlar+Odak Alanları pilot turu): "Alanları yönet"deki ▲▼ TAMAMEN KALDIRILDI (Behnan kararı:
+  // homeAlanSiraKaydet + homeAlanSirala (2026-09-19, Behnan isteği — CardContainer'ın 3. davranışı: sürükle-
+  // bırak sıralama, Notlar+Odak Alanları pilot turu; 2026-09-20'de SiraliListe'ye taşındı, bkz. aşağısı): "Alanları yönet"deki ▲▼ TAMAMEN KALDIRILDI (Behnan kararı:
   // "▲▼ kalksın, sadece sürükle-bırak olsun"), sıralama artık SADECE Home ekranındaki sürükle-bırak ile. Aynı
   // `sira` alanını paylaşıyor (grupSiraDegistir'in kullandığı alanla AYNI) — sadece yazma yolu değişti: ikili
   // takas yerine, bırakıldıktan sonraki YENİ SIRA baştan sona yeniden numaralanıyor (0..n-1).
@@ -2863,13 +2928,11 @@ export default function Rite() {
     await Promise.all(yeniTamListe.map((a: any, i: number) => supabase.from('dog_gruplar').update({ sira: i }).eq('id', a.id)));
     loadGruplar(client.id);
   }
-  function onDragEndHomeAlan(e: any) {
-    const { active, over } = e;
-    if (!over || active.id === over.id) return;
-    const oldIndex = homeAlanlarGorunur.findIndex((a: any) => a.id === active.id);
-    const newIndex = homeAlanlarGorunur.findIndex((a: any) => a.id === over.id);
-    if (oldIndex < 0 || newIndex < 0) return;
-    const yeniGorunur = arrayMove(homeAlanlarGorunur, oldIndex, newIndex);
+  // homeAlanSirala (2026-09-20, sürükle-bırak iskeletinin standartlaştırılması): eski onDragEndHomeAlan'ın
+  // yerini aldı — SiraliListe artık ham event'i değil, doğrudan YENİ sıralı `homeAlanlarGorunur` dizisini
+  // veriyor (bkz. SiraliListe'nin `onSirala` modu), gizli alanları (home_gizli) tam listeye geri serpiştirip
+  // kaydetme mantığı AYNEN korundu.
+  function homeAlanSirala(yeniGorunur: any[]) {
     let vi = 0;
     const yeniTam = homeAlanlar.map((a: any) => (a.home_gizli ? a : yeniGorunur[vi++]));
     homeAlanSiraKaydet(yeniTam);
@@ -3828,8 +3891,8 @@ export default function Rite() {
   // 2026-09-19 GÜNCELLEME (Behnan kararı — CardContainer'ın sürükle-bırak davranışı Notlar'a da genişletildi):
   // ÖNCEDEN (2026-09-17 civarı) burada "Notlar sürüklenemez, gerek yok" kararı vardı (Behnan: "sıralayamıyoruz,
   // gerek de yok gibi, bir an önce karar verip tasnif etsin"). Behnan bu kararı AÇIKÇA değiştirdi — sorulunca
-  // "Fikrim değişti, sürükle-bırak eklensin" dedi. Artık notlar.map SortableRow/DndContext ile sarılıyor (bkz.
-  // onDragEndNotlar), blok_sira sürükleme sonrası YENİDEN NUMARALANIYOR (n-i, en üsttekine en yüksek değer) —
+  // "Fikrim değişti, sürükle-bırak eklensin" dedi. Artık notlar SiraliListe ile sarılıyor (bkz. notlarIcerik,
+  // notlarSiraKaydet), blok_sira sürükleme sonrası YENİDEN NUMARALANIYOR (n-i, en üsttekine en yüksek değer) —
   // Date.now() ile karışmaması için: yeni oluşan bir not hâlâ çok daha büyük bir blok_sira alacağı için otomatik
   // en üste düşmeye devam ediyor, elle sürüklenenler küçük tam sayılarla aynı sırada kalıyor.
   const notlar = rituals.filter((r) => !r.mezun && isNotKart(r)).sort((a, b) => (Number(b.blok_sira) || 0) - (Number(a.blok_sira) || 0));
@@ -3839,43 +3902,31 @@ export default function Rite() {
     await Promise.all(yeniSirali.map((rt: any, i: number) => supabase.from('dog_rituals').update({ blok_sira: n - i }).eq('id', rt.id)));
     loadData(client.id);
   }
-  function onDragEndNotlar(e: any) {
-    const { active, over } = e;
-    if (!over || active.id === over.id) return;
-    const oldIndex = notlar.findIndex((r: any) => r.id === active.id);
-    const newIndex = notlar.findIndex((r: any) => r.id === over.id);
-    if (oldIndex < 0 || newIndex < 0) return;
-    notlarSiraKaydet(arrayMove(notlar, oldIndex, newIndex));
-  }
   // notlarIcerik (2026-09-20, Behnan isteği — CardContainer'ın "Tam ekranda aç" eylemi, ilk somut örnek: Notlar):
   // Notlar'ın kart/liste görünümlü, sürükle-bırak'lı içeriği artık ayrı bir fonksiyon — hem Ajanda'daki gömülü
   // CardContainer'ın children'ı, hem de aşağıdaki `screen === 'notlar'` tam sayfa ekranı AYNI içeriği kullanıyor,
-  // kod tekrarı olmasın diye. İçerik/mantık hiç değişmedi, sadece iki yerden çağrılabilir hale geldi.
+  // kod tekrarı olmasın diye. 2026-09-20 GÜNCELLEME (sürükle-bırak iskeletinin standartlaştırılması): eski
+  // DndContext/SortableContext/SortableRow/onDragEndNotlar boilerplate'i kalktı, artık SiraliListe kullanıyor
+  // (bkz. SiraliListe tanımı, CardContainer'ın hemen altı) — davranış AYNEN korundu, sadece kurulum tek satıra indi.
   function notlarIcerik() {
-    return (
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEndNotlar}>
-        <SortableContext items={notlar.map((rt: any) => rt.id)} strategy={verticalListSortingStrategy}>
-          {containerGorunumOf('ajanda_notlar') === 'kart' ? (
-            notlar.map((rt: any) => (
-              <SortableRow key={rt.id} id={rt.id}>
-                <div className="card" style={{ padding: '12px 14px', background: renkIcerik(containerRenkOf('ajanda_notlar', 'sari')), border: 'none', borderRadius: 3, marginBottom: 8 }}>
-                  <RitItem rt={rt} />
-                </div>
-              </SortableRow>
-            ))
-          ) : (
-            <div className="card" style={{ background: renkIcerik(containerRenkOf('ajanda_notlar', 'sari')), border: 'none' }}>
-              {notlar.map((rt: any, i: number) => (
-                <SortableRow key={rt.id} id={rt.id}>
-                  <div style={{ borderTop: i > 0 ? '1px solid rgba(0,0,0,.08)' : undefined, padding: '8px 0' }}>
-                    <RitItem rt={rt} />
-                  </div>
-                </SortableRow>
-              ))}
+    return containerGorunumOf('ajanda_notlar') === 'kart' ? (
+      <SiraliListe ogeler={notlar} strateji="liste" onSirala={notlarSiraKaydet}>
+        {(rt: any) => (
+          <div className="card" style={{ padding: '12px 14px', background: renkIcerik(containerRenkOf('ajanda_notlar', 'sari')), border: 'none', borderRadius: 3, marginBottom: 8 }}>
+            <RitItem rt={rt} />
+          </div>
+        )}
+      </SiraliListe>
+    ) : (
+      <div className="card" style={{ background: renkIcerik(containerRenkOf('ajanda_notlar', 'sari')), border: 'none' }}>
+        <SiraliListe ogeler={notlar} strateji="liste" onSirala={notlarSiraKaydet}>
+          {(rt: any, i: number) => (
+            <div style={{ borderTop: i > 0 ? '1px solid rgba(0,0,0,.08)' : undefined, padding: '8px 0' }}>
+              <RitItem rt={rt} />
             </div>
           )}
-        </SortableContext>
-      </DndContext>
+        </SiraliListe>
+      </div>
     );
   }
   // Çalışan programlar: program kimliğine göre grupla (ilerleme + süre kontrolü için).
@@ -4181,58 +4232,52 @@ export default function Rite() {
                   2026-09-19 (Behnan isteği — CardContainer'ın 3. davranışı, sürükle-bırak): grid'e uygun
                   `rectSortingStrategy` (verticalListSortingStrategy düz listeler için, 2 sütunlu ızgarada doğru
                   hesaplamıyor). "Alanları yönet"deki ▲▼ kaldırıldı (Behnan kararı), sıralama artık SADECE burada,
-                  kartı basılı tutup sürükleyerek (bkz. onDragEndHomeAlan, SortableRow — Ajanda'nın gün listesiyle
-                  AYNI dokunmatik-uyumlu desen). */
-              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEndHomeAlan}>
-                <SortableContext items={homeAlanlarGorunur.map((a: any) => a.id)} strategy={rectSortingStrategy}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                    {homeAlanlarGorunur.map((a) => {
-                      const guncel = homeGuncelDeger(a.anahtar);
-                      return (
-                        <SortableRow key={a.id} id={a.id}>
-                          <div className="card" style={{ margin: 0, cursor: 'pointer', background: renkIcerik(containerRenkOf('home_odak')) }} onClick={() => setHomeDetay(a.anahtar)}>
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                              <div style={{ minWidth: 0 }}>
-                                <h3 style={{ margin: 0 }}>{a.ad}</h3>
-                                <div className="note" style={{ marginTop: 4 }}>{guncel ? HOME_SEVIYE[guncel - 1] : 'Henüz değerlendirilmedi'}</div>
-                              </div>
-                              <div style={{ width: 18, height: 50, borderRadius: 6, border: '1px solid var(--line)', background: '#efe8da', display: 'flex', alignItems: 'flex-end', overflow: 'hidden', flex: '0 0 auto' }} title={guncel ? HOME_SEVIYE[guncel - 1] : 'Henüz değerlendirilmedi'}>
-                                {guncel && <div style={{ width: '100%', height: (guncel / HOME_SEVIYE.length) * 100 + '%', background: HOME_SEVIYE_RENK[guncel - 1], transition: 'height .3s' }} />}
-                              </div>
-                            </div>
+                  kartı basılı tutup sürükleyerek (bkz. homeAlanSirala, SiraliListe — Ajanda'nın gün listesiyle
+                  AYNI dokunmatik-uyumlu desen).
+                  2026-09-20 GÜNCELLEME (sürükle-bırak iskeletinin standartlaştırılması): eski DndContext/
+                  SortableContext/SortableRow boilerplate'i kalktı, SiraliListe kullanıyor — davranış AYNEN. */
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <SiraliListe ogeler={homeAlanlarGorunur} strateji="izgara" onSirala={homeAlanSirala}>
+                  {(a: any) => {
+                    const guncel = homeGuncelDeger(a.anahtar);
+                    return (
+                      <div className="card" style={{ margin: 0, cursor: 'pointer', background: renkIcerik(containerRenkOf('home_odak')) }} onClick={() => setHomeDetay(a.anahtar)}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                          <div style={{ minWidth: 0 }}>
+                            <h3 style={{ margin: 0 }}>{a.ad}</h3>
+                            <div className="note" style={{ marginTop: 4 }}>{guncel ? HOME_SEVIYE[guncel - 1] : 'Henüz değerlendirilmedi'}</div>
                           </div>
-                        </SortableRow>
-                      );
-                    })}
-                  </div>
-                </SortableContext>
-              </DndContext>
+                          <div style={{ width: 18, height: 50, borderRadius: 6, border: '1px solid var(--line)', background: '#efe8da', display: 'flex', alignItems: 'flex-end', overflow: 'hidden', flex: '0 0 auto' }} title={guncel ? HOME_SEVIYE[guncel - 1] : 'Henüz değerlendirilmedi'}>
+                            {guncel && <div style={{ width: '100%', height: (guncel / HOME_SEVIYE.length) * 100 + '%', background: HOME_SEVIYE_RENK[guncel - 1], transition: 'height .3s' }} />}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }}
+                </SiraliListe>
+              </div>
               ) : (
               /* LİSTE görünümü (2026-09-19, YENİ — CardContainer'ın liste/kart davranışı): tek sütun, `.mrow`
                   (Havuz/Home'un diğer özet şeritlerinde de kullanılan standart satır deseni) — dolu seviye rengi
                   artık uzun bir çubuk değil, küçük bir renkli nokta; her satır aynı şekilde tıklanıp detay açıyor.
-                  Sürükle-bırak burada da AYNI onDragEndHomeAlan/sira — sadece strateji `verticalListSortingStrategy`
-                  (düz liste). */
-              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEndHomeAlan}>
-                <SortableContext items={homeAlanlarGorunur.map((a: any) => a.id)} strategy={verticalListSortingStrategy}>
-                  <div className="card" style={{ background: renkIcerik(containerRenkOf('home_odak')) }}>
-                    {homeAlanlarGorunur.map((a: any) => {
-                      const guncel = homeGuncelDeger(a.anahtar);
-                      return (
-                        <SortableRow key={a.id} id={a.id}>
-                          <div className="mrow" style={{ cursor: 'pointer' }} onClick={() => setHomeDetay(a.anahtar)}>
-                            <span>{a.ad}</span>
-                            <b style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 400 }}>
-                              {guncel && <span style={{ width: 8, height: 8, borderRadius: 4, background: HOME_SEVIYE_RENK[guncel - 1], flex: '0 0 auto' }} />}
-                              {guncel ? HOME_SEVIYE[guncel - 1] : 'Henüz değerlendirilmedi'}
-                            </b>
-                          </div>
-                        </SortableRow>
-                      );
-                    })}
-                  </div>
-                </SortableContext>
-              </DndContext>
+                  Sürükle-bırak burada da AYNI homeAlanSirala/SiraliListe — sadece strateji "liste" (düz liste).
+                  2026-09-20 GÜNCELLEME: SiraliListe kullanıyor (bkz. yukarıdaki not), davranış AYNEN. */
+              <div className="card" style={{ background: renkIcerik(containerRenkOf('home_odak')) }}>
+                <SiraliListe ogeler={homeAlanlarGorunur} strateji="liste" onSirala={homeAlanSirala}>
+                  {(a: any) => {
+                    const guncel = homeGuncelDeger(a.anahtar);
+                    return (
+                      <div className="mrow" style={{ cursor: 'pointer' }} onClick={() => setHomeDetay(a.anahtar)}>
+                        <span>{a.ad}</span>
+                        <b style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 400 }}>
+                          {guncel && <span style={{ width: 8, height: 8, borderRadius: 4, background: HOME_SEVIYE_RENK[guncel - 1], flex: '0 0 auto' }} />}
+                          {guncel ? HOME_SEVIYE[guncel - 1] : 'Henüz değerlendirilmedi'}
+                        </b>
+                      </div>
+                    );
+                  }}
+                </SiraliListe>
+              </div>
               )}
             </CardContainer>
             {/* Son ölçümler (2026-09, Behnan kararı): Gelişim'in eski "Ölçümler" kartının yerini alıyor —
@@ -4535,16 +4580,17 @@ export default function Rite() {
                     return <div className="card" style={notCard ? { padding: '12px 14px', background: '#fdf6d3', border: 'none', borderRadius: 3 } : { padding: '4px 10px' }}><RitItem rt={r.members[0]} /></div>;
                   };
 
+                  // 2026-09-20 GÜNCELLEME (sürükle-bırak iskeletinin standartlaştırılması, Behnan: "cevap belli
+                  // gibi, ikincisi" — CardContainer'ın İÇİNE değil, ayrı bir yardımcıya): eski DndContext/
+                  // SortableContext/SortableRow boilerplate'i kalktı, SiraliListe kullanıyor — ama onDragEndDay
+                  // rutine katılma/zaman dilimi/gün sırası gibi basit bir yeniden sıralamadan FAZLASINI yaptığı
+                  // için (bkz. tanımı, yukarısı) SiraliListe'nin `onSirala` (hesaplanmış dizi) değil `onDragEnd`
+                  // (ham event) modu kullanılıyor — mantık AYNEN onDragEndDay'de kalıyor, SiraliListe sadece
+                  // iskeleti kuruyor. `idAlani` satırların `.id` değil `.key` kullanmasından dolayı gerekli.
                   return (
-                    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => onDragEndDay(rows, e)}>
-                      <SortableContext items={rows.map((r) => r.key)} strategy={verticalListSortingStrategy}>
-                        {rows.map((r) => (
-                          <SortableRow key={r.key} id={r.key}>
-                            {rowBody(r)}
-                          </SortableRow>
-                        ))}
-                      </SortableContext>
-                    </DndContext>
+                    <SiraliListe ogeler={rows} idAlani={(r: any) => r.key} onDragEnd={(e: any) => onDragEndDay(rows, e)}>
+                      {(r: any) => rowBody(r)}
+                    </SiraliListe>
                   );
                 })()}
 
@@ -4566,7 +4612,7 @@ export default function Rite() {
                 ayrı chevron kalktı. `eylemler`de TEK bir hızlı eylem var: "↗ Tam ekran" (screen='notlar'yı açar,
                 bkz. aşağısı) — başka gizli/⋯'ya düşecek bir eylem olmadığı için ⋯ menüsü hiç render edilmiyor,
                 Behnan'ın "bazı containerlar da ... menüsü olmayıp sadece istediğimiz ikonu gösterebiliriz"
-                senaryosunun ilk canlı örneği. İçerik artık notlarIcerik() içinde (bkz. onDragEndNotlar'ın
+                senaryosunun ilk canlı örneği. İçerik artık notlarIcerik() içinde (bkz. notlarSiraKaydet'in
                 altı) — aynı içerik aşağıdaki tam sayfa ekranında da tekrar kullanılıyor. */}
             {!linkMode && notlar.length > 0 && (
               <CardContainer
@@ -5113,7 +5159,7 @@ export default function Rite() {
         {/* ---------- NOTLAR (tam sayfa, 2026-09-20 Behnan kararı) ---------- */}
         {/* Notlar CardContainer'ının "↗ Tam ekran" eylemiyle açılan bağlamsal ekran — Ölçümler'in Home'dan aynı
             desende açılması gibi, buradaki geri linki de doğal evi olan Ajanda'ya dönüyor. İçerik notlarIcerik()
-            ile Ajanda'daki gömülü haliyle BİREBİR aynı (bkz. onDragEndNotlar'ın altındaki tanım) — kod tekrarı
+            ile Ajanda'daki gömülü haliyle BİREBİR aynı (bkz. notlarSiraKaydet'in altındaki tanım) — kod tekrarı
             yok, sürükle-bırak/görünüm/renk tercihleri iki yerde de aynı state'i paylaşıyor. Bu, Home'dan bir
             container'ı tam sayfa açan kısayol (widget) fikrinin ilk canlı örneği: bugün sadece Notlar'ın kendi
             "↗ Tam ekran" eyleminden açılıyor, ama Home bir widget sistemi kazandığında aynı screen='notlar'
@@ -6163,7 +6209,7 @@ export default function Rite() {
             <h2>⚙️ Alanları yönet</h2>
             {/* 2026-09-19 (Behnan kararı — CardContainer'ın sürükle-bırak sıralama davranışı): ▲▼ ile sıralama
                 TAMAMEN KALDIRILDI ("▲▼ kalksın, sadece sürükle-bırak olsun") — sıra artık SADECE Home
-                ekranındaki kartı basılı tutup sürükleyerek değişiyor (bkz. onDragEndHomeAlan). Bu ekran artık
+                ekranındaki kartı basılı tutup sürükleyerek değişiyor (bkz. homeAlanSirala). Bu ekran artık
                 sadece görünürlük (home_gizli) için. */}
             <div className="note" style={{ marginTop: 0, marginBottom: 12 }}>Hangi alanların Home'da görüneceğini buradan ayarla — sırasını Home ekranında kartı basılı tutup sürükleyerek değiştirebilirsin. Adını, kontrol listesini ya da örneklerini değiştirmek için Kütüphane'deki "Grupları yönet" ekranını kullan.</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
