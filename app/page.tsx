@@ -2880,6 +2880,11 @@ export default function Rite() {
   // Alt grup yok, sade — istersen kes-yapıştır ile istediğin başka klasöre taşıyabilirsin.
   async function ritHavuzaAl(o: any) {
     if (!client || paylasBusy) return;
+    // İdempotency koruması (2026-09-20, Behnan'ın fark ettiği kopya sorunu): aynı kart daha önce zaten
+    // Havuza alınmışsa (bkz. havuzdaVarMi, render tarafında) tekrar eklemek yerine sessizce çık — buton zaten
+    // devre dışı görünüyor ama savunma amaçlı burada da kontrol ediliyor (ör. çift tıklama zamanlaması).
+    const zatenVar = activities.some((a: any) => a.client_id === client.id && a.grup === 'Kaydedilenler' && !a.silindi_tarih && a.kart_config?._kaynak_rit_id === o.id);
+    if (zatenVar) { setKMsg('✓ Zaten Havuzunda'); setTimeout(() => { setPaylasOpen(false); setKMsg(''); }, 900); return; }
     setPaylasBusy(true);
     const ins = await supabase.from('dog_activities').insert({
       client_id: client.id, tur: 'aktivite', ad: o.ad, grup: 'Kaydedilenler', alt_grup: null,
@@ -2887,7 +2892,9 @@ export default function Rite() {
       videolar: o.url ? [{ baslik: o.ad, url: o.url }] : [],
       zaman: o.zaman || 'gün', zamanlar: null, gunler: o.gunler || null,
       sure_gun: o.bitis ? sureGun(o) : null,
-      kart_tipi: o.kart_tipi || null, kart_config: o.kart_config || null,
+      // kart_config._kaynak_rit_id (2026-09-20, YENİ): mevcut kart_config alanları (ör. video url'i) korunuyor,
+      // sadece kaynak ritüelin id'si gizli bir işaret olarak ekleniyor — bkz. havuzdaVarMi, yukarısı.
+      kart_tipi: o.kart_tipi || null, kart_config: { ...(o.kart_config || {}), _kaynak_rit_id: o.id },
       // puan: 2026-09-16 — ritüel Puanla ile zaten değerlendirilmişse (bkz. ritPuanla), Havuz'a kaydederken
       // bu puan da otomatik taşınıyor, ayrıca yeniden değerlendirmeye gerek kalmıyor.
       puan: o.puan || null,
@@ -5662,6 +5669,15 @@ export default function Rite() {
         const canliAdim = isRit && detaySablon ? (detaySablon.adimlar || [])[o.sablon_adim ?? 0] : null;
         const kTip = (isRit ? (canliAdim?.kartTipi || o.kart_tipi) : act?.kart_tipi) || 'standart';
         const kCfg = (isRit ? (canliAdim?.kartConfig || o.kart_config) : act?.kart_config) || {};
+        // havuzdaVarMi (2026-09-20, Behnan kararı — "havuza kaydet dedik, tekrar kaydet diyorum yine
+        // kaydediyor, aynı isimli kopyalar oluyor"): ritHavuzaAl idempotent değildi, her tıklamada yeni bir
+        // dog_activities satırı ekliyordu. Şimdi ritHavuzaAl kaynak ritüelin id'sini kart_config._kaynak_rit_id
+        // içine (mevcut kart_config alanlarını BOZMADAN, spread ile) gizli bir işaret olarak yazıyor — dog_inbox
+        // paylaşımlarındaki "durum:'alindi'" desenine benzer bir idempotency izi. Burada o iz aranıp buton
+        // Gelenler'deki "✓ Alındı" ile AYNI dille devre dışı bırakılıyor (bkz. aşağısı, "📥 Kendi Havuzuma al").
+        // NOT: bu iz SADECE bundan sonra kaydedilenler için geçerli — önceden oluşmuş kopyalar (Kişisel
+        // Arşiv > Kaydedilenler) otomatik birleştirilmiyor, elle silinmesi gerekiyor.
+        const havuzdaVarMi = isRit && !!client && activities.some((a: any) => a.client_id === client.id && a.grup === 'Kaydedilenler' && !a.silindi_tarih && a.kart_config?._kaynak_rit_id === o.id);
         const aciklamaGoster = isRit ? (canliAdim ? (canliAdim.aciklama || null) : o.aciklama) : o.aciklama;
         // Bilgi kartı düzenlemesi (video/içerik/cümle saniyesi): kart "canlı adım" olarak şablondan okunuyorsa
         // kaydı da şablona yazmak gerekir — yoksa ekran hep şablondaki eski veriyi göstermeye devam eder (kCfg
@@ -6301,8 +6317,17 @@ export default function Rite() {
                     (isRit=false) bu seçenek anlamsız, orada gösterilmiyor. */}
                 {isRit && !kCfg?.randevu && (
                   <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--line)' }}>
-                    <button className="btn ghost" style={{ width: '100%' }} disabled={paylasBusy} onClick={() => ritHavuzaAl(o)}>📥 Kendi Havuzuma al</button>
-                    <div className="note" style={{ marginTop: 4, marginBottom: 0 }}>Kimseye göndermeden, bu kartı doğrudan kendi Havuz'una (şablon olarak) ekler.</div>
+                    {havuzdaVarMi ? (
+                      <>
+                        <button className="btn ghost" style={{ width: '100%' }} disabled>✓ Havuzunda</button>
+                        <div className="note" style={{ marginTop: 4, marginBottom: 0 }}>Bu kart zaten Kişisel Arşiv &gt; Kaydedilenler&apos;de.</div>
+                      </>
+                    ) : (
+                      <>
+                        <button className="btn ghost" style={{ width: '100%' }} disabled={paylasBusy} onClick={() => ritHavuzaAl(o)}>📥 Kendi Havuzuma al</button>
+                        <div className="note" style={{ marginTop: 4, marginBottom: 0 }}>Kimseye göndermeden, bu kartı doğrudan kendi Havuz'una (şablon olarak) ekler.</div>
+                      </>
+                    )}
                   </div>
                 )}
                 {kMsg && <div className="msg">{kMsg}</div>}
