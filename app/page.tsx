@@ -400,9 +400,12 @@ const LS_DEV = 'rite_dev_mode';
 // kendisi Home'da göster/gizle anahtarı sunuyor (bkz. widgetGorunurMu/widgetGorunurDegistir, LS_WIDGET_GORUNUR).
 const WIDGET_KATALOG: { anahtar: string; ad: string; aciklama: string; uygulandi: boolean }[] = [
   { anahtar: 'olcumler', ad: 'Ölçümler', aciklama: 'En son ne zaman bir ölçüm eklendiğini gösterir, dokununca Ölçümler ekranını açar.', uygulandi: true },
-  { anahtar: 'randevular', ad: 'Yaklaşan randevular', aciklama: 'En yakın randevu(lar)ı özetler, dokununca ilgili günü Ajanda’da açar.', uygulandi: false },
-  { anahtar: 'gelenler', ad: 'Gelenler (Inbox)', aciklama: 'Okunmamış sayısını gösterir, dokununca Gelenler’i tam sayfa açar.', uygulandi: false },
-  { anahtar: 'notlar_widget', ad: 'Notlar', aciklama: 'Ajanda’ya girmeden Notlar’a Home’dan hızlı erişim.', uygulandi: false },
+  // 'randevular' → 'yaklasan_aktiviteler' (2026-09-20, Behnan düzeltmesi: "artık randevu kavramı yokmuş, peki
+  // yaklaşan aktiviteleri... yapalım" — Aktivite birleşmesinden sonra ayrı bir "randevu" ekranı/sekmesi yok, ama
+  // kart_config.gorev/randevu bayraklı, tarihi olan aktiviteler hâlâ var, bkz. Home'daki yaklasanAktivite).
+  { anahtar: 'yaklasan_aktiviteler', ad: 'Yaklaşan aktiviteler', aciklama: 'Belirli bir tarihi olan en yakın aktiviteyi özetler, dokununca ilgili günü Ajanda’da açar.', uygulandi: true },
+  { anahtar: 'gelenler', ad: 'Gelenler (Inbox)', aciklama: 'Okunmamış sayısını gösterir, dokununca Gelenler’i tam sayfa açar.', uygulandi: true },
+  { anahtar: 'notlar_widget', ad: 'Notlar', aciklama: 'Ajanda’ya girmeden Notlar’a Home’dan hızlı erişim.', uygulandi: true },
   { anahtar: 'gun_ozeti', ad: 'Bugünün özeti', aciklama: '"5/8 aktivite tamamlandı" gibi bir ilerleme göstergesi, dokununca bugünkü Ajanda’yı açar.', uygulandi: false },
   { anahtar: 'seri', ad: 'Alışkanlık serisi', aciklama: 'Bir rutinin kaç gündür kesintisiz yapıldığını gösterir.', uygulandi: false },
   { anahtar: 'biriktirme', ad: 'Su / Pomodoro toplamı', aciklama: 'Bugünkü biriktirmeli ölçüm (su, pomodoro) toplamlarını gösterir.', uygulandi: false },
@@ -419,6 +422,15 @@ const WIDGET_KATALOG: { anahtar: string; ad: string; aciklama: string; uygulandi
 // Alanları'nın "varsayılan gizli"sinin TERSİ — widget'lar zaten `uygulandi:true` olmadan hiç Home'a çıkmıyor,
 // çıktıklarında görünür başlamaları daha doğal, home_gizli'nin gizlilik gerekçesi burada yok).
 const LS_WIDGET_GORUNUR = 'rite_widget_gorunur';
+// WIDGET_SIRA_VARSAYILAN + LS_WIDGET_SIRA (2026-09-20, Behnan isteği — "home da nasıl göründüğünü ve sürükle
+// bırak ile yerleştirimini deneyebiliriz"): Home'daki widget'ların (Ölçümler + bugün eklenen 3 yeni örnek)
+// SIRALANABİLİR olması için — CardContainer'lı bloklar (şu an tek örnek: Odak Alanları) BİLİNÇLİ olarak bu
+// sıralamanın DIŞINDA tutuldu, çünkü Odak Alanları'nın kendi İÇİNDE zaten bir SiraliListe var (alan kartlarının
+// sürüklenmesi) — iki iç içe SiraliListe/SortableRow aynı pointer/delay ayarlarıyla aynı anda aktive olmaya
+// çalışırsa çakışma riski var (ikisi de aynı touchAction/delay deseni). Bunu çözmek ayrı bir mühendislik konusu,
+// bugünkü kapsam sadece widget'lar arası sıralama — Odak Alanları Home'da hep EN ÜSTTE sabit kalıyor.
+const WIDGET_SIRA_VARSAYILAN = ['olcumler', 'yaklasan_aktiviteler', 'gelenler', 'notlar_widget'];
+const LS_WIDGET_SIRA = 'rite_widget_sira';
 // LS_CONTAINER (2026-09-19, Behnan isteği — "CardContainer" standardizasyonu): Home/Ajanda/Havuz'da tekrar eden
 // başlık-şeridi desenini (bkz. CardContainer bileşeni, yukarısı) tek bir yerde toplamanın ilk adımı — v1 SADECE
 // aç/kapa (collapsible) taşıyor. Behnan: "kapalı açık durumu localstorage'da saklansın" (cihaza özel, hesaba
@@ -1905,6 +1917,16 @@ export default function Rite() {
       return nv;
     });
   }
+  // widgetSira + widgetSirala (2026-09-20, bkz. WIDGET_SIRA_VARSAYILAN/LS_WIDGET_SIRA, yukarısı): Home'daki
+  // widget'ların sırası — homeAlanSirala/SiraliListe ile AYNI "görünür olanı sürükle, gizli olanı olduğu yerde
+  // bırak" deseni, sadece home_gizli yerine widgetGorunurMu kullanıyor.
+  const [widgetSira, setWidgetSira] = useState<string[]>(WIDGET_SIRA_VARSAYILAN);
+  function widgetSirala(yeniGorunur: string[]) {
+    let vi = 0;
+    const yeniTam = widgetSira.map((k: string) => (widgetGorunurMu(k) ? yeniGorunur[vi++] : k));
+    setWidgetSira(yeniTam);
+    try { localStorage.setItem(LS_WIDGET_SIRA, JSON.stringify(yeniTam)); } catch (_) {}
+  }
   // containerGorunum + containerGorunumToggle (2026-09-19, bkz. CardContainer'ın gorunum/onGorunumToggle prop'u,
   // yukarısı): aç/kapa haritasıyla AYNI kalıp (id -> değer, tek localStorage anahtarı, cihaza özel) ama ayrı bir
   // harita/anahtar — ikisi bağımsız tercihler (bir container kapalıyken de görünüm modu hatırlanmalı). Varsayılan
@@ -2355,6 +2377,15 @@ export default function Rite() {
     try {
       const wg = localStorage.getItem(LS_WIDGET_GORUNUR);
       if (wg) setWidgetGorunur(JSON.parse(wg));
+    } catch (_) {}
+    try {
+      const ws = localStorage.getItem(LS_WIDGET_SIRA);
+      if (ws) {
+        const parsed = JSON.parse(ws);
+        const gecerli = Array.isArray(parsed) ? parsed.filter((k: any) => WIDGET_SIRA_VARSAYILAN.includes(k)) : [];
+        const eksikler = WIDGET_SIRA_VARSAYILAN.filter((k) => !gecerli.includes(k));
+        setWidgetSira([...gecerli, ...eksikler]);
+      }
     } catch (_) {}
     try {
       const hg = localStorage.getItem(LS_HAVUZ_GORUNUM);
@@ -4043,6 +4074,16 @@ export default function Rite() {
   const sonOlcumTarih = meas.length ? meas.reduce((mx: string, m: any) => (m.tarih > mx ? m.tarih : mx), meas[0].tarih) : null;
   const sonOlcumGunFark = sonOlcumTarih ? Math.round((parseD(today).getTime() - parseD(sonOlcumTarih).getTime()) / 86400000) : null;
   const sonOlcumBilgi = sonOlcumTarih == null ? 'Henüz ölçüm eklenmedi' : sonOlcumGunFark === 0 ? 'Bugün kaydedildi' : sonOlcumGunFark === 1 ? 'Dün kaydedildi' : `${sonOlcumGunFark} gün önce kaydedildi`;
+  // yaklasanAktivite (2026-09-20, Widget'ın 2. örneği — Behnan: "artık randevu kavramı yokmuş, yaklaşan
+  // aktiviteleri... yapalım"): "Randevu" ayrı bir tür/sekme değil ama kart_config.gorev/randevu bayraklı, belirli
+  // bir tarihe (baslangic) bağlı, henüz tamamlanmamış (bitis boş — bkz. kartYapildiToggle) aktiviteler hâlâ var.
+  // Bugünden SONRAKİ en yakını (bugünün kendisi zaten Ajanda'nın ana ekranında görünüyor, widget'ın işi ondan
+  // SONRAsını önceden haber vermek).
+  const yaklasanAktiviteler = rituals
+    .filter((r: any) => !r.mezun && !r.bitis && (r.kart_config?.gorev || r.kart_config?.randevu) && r.baslangic && r.baslangic > today)
+    .sort((a: any, b: any) => (a.baslangic === b.baslangic ? ((a.hatirlatma_saat || '') < (b.hatirlatma_saat || '') ? -1 : 1) : (a.baslangic < b.baslangic ? -1 : 1)));
+  const yaklasanAktivite = yaklasanAktiviteler[0] || null;
+  const yaklasanBilgi = yaklasanAktivite ? `${yaklasanAktivite.ad} · ${parseD(yaklasanAktivite.baslangic).getDate()} ${MONTHS[parseD(yaklasanAktivite.baslangic).getMonth()]}` : 'Yaklaşan aktivite yok';
   const days7 = lastDays(7);
   const last30 = lastDays(30);
   const weekArr = weekDays(day);
@@ -4363,16 +4404,23 @@ export default function Rite() {
               </div>
               )}
             </CardContainer>
-            {/* Ölçümler (2026-09-20, Behnan kararı — Widget'ın ilk somut örneği: "Ölçümün widget olmasına hemen
-                hemen karar verdik"): CardContainer DEĞİL artık, Widget (bkz. tanımı, SiraliListe'nin hemen
-                altında). Eski chevron-ile-aç "son ölçümler" önizlemesi (varsayılan KAPALI, gizlilik gerekçesi —
-                "keza ölçümlerim içinde") artık gereksiz: Widget zaten gerçek değeri GÖSTERMİYOR, sadece göreli
-                bir "canlı gösterge" (`sonOlcumBilgi`, bkz. tanımı yukarıda). Dokununca (Widget'ın tek davranışı)
-                aynı 'olcumler' ekranı açılıyor — o ekran artık hem Ruh hali analizini hem de gerçek değerleri
-                (eski "son ölçümler" listesi, taşındı) hem de ＋ ile ölçüm eklemeyi barındırıyor (bkz. aşağısı).
-                Gelişim'in eski "Ölçümler" kartının yerini alan asıl veri (sonOlcumler) DEĞİŞMEDİ, sadece Home'daki
-                sunumu (özet mi, gerçek değer mi) değişti. */}
-            {widgetGorunurMu('olcumler') && <Widget ikon="📊" baslik="Ölçümler" bilgi={sonOlcumBilgi} onClick={() => setScreen('olcumler')} />}
+            {/* Widget'lar (2026-09-20, Behnan isteği — "birkaç örneği de hemen yapıp home da nasıl göründüğünü ve
+                sürükle bırak ile yerleştirimini deneyebiliriz"): Ölçümler ("Ölçümün widget olmasına hemen hemen
+                karar verdik" kararının ilk uygulaması) + bugün eklenen 3 yeni örnek (Yaklaşan aktiviteler,
+                Gelenler, Notlar) — hepsi WIDGET_KATALOG'da `uygulandi:true`. SiraliListe ile sürüklenerek
+                sıralanabiliyor (bkz. widgetSira/widgetSirala, yukarısı) — Odak Alanları BİLİNÇLİ olarak bu
+                sıralamanın DIŞINDA (kendi içinde zaten bir SiraliListe var, iç içe sürükleme çakışma riski taşır,
+                bkz. WIDGET_SIRA_VARSAYILAN'ın üstündeki not). Her widget'ın gerçek değer değil göreli/özet bir
+                gösterge taşıması bilinçli (Ölçümler'deki gizlilik gerekçesiyle aynı ilke). */}
+            <SiraliListe ogeler={widgetSira.filter(widgetGorunurMu)} idAlani={(k: string) => k} onSirala={widgetSirala}>
+              {(k: string) => {
+                if (k === 'olcumler') return <Widget ikon="📊" baslik="Ölçümler" bilgi={sonOlcumBilgi} onClick={() => setScreen('olcumler')} />;
+                if (k === 'yaklasan_aktiviteler') return <Widget ikon="📅" baslik="Yaklaşan aktiviteler" bilgi={yaklasanBilgi} onClick={() => { if (yaklasanAktivite) setSelDate(yaklasanAktivite.baslangic); setScreen('ajanda'); }} />;
+                if (k === 'gelenler') return <Widget ikon="📥" baslik="Gelenler" bilgi={ibBadge > 0 ? `${ibBadge} yeni` : 'Yeni yok'} onClick={() => { setHavuzFolder('gelenler'); setScreen('havuz'); }} />;
+                if (k === 'notlar_widget') return <Widget ikon="📝" baslik="Notlar" bilgi={notlar.length > 0 ? `${notlar.length} not` : 'Henüz not yok'} onClick={() => setScreen('notlar')} />;
+                return null;
+              }}
+            </SiraliListe>
             {/* Kapsama (eski Gelişim'in ana kartı — haftalık alan-dokunma analizi) 2026-09'da (Behnan kararı)
                 bottom_nav'dan çıkarılıp Home'dan erişilen, bağlama girmeyen genel bir "Analiz" ekranına taşındı
                 — Behnan'ın deyişiyle "bottom nav'da görünmeyen ama home'dan ulaşabiliriz". İçerik/mantık hiç
