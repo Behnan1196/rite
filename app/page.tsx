@@ -5117,12 +5117,28 @@ export default function Rite() {
             yok, sürükle-bırak/görünüm/renk tercihleri iki yerde de aynı state'i paylaşıyor. Bu, Home'dan bir
             container'ı tam sayfa açan kısayol (widget) fikrinin ilk canlı örneği: bugün sadece Notlar'ın kendi
             "↗ Tam ekran" eyleminden açılıyor, ama Home bir widget sistemi kazandığında aynı screen='notlar'
-            hedefine oradan da gidilebilir. */}
+            hedefine oradan da gidilebilir.
+            2026-09-20 GÜNCELLEME (Behnan: "tam ekrana geçtiğinde hızlı eylemler artık görünmüyor... acaba tam
+            ekranda onları görmeli miyiz"): Başlık artık düz <h2> değil, gömülü haldeki AYNI CardContainer
+            (renk/gorunum aynen taşındı, tam ekranda da anlamlı) — `acik={true}` sabit ve `headerToggle` (ama
+            `onToggle` no-op) SADECE chevron'u gizlemek için, burada aç/kapa'nın bir anlamı yok, zaten tam
+            sayfadayız. `eylemler` BİLİNÇLİ olarak verilmiyor — "Tam ekran" eylemi zaten buradan görünmemeli
+            (kendi kendini açması anlamsız), geri dönüş zaten üstteki "‹ Ajanda" linkinin işi. */}
         {screen === 'notlar' && (
           <div>
             <button className="linkbtn" onClick={() => setScreen('ajanda')}>‹ Ajanda</button>
-            <h2 style={{ marginTop: 6 }}>Notlar</h2>
-            {notlar.length === 0 ? <div className="note">Henüz not yok.</div> : notlarIcerik()}
+            <CardContainer
+              baslik="Notlar"
+              acik
+              onToggle={() => {}}
+              headerToggle
+              gorunum={containerGorunumOf('ajanda_notlar')}
+              onGorunumToggle={() => containerGorunumToggle('ajanda_notlar')}
+              renk={containerRenkOf('ajanda_notlar', 'sari')}
+              onRenkSec={(r) => containerRenkSec('ajanda_notlar', r)}
+            >
+              {notlar.length === 0 ? <div className="note">Henüz not yok.</div> : notlarIcerik()}
+            </CardContainer>
           </div>
         )}
 
