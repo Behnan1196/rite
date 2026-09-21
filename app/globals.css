@@ -197,14 +197,26 @@ input{width:100%;font-size:15px;padding:11px 12px;border:1px solid var(--line);b
 .actcard:first-of-type{border-top:none;}
 .actcard .n{font-size:13.5px;font-weight:700;}
 .actcard .o{font-size:11.5px;color:var(--muted);margin-top:2px;line-height:1.35;}
-.actcard .go{margin-left:auto;color:#c4bca8;font-size:20px;}
-/* .vsrow (2026-09-21, kart görünüm taksonomisi R&D'si — Kişisel Arşiv'in VS Code tarzı sade satırı, bkz.
-   aktKartSade): kart-gorunumleri.html mockup'ındaki §4 taslağıyla birebir aynı token'lar — .actcard'dan daha
-   minimal (kalın başlık/alt satır yok), tek satırda küçük ikon + kalın olmayan isim. */
-.vsrow{display:flex;align-items:center;gap:9px;padding:8px 4px;border-top:1px solid var(--line);cursor:pointer;}
-.vsrow:first-of-type{border-top:none;}
-.vsrow .iko{font-size:13px;flex:0 0 18px;text-align:center;}
-.vsrow .nm{font-size:12.5px;font-weight:400;color:var(--ink);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+/* .go (2026-09-21 GÜNCELLEME): eskiden `.actcard .go` diye kapsamlıydı — artık genel, .kartsatiri içinde de
+   kullanılıyor (bkz. aşağısı). Bilinçli genişletme: .go class'ı .actcard dışında başka bir amaçla kullanılmıyordu,
+   Gelenler'in daralt okunun (.card içinde, .actcard kapsamı DIŞINDA kalan bir kullanım) stilsiz kalma hatasını da
+   yan etki olarak düzeltiyor. */
+.go{margin-left:auto;color:#c4bca8;font-size:20px;}
+/* .kartsatiri (2026-09-21, kart görünüm taksonomisi R&D'si — "dört ayrı bileşen" birleştirme, Behnan kararı:
+   "birleştirelim elbette"): Kişisel Arşiv'in VS Code satırı (aktKartSade), Gelenler'in daralmış satırı
+   (gelKartListe/InboxNot) ve Çöp Kutusu'nun satırı artık AYNI görsel iskeleti (ikon + başlık [+ alt bilgi] +
+   sağ slot, üstte ince ayraç) TEK bir CSS ailesinden alıyor — eskiden .actcard/.vsrow diye kısmen çakışan iki
+   ayrı sınıf, üç ayrı JSX kopyası olarak tekrarlanıyordu. `.ks-baslik` VARSAYILAN olarak eski `.actcard .n`
+   (kalın, 13.5px) davranışını sürdürüyor (InboxNot/Gelenler/Çöp Kutusu); `.hafif` değiştiricisi SADECE Kişisel
+   Arşiv'in kasıtlı "kalın olmayan isim" (VS Code tarzı) tercihini korumak için var. RitItem BİLİNÇLİ OLARAK
+   BURAYA DAHİL EDİLMEDİ (bkz. KartSatiri'nin tanımındaki not, rite-page.tsx). */
+.kartsatiri{display:flex;align-items:center;gap:10px;padding:10px 2px;border-top:1px solid var(--line);}
+.kartsatiri:first-of-type{border-top:none;}
+.kartsatiri .ks-iko{font-size:15px;flex:0 0 20px;text-align:center;}
+.kartsatiri .ks-metin{flex:1;min-width:0;}
+.kartsatiri .ks-baslik{font-size:13.5px;font-weight:700;}
+.kartsatiri .ks-baslik.hafif{font-size:12.5px;font-weight:400;}
+.kartsatiri .ks-alt{font-size:11.5px;color:var(--muted);margin-top:2px;line-height:1.35;}
 .modal{position:fixed;inset:0;background:rgba(24,21,16,.5);display:flex;align-items:flex-end;justify-content:center;z-index:50;}
 .sheet{position:relative;background:#fff;width:100%;max-width:460px;max-height:90vh;overflow-y:auto;border-radius:18px 18px 0 0;padding:16px 16px 30px;animation:up .2s ease;}
 @keyframes up{from{transform:translateY(20px);opacity:.6}to{transform:none;opacity:1}}

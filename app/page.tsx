@@ -632,6 +632,25 @@ const NEFES_DESEN: Record<string, { ad: string; fazlar: [string, number, number]
   koheran: { ad: '5·5 dengeli', fazlar: [['Nefes al', 5, 1], ['Ver', 5, 0.5]] },
 };
 const kartIkon = (tip?: string | null) => (KARTLAR.find((k) => k[0] === tip)?.[2] || '');
+// bilgiIkonEtiket (2026-09-21, kart görünüm taksonomisi R&D'si — Behnan'ın fark ettiği bug: "Notun aktivite
+// türünde kaydolması ... doğrudan notlardan silinmişse tipi Not olmalı, ajandaya almışsak aktivite veya
+// alışkanlık haline gelir zaten"): `kart_tipi='bilgi'` TEK bir KARTLAR girdisine (📄 "Bilgi") düşüyor, alt tipi
+// (Not/Yapılacak/Randevu/Alışkanlık) hiç ayırt etmiyordu — RitItem'ın kendi `bilgiIkon` mantığı bunu Ajanda/
+// Notlar'da zaten çözüyordu ama Çöp Kutusu'nun `cop` listesi (üç kökün TAMAMI — Kişisel Arşiv/Gelenler/Ajanda)
+// hâlâ düz `KARTLAR.find` kullanıyordu, yani silinen bir Not "Bilgi" gibi (aslında ayrışmadan) görünüyordu.
+// Artık TEK yerden (bkz. RitItem ve Havuz'daki sadeIkon, ikisi de bunu çağırıyor) — 'bilgi' için alt tip
+// ikonu+etiketi, değilse genel KARTLAR eşlemesi.
+const bilgiIkonEtiket = (kartTipi: string | null | undefined, kartConfig: any, aliskanlik: boolean | undefined | null): { ikon: string; etiket: string } => {
+  if (kartTipi === 'bilgi') {
+    const cfg = kartConfig || {};
+    if (cfg.randevu) return { ikon: '📅', etiket: 'Randevu' };
+    if (aliskanlik) return { ikon: '🎓', etiket: 'Alışkanlık' };
+    if (cfg.gorev) return { ikon: '☑️', etiket: 'Yapılacak' };
+    return { ikon: '📄', etiket: 'Not' };
+  }
+  const k = KARTLAR.find((x) => x[0] === (kartTipi || 'standart'));
+  return { ikon: k?.[2] || '•', etiket: k?.[1] || 'Standart' };
+};
 function gunlerLabel(g?: number[] | null): string {
   if (!g || g.length === 0) return 'her gün';
   if (g.length === 7) return 'her gün';
@@ -1876,18 +1895,52 @@ function SablonKart({ sablon, onKaydet }: { sablon: Sablon; onKaydet?: (vals: Re
     </div>
   );
 }
-// Inbox notu kartı: dokunulabilir; tıklayınca editör açılır.
+// KartSatiri (2026-09-21, kart görünüm taksonomisi R&D'si — "dört ayrı bileşen" birleştirme, Behnan kararı:
+// "birleştirelim elbette" — daha önce sorulduğunda anlaşılmayan "dört ayrı bileşen" sorusu buydu: RitItem,
+// eski aktKart/aktKartGenis, gelKart/gelKartListe ve Çöp Kutusu'nun sabit `.actcard` biçimi kod paylaşmayan
+// dört ayrı render ailesiydi). Bunlardan üçü — Kişisel Arşiv'in VS Code satırı (aktKartSade), Gelenler'in
+// daralmış satırı (InboxNot + gelKartListe) ve Çöp Kutusu'nun satırı — aslında AYNI görsel iskeleti paylaşıyordu:
+// ikon + başlık [+ alt bilgi] + sağ slot, üstte ince ayraç. Artık TEK bileşen (`KartSatiri`) + TEK CSS ailesi
+// (`.kartsatiri`, globals.css) bu üçünü render ediyor. `hafif` Kişisel Arşiv'in kasıtlı "kalın olmayan isim"
+// (VS Code tarzı) tercihini koruyor, diğer ikisi varsayılan kalın başlığı kullanıyor. `solEk`, InboxNot'un
+// resim önizlemesi gibi ikon-slotuna sığmayan özel sol içerik için (ikon'la BİRLİKTE değil, YERİNE kullanılır).
+// RitItem BİLİNÇLİ OLARAK BURAYA DAHİL EDİLMEDİ — checkbox/streak-bar/sticky-note/genis gibi kendine özgü,
+// genel bir "satır" kalıbına sığmayan zengin bir davranışı var (Aktivite/Not'un kendi ortak anatomisi zaten
+// RitItem'da toplanmıştı, bkz. RitItem tanımı); onu da buraya zorlamak kod karmaşasını azaltmaz, artırırdı.
+function KartSatiri({ ikon, solEk, baslik, altBaslik, hafif, tikla, sag, opacity }: {
+  ikon?: ReactNode;
+  solEk?: ReactNode;
+  baslik: ReactNode;
+  altBaslik?: ReactNode;
+  hafif?: boolean;
+  tikla?: () => void;
+  sag?: ReactNode;
+  opacity?: number;
+}) {
+  return (
+    <div className="kartsatiri" style={{ opacity: opacity ?? 1, cursor: tikla ? 'pointer' : 'default' }} onClick={tikla}>
+      {solEk}
+      {ikon != null && <span className="ks-iko">{ikon}</span>}
+      <div className="ks-metin">
+        <div className={'ks-baslik' + (hafif ? ' hafif' : '')}>{baslik}</div>
+        {altBaslik && <div className="ks-alt">{altBaslik}</div>}
+      </div>
+      {sag}
+    </div>
+  );
+}
+// Inbox notu kartı: dokunulabilir; tıklayınca editör açılır. 2026-09-21: artık KartSatiri kullanıyor (bkz. yukarısı).
 function InboxNot({ v, onOpen }: { v: any; onOpen: () => void }) {
   const ikon = v.payload?.kartTipi === 'video' ? '🎬' : v.url ? '🔗' : v.payload?.resim ? '📷' : '📌';
   return (
-    <div className="actcard" onClick={onOpen} style={{ cursor: 'pointer' }}>
-      {v.payload?.resim && <img src={v.payload.resim} alt="" style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 6, flex: '0 0 auto' }} />}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div className="n">{ikon} {v.baslik}</div>
-        {v.payload?.aciklama && <div className="o">{v.payload.aciklama}</div>}
-      </div>
-      <span className="go">›</span>
-    </div>
+    <KartSatiri
+      solEk={v.payload?.resim ? <img src={v.payload.resim} alt="" style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 6, flex: '0 0 auto' }} /> : undefined}
+      ikon={v.payload?.resim ? undefined : ikon}
+      baslik={v.baslik}
+      altBaslik={v.payload?.aciklama}
+      tikla={onOpen}
+      sag={<span className="go">›</span>}
+    />
   );
 }
 const AVATARLAR = ['🌿', '🌸', '🌙', '☀️', '🍃', '🌾', '🍄', '🪴', '🦋', '⭐'];
@@ -2974,6 +3027,10 @@ export default function Rite() {
       // kart_config._kaynak_rit_id (2026-09-20, YENİ): mevcut kart_config alanları (ör. video url'i) korunuyor,
       // sadece kaynak ritüelin id'si gizli bir işaret olarak ekleniyor — bkz. havuzdaVarMi, yukarısı.
       kart_tipi: o.kart_tipi || null, kart_config: { ...(o.kart_config || {}), _kaynak_rit_id: o.id },
+      // aliskanlik (2026-09-21 EKLENDİ — Behnan'ın fark ettiği bug: kimlik kaybı): eskiden bu satır hiç
+      // yoktu, yani Havuz'a kaydedilen bir Alışkanlık, kopyada 'aliskanlik' alanını kaybedip (kart_config'te
+      // gorev/randevu da yoksa) sanki bir Not'muş gibi görünüyordu — bkz. bilgiIkonEtiket tanımındaki not.
+      aliskanlik: !!o.aliskanlik,
       // puan: 2026-09-16 — ritüel Puanla ile zaten değerlendirilmişse (bkz. ritPuanla), Havuz'a kaydederken
       // bu puan da otomatik taşınıyor, ayrıca yeniden değerlendirmeye gerek kalmıyor.
       puan: o.puan || null,
@@ -3979,7 +4036,10 @@ export default function Rite() {
       await supabase.from('dog_activities').insert({ client_id: client.id, tur: 'program', ad: p.ad, grup: g || 'Genel', adimlar: p.adimlar || [], sure_gun: p.sure_gun || null, faydalar: [], kaynak_etiket: 'Paylaşılan', aktif: true, sablon_id: p.sablon_id || null });
     } else {
       const alan0 = (p.faydalar && p.faydalar.length) ? (faydaList.find((f) => f.kod === p.faydalar[0])?.alan || null) : null;
-      await supabase.from('dog_activities').insert({ client_id: client.id, tur: 'aktivite', ad: p.ad, grup: g || alan0 || 'Genel', faydalar: p.faydalar || [], aciklama: p.aciklama || null, videolar: p.videolar || null, zaman: p.zaman || 'gün', zamanlar: p.zamanlar || null, gunler: p.gunler || null, sure_gun: p.sure_gun || null, kart_tipi: p.kartTipi || null, kart_config: p.kartConfig || null, kaynak_etiket: 'Paylaşılan', aktif: true });
+      // aliskanlik (2026-09-21 EKLENDİ — bkz. ritHavuzaAl'daki aynı düzeltme notu): payload zaten p.aliskanlik
+      // taşıyordu (bkz. inboxAktiviteAjanda/paylaşım tarafı), ama buraya — Gelenler'den Kişisel Arşiv'e taşırken
+      // — hiç yazılmıyordu, kimlik kaybı burada da vardı.
+      await supabase.from('dog_activities').insert({ client_id: client.id, tur: 'aktivite', ad: p.ad, grup: g || alan0 || 'Genel', faydalar: p.faydalar || [], aciklama: p.aciklama || null, videolar: p.videolar || null, zaman: p.zaman || 'gün', zamanlar: p.zamanlar || null, gunler: p.gunler || null, sure_gun: p.sure_gun || null, kart_tipi: p.kartTipi || null, kart_config: p.kartConfig || null, aliskanlik: !!p.aliskanlik, kaynak_etiket: 'Paylaşılan', aktif: true });
     }
     await supabase.from('dog_inbox').delete().eq('id', item.id);
     setIbGrupSec(null); setIbGrupVal('Genel');
@@ -4236,25 +4296,33 @@ export default function Rite() {
   // ki render tarafı kök tipine göre dallanmak zorunda kalmasın. Havuz'un "Çöp Kutusu" klasöründen (bkz.
   // havuzFolder) görüntüleniyor — Ajanda'nın artık kendi ayrı çöp kutusu YOK.
   const cop = [
-    ...activities.filter((a: any) => a.client_id === client.id && a.silindi_tarih).map((a: any) => ({
-      id: 'a:' + a.id, tarih: a.silindi_tarih,
-      kok: '🗄️ Kişisel Arşiv' + (a.grup ? ' · ' + a.grup + (a.alt_grup ? ' › ' + a.alt_grup : '') : ''),
-      ikon: a.tur === 'program' ? '🧩' : (KARTLAR.find((k) => k[0] === (a.kart_tipi || 'standart'))?.[2] || '•'),
-      tip: a.tur === 'program' ? 'Program' : (KARTLAR.find((k) => k[0] === (a.kart_tipi || 'standart'))?.[1] || 'Standart'),
-      ad: a.ad, geriAl: () => aktiviteGeriAl(a),
-    })),
-    ...inbox.filter((v: any) => v.client_id === client.id && v.silindi_tarih).map((v: any) => ({
-      id: 'i:' + v.id, tarih: v.silindi_tarih, kok: '📥 Gelenler',
-      ikon: v.tur !== 'aktivite' ? '📌' : (KARTLAR.find((k) => k[0] === (v.payload?.kartTipi || 'standart'))?.[2] || '🎁'),
-      tip: v.tur !== 'aktivite' ? 'Not / paylaşım' : (KARTLAR.find((k) => k[0] === (v.payload?.kartTipi || 'standart'))?.[1] || 'Standart'),
-      ad: v.baslik || v.payload?.ad || 'Paylaşım', geriAl: () => inboxGeriAl(v.id),
-    })),
-    ...ajandaCop.map((r: any) => ({
-      id: 'r:' + r.id, tarih: r.silindi_tarih, kok: '📅 Ajanda',
-      ikon: kartIkon(r.kart_tipi) || '📅',
-      tip: KARTLAR.find((k) => k[0] === (r.kart_tipi || 'standart'))?.[1] || 'Standart',
-      ad: r.ad, geriAl: () => ritGeriAl(r.id),
-    })),
+    ...activities.filter((a: any) => a.client_id === client.id && a.silindi_tarih).map((a: any) => {
+      // 2026-09-21 GÜNCELLEME (Behnan'ın fark ettiği bug, bkz. bilgiIkonEtiket tanımındaki not): 'bilgi' türü
+      // artık alt tipine göre ayrışıyor (Not/Yapılacak/Randevu/Alışkanlık) — düz "Bilgi" etiketi kalktı.
+      const { ikon, etiket } = a.tur === 'program' ? { ikon: '🧩', etiket: 'Program' } : bilgiIkonEtiket(a.kart_tipi, a.kart_config, a.aliskanlik);
+      return {
+        id: 'a:' + a.id, tarih: a.silindi_tarih,
+        kok: '🗄️ Kişisel Arşiv' + (a.grup ? ' · ' + a.grup + (a.alt_grup ? ' › ' + a.alt_grup : '') : ''),
+        ikon, tip: etiket, ad: a.ad, geriAl: () => aktiviteGeriAl(a),
+      };
+    }),
+    ...inbox.filter((v: any) => v.client_id === client.id && v.silindi_tarih).map((v: any) => {
+      // Not: kartTipi hiç yoksa (standart bir aktivite paylaşımı) bilgiIkonEtiket zaten KARTLAR'daki 'standart'
+      // girdisine (•/Standart) düşüyor — eski kod burada '🎁' fallback'i taşıyordu ama 'standart' KARTLAR'da her
+      // zaman eşleştiği için o dal hiç çalışmıyordu (ölü kod), yeniden üretilmedi.
+      const { ikon, etiket } = v.tur !== 'aktivite' ? { ikon: '📌', etiket: 'Not / paylaşım' } : bilgiIkonEtiket(v.payload?.kartTipi, v.payload?.kartConfig, v.payload?.aliskanlik);
+      return {
+        id: 'i:' + v.id, tarih: v.silindi_tarih, kok: '📥 Gelenler',
+        ikon, tip: etiket, ad: v.baslik || v.payload?.ad || 'Paylaşım', geriAl: () => inboxGeriAl(v.id),
+      };
+    }),
+    ...ajandaCop.map((r: any) => {
+      const { ikon, etiket } = bilgiIkonEtiket(r.kart_tipi, r.kart_config, r.aliskanlik);
+      return {
+        id: 'r:' + r.id, tarih: r.silindi_tarih, kok: '📅 Ajanda',
+        ikon, tip: etiket, ad: r.ad, geriAl: () => ritGeriAl(r.id),
+      };
+    }),
   ].sort((a, b) => (a.tarih < b.tarih ? 1 : -1));
   const personalGroupOf = (a: any) => a.grup && a.grup !== 'Kişisel' ? a.grup : 'Genel';
   // Havuz gruplama: Genel her zaman seçenek olarak durur (boş bile olsa), üstüne kullanıcının kendi eklediği
@@ -4296,8 +4364,12 @@ export default function Rite() {
     const vurl = tip === 'video' ? (cfg.url || rt.url) : rt.url;
     // Kişisel bilgi kartları (Not/Randevu/Alışkanlık/Yapılacak) hepsi aynı kart_tipi='bilgi' altında — görsel
     // olarak birbirinden ayrışsınlar diye burada alt tipe göre farklı ipucu gösteriliyor (kullanıcı isteği).
-    const bilgiIkon = tip === 'bilgi' ? (cfg.randevu ? '📅' : rt.aliskanlik ? '🎓' : cfg.gorev ? '☑️' : '📄') : null;
-    const bilgiAltTip = bilgiIkon ? bilgiIkon + (cfg.randevu ? ' randevu' : rt.aliskanlik ? ' alışkanlık' : cfg.gorev ? ' yapılacak' : ' not') : null;
+    // 2026-09-21 GÜNCELLEME: artık modül seviyesindeki paylaşılan `bilgiIkonEtiket` yardımcısını çağırıyor (bkz.
+    // tanımı, kartIkon'un hemen altı) — Havuz'un sadeIkon'u ve Çöp Kutusu'nun `cop` listesi de AYNI mantığı
+    // buradan alıyor, üç ayrı kopya tek yere indi.
+    const bilgiInfo = tip === 'bilgi' ? bilgiIkonEtiket(tip, cfg, rt.aliskanlik) : null;
+    const bilgiIkon = bilgiInfo ? bilgiInfo.ikon : null;
+    const bilgiAltTip = bilgiInfo ? bilgiInfo.ikon + ' ' + bilgiInfo.etiket.toLowerCase() : null;
     const ipucu = tip === 'anket' ? '📋 doldur' : tip === 'coktan' ? '❓ yanıtla' : tip === 'diyet' ? '🍽 öğün' : tip === 'tarif' ? '🍳 tarif' : tip === 'video' ? '🎬 izle' : tip === 'nefes' ? '🫁 nefes' : tip === 'ruhhali' ? '🙂 check-in' : tip === 'workout' ? '🏋️ egzersiz' : bilgiAltTip ? bilgiAltTip : tip === 'sukran' ? '🙏 şükran' : tip === 'topraklama' ? '🖐 topraklan' : tip === 'pomodoro' ? '🍅 odaklan' : tip === 'beden' ? '🧘 taransın' : tip === 'uykuoncesi' ? '🌙 hazırlan' : tip === 'su' ? '💧 iç' : tip === 'maruz' ? '🎯 uygula' : tip === 'niyet' ? '🧭 niyet belirle' : tip === 'randevu' ? '📅 randevu' : '';
     // Yapılacak VE Randevu: günü geçmiş (baslangic bugünden önce) ve hâlâ işaretlenmemişse kaç gündür beklediğini
     // göster (kullanıcı isteği: "geciktiğine dair küçük bir belirteç", "randevu gecikmesini de aynı şekilde
@@ -5056,24 +5128,23 @@ export default function Rite() {
           // tarama hızını hedefliyor (detaya girince zaten hepsi var). Tıklama davranışı DEĞİŞMEDİ (openDetay
           // zaten tam detay ekranını açıyor — Behnan'ın "olması gereken bir opsiyon" dediği "detaya ulaşma"
           // zaten vardı, eksik değildi), ⋯ menüsü de aynı aktMenu.
-          // sadeIkon: RitItem'daki bilgiIkon mantığının (bkz. RitItem tanımı, ~satır 4295) Kişisel Arşiv'e
-          // taşınmış hâli — 'bilgi' alt tiplerinde aynı ayrım (randevu/alışkanlık/yapılacak/not), programlarda
-          // 🧩, diğer kart_tipi'lerinde genel KARTLAR eşlemesi (kartIkon).
-          const sadeIkon = (a: any) => {
-            if (a.tur === 'program') return '🧩';
-            const tip = a.kart_tipi || 'standart';
-            if (tip === 'bilgi') {
-              const cfg = a.kart_config || {};
-              return cfg.randevu ? '📅' : a.aliskanlik ? '🎓' : cfg.gorev ? '☑️' : '📄';
-            }
-            return kartIkon(tip) || '•';
-          };
+          // sadeIkon: artık modül seviyesindeki paylaşılan `bilgiIkonEtiket` yardımcısını çağırıyor (bkz.
+          // tanımı, kartIkon'un hemen altı) — programlarda 🧩, 'bilgi' alt tiplerinde aynı ayrım (randevu/
+          // alışkanlık/yapılacak/not), diğerlerinde genel KARTLAR eşlemesi. Aynı mantık artık Çöp Kutusu'nda
+          // (bkz. cop tanımı) ve RitItem'da da (bkz. RitItem tanımı) TEK yerden geliyor.
+          // 2026-09-21 GÜNCELLEME: artık dosyanın başındaki paylaşılan `KartSatiri` bileşenini kullanıyor
+          // (bkz. tanımı, InboxNot'un hemen üstü) — `hafif` ile VS Code tarzı kalın-olmayan isim korunuyor.
+          const sadeIkon = (a: any) => a.tur === 'program' ? '🧩' : bilgiIkonEtiket(a.kart_tipi, a.kart_config, a.aliskanlik).ikon;
           const aktKartSade = (a: any) => (
-            <div key={a.id} className="vsrow" style={{ opacity: havuzPano === a.id ? .45 : 1 }} onClick={() => openDetay(a, 'aktivite')}>
-              <span className="iko">{sadeIkon(a)}</span>
-              <span className="nm">{a.ad}{a.puan ? <span className="puanp"> {'★'.repeat(a.puan)}</span> : ''}</span>
-              {aktMenu(a)}
-            </div>
+            <KartSatiri
+              key={a.id}
+              opacity={havuzPano === a.id ? .45 : 1}
+              tikla={() => openDetay(a, 'aktivite')}
+              ikon={sadeIkon(a)}
+              hafif
+              baslik={<>{a.ad}{a.puan ? <span className="puanp"> {'★'.repeat(a.puan)}</span> : ''}</>}
+              sag={aktMenu(a)}
+            />
           );
           const aktKartFn = aktKartSade;
           // gelKartIcerik (2026-09-18, Havuz yeniden tasarımı — 6. adım, Behnan: "sanki toggle tek olup, tüm
@@ -5125,11 +5196,14 @@ export default function Rite() {
             <div key={v.id} className="card">{gelKartIcerik(v)}</div>
           );
           // gelKartListe (2026-09-18, Havuz yeniden tasarımı — 6. adım): Gelenler'in liste görünümü. Not/mesaj
-          // paylaşımları (InboxNot) zaten tek satırlık bir actcard, değişmeden kullanılıyor. Aktivite-türü
-          // paylaşımlar ise varsayılan olarak tek satırlık bir satır — dokununca (gelAcikId ile) yerinde
-          // genişleyip gelKartIcerik'in tam içeriğini (aksiyon butonları dahil) gösteriyor, tekrar dokununca
-          // daralıyor. Ayrı bir detay ekranı yok (yalnızca bilgi kartTipi'nde openInboxPreview var), o yüzden
-          // "genişlet/daralt" akordeon deseni tercih edildi.
+          // paylaşımları (InboxNot) zaten tek satırlık, değişmeden kullanılıyor. Aktivite-türü paylaşımlar ise
+          // varsayılan olarak tek satırlık bir satır — dokununca (gelAcikId ile) yerinde genişleyip
+          // gelKartIcerik'in tam içeriğini (aksiyon butonları dahil) gösteriyor, tekrar dokununca daralıyor.
+          // Ayrı bir detay ekranı yok (yalnızca bilgi kartTipi'nde openInboxPreview var), o yüzden "genişlet/
+          // daralt" akordeon deseni tercih edildi. 2026-09-21 GÜNCELLEME: daralmış satır artık paylaşılan
+          // `KartSatiri` bileşenini kullanıyor (bkz. tanımı, InboxNot'un hemen üstü — "dört ayrı bileşen"
+          // birleştirmesinin bir parçası); genişlemiş `.card` hâli (kendine özgü aksiyon butonları/form içerdiği
+          // için) DEĞİŞMEDİ.
           const gelKartListe = (v: any) => v.tur !== 'aktivite' ? (
             <InboxNot key={v.id} v={v} onOpen={() => openIbDetay(v)} />
           ) : gelAcikId === v.id ? (
@@ -5140,13 +5214,14 @@ export default function Rite() {
               {gelKartIcerik(v)}
             </div>
           ) : (
-            <div key={v.id} className="actcard" onClick={() => setGelAcikId(v.id)}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div className="n">🎁 {v.baslik || v.payload?.ad}</div>
-                <div className="o">{v.payload?.from_ad ? 'Kimden: ' + v.payload.from_ad : 'Paylaşım'}{v.durum === 'alindi' ? ' · ✓ Alındı' : ''}</div>
-              </div>
-              <span className="go">›</span>
-            </div>
+            <KartSatiri
+              key={v.id}
+              tikla={() => setGelAcikId(v.id)}
+              ikon="🎁"
+              baslik={v.baslik || v.payload?.ad}
+              altBaslik={<>{v.payload?.from_ad ? 'Kimden: ' + v.payload.from_ad : 'Paylaşım'}{v.durum === 'alindi' ? ' · ✓ Alındı' : ''}</>}
+              sag={<span className="go">›</span>}
+            />
           );
           const gelKartFn = havuzGorunum === 'kart' ? gelKart : gelKartListe;
           return (
@@ -5242,14 +5317,18 @@ export default function Rite() {
                 ) : (
                   <>
                     <p className="sub" style={{ marginTop: 0 }}>Silinen kartlar burada 30 gün tutulur, sonra kalıcı silinir.</p>
+                    {/* 2026-09-21 GÜNCELLEME: artık paylaşılan `KartSatiri` bileşenini kullanıyor (bkz. tanımı,
+                        InboxNot'un hemen üstü — "dört ayrı bileşen" birleştirmesinin bir parçası). Tıklama
+                        davranışı YOK (satırın kendisi tıklanabilir değildi, sadece Geri al butonu) — bilinçli
+                        olarak korundu. */}
                     {cop.map((c) => (
-                      <div key={c.id} className="actcard">
-                        <div style={{ flex: 1 }}>
-                          <div className="n">{c.ikon} {c.ad}</div>
-                          <div className="o">{c.tip} · {c.kok} · silindi: {kisaTarih(c.tarih.slice(0, 10))}</div>
-                        </div>
-                        <button className="btn ghost sm" onClick={c.geriAl}>Geri al</button>
-                      </div>
+                      <KartSatiri
+                        key={c.id}
+                        ikon={c.ikon}
+                        baslik={c.ad}
+                        altBaslik={`${c.tip} · ${c.kok} · silindi: ${kisaTarih(c.tarih.slice(0, 10))}`}
+                        sag={<button className="btn ghost sm" onClick={c.geriAl}>Geri al</button>}
+                      />
                     ))}
                   </>
                 )}
