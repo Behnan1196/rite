@@ -49,6 +49,10 @@ function SortableRow({ id, disabled, children }: { id: string; disabled?: boolea
 // edilmiyor. Verilirse kapalıyken içerik yine render ediliyor ama sabit yükseklikte kırpılıyor (overflow hidden)
 // + alt kenarda hafif bir gölge (arka plan rengi ne olursa olsun çalışsın diye gradient yerine inset shadow) —
 // "daha var" hissi versin diye.
+// 2026-09-21 GÜNCELLEME (Behnan isteği — Notlar'dan kaldırıldı): Notlar'ın CardContainer çağrısı artık
+// `kapaliOnizleme` GEÇMİYOR — "diğerleri gibi kapansın" (Odak Alanları/Ajanda gün listesi gibi), yani kapalıyken
+// içerik hiç render edilmiyor. Mekanizmanın kendisi (bu blok) kalıyor, başka bir container ileride isterse yine
+// kullanabilir; sadece Notlar'daki somut kullanım kaldırıldı.
 // RENK_TEMALARI (2026-09-19, Behnan isteği — CardContainer'ın 5. davranışı, renk/stil): [key, etiket, renk] —
 // tek bir pastel ton hem başlık şeridinde hem içerikte (Behnan: "başlık + içerik teması birlikte") kullanılıyor,
 // ayrı ayrı iki ton yerine TEK renk her yerde (en basit, en tutarlı okuma). 'varsayilan' özel: başlık `#efe8da`
@@ -4127,11 +4131,16 @@ export default function Rite() {
   // DndContext/SortableContext/SortableRow/onDragEndNotlar boilerplate'i kalktı, artık SiraliListe kullanıyor
   // (bkz. SiraliListe tanımı, CardContainer'ın hemen altı) — davranış AYNEN korundu, sadece kurulum tek satıra indi.
   function notlarIcerik() {
-    return containerGorunumOf('ajanda_notlar') === 'kart' ? (
+    // 2026-09-21 GÜNCELLEME (Behnan isteği — Aktivite'deki Geniş görünüm mekanizması Notlar'a da genişletildi):
+    // Aktivite tarafında RitItem'a eklenen `genis` prop'u (açıklama önizlemesi + video rozeti) burada da aynı
+    // kart/liste toggle'ına (containerGorunumOf('ajanda_notlar')) bağlanıyor — 'kart' modunda genis, 'liste'
+    // modunda değil. "Ortak anatomi" kararı gereği Aktivite/Not aynı RitItem bileşenini, aynı kurala göre kullanıyor.
+    const notlarGenis = containerGorunumOf('ajanda_notlar') === 'kart';
+    return notlarGenis ? (
       <SiraliListe ogeler={notlar} strateji="liste" onSirala={notlarSiraKaydet}>
         {(rt: any) => (
           <div className="card" style={{ padding: '12px 14px', background: renkIcerik(containerRenkOf('ajanda_notlar', 'sari')), border: 'none', borderRadius: 3, marginBottom: 8 }}>
-            <RitItem rt={rt} />
+            <RitItem rt={rt} genis={notlarGenis} />
           </div>
         )}
       </SiraliListe>
@@ -4140,7 +4149,7 @@ export default function Rite() {
         <SiraliListe ogeler={notlar} strateji="liste" onSirala={notlarSiraKaydet}>
           {(rt: any, i: number) => (
             <div style={{ borderTop: i > 0 ? '1px solid rgba(0,0,0,.08)' : undefined, padding: '8px 0' }}>
-              <RitItem rt={rt} />
+              <RitItem rt={rt} genis={notlarGenis} />
             </div>
           )}
         </SiraliListe>
@@ -4909,7 +4918,6 @@ export default function Rite() {
                 headerToggle
                 gorunum={containerGorunumOf('ajanda_notlar')}
                 onGorunumToggle={() => containerGorunumToggle('ajanda_notlar')}
-                kapaliOnizleme={90}
                 renk={containerRenkOf('ajanda_notlar', 'sari')}
                 onRenkSec={(r) => containerRenkSec('ajanda_notlar', r)}
                 eylemler={[{ key: 'tamEkran', ikon: '↗', etiket: 'Tam ekran', onClick: () => setScreen('notlar'), hizli: true }]}
