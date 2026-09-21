@@ -3027,10 +3027,16 @@ export default function Rite() {
       // kart_config._kaynak_rit_id (2026-09-20, YENİ): mevcut kart_config alanları (ör. video url'i) korunuyor,
       // sadece kaynak ritüelin id'si gizli bir işaret olarak ekleniyor — bkz. havuzdaVarMi, yukarısı.
       kart_tipi: o.kart_tipi || null, kart_config: { ...(o.kart_config || {}), _kaynak_rit_id: o.id },
-      // aliskanlik (2026-09-21 EKLENDİ — Behnan'ın fark ettiği bug: kimlik kaybı): eskiden bu satır hiç
-      // yoktu, yani Havuz'a kaydedilen bir Alışkanlık, kopyada 'aliskanlik' alanını kaybedip (kart_config'te
-      // gorev/randevu da yoksa) sanki bir Not'muş gibi görünüyordu — bkz. bilgiIkonEtiket tanımındaki not.
-      aliskanlik: !!o.aliskanlik,
+      // 2026-09-21 GERİ ALINDI (Behnan'ın "havuza kaydet dedim, Kaydedilenler'de göremiyorum" bug raporu):
+      // bir önceki round'da buraya `aliskanlik: !!o.aliskanlik` eklenmişti (kimlik-kaybı düzeltmesi niyetiyle),
+      // ama `yeniHavuzTaslakAc` (satır ~3468, Kişisel Arşiv'e DOĞRUDAN yeni kart oluşturma — zaten çalışan,
+      // dokunulmamış bir yol) `isAliskanlik`i SADECE varsayılan isim/gunler için kullanıp dog_activities INSERT'ine
+      // hiç yazmıyor — bu, tabloda böyle bir kolon OLMADIĞININ güçlü bir işareti. O satır muhtemelen "column
+      // aliskanlik does not exist" hatasıyla INSERT'i tamamen başarısız kılıyordu (ins.error → "Havuza
+      // eklenemedi", kart hiç oluşmuyordu). Alışkanlık kimliği Havuz'un (dog_activities) statik/tekrarsız
+      // kart modelinde zaten yok — bu ayrım sadece Ajanda'daki (dog_rituals) canlı ritüellerde anlamlı, Havuz'a
+      // kopyalanınca doğal olarak düşüyor. `bilgiIkonEtiket`'in aliskanlik parametresi Havuz tarafında hep
+      // undefined kalacak, kart bu yüzden 📄 Not gibi görünecek — bu YANLIŞ değil, Havuz'un veri modeliyle tutarlı.
       // puan: 2026-09-16 — ritüel Puanla ile zaten değerlendirilmişse (bkz. ritPuanla), Havuz'a kaydederken
       // bu puan da otomatik taşınıyor, ayrıca yeniden değerlendirmeye gerek kalmıyor.
       puan: o.puan || null,
@@ -4036,10 +4042,11 @@ export default function Rite() {
       await supabase.from('dog_activities').insert({ client_id: client.id, tur: 'program', ad: p.ad, grup: g || 'Genel', adimlar: p.adimlar || [], sure_gun: p.sure_gun || null, faydalar: [], kaynak_etiket: 'Paylaşılan', aktif: true, sablon_id: p.sablon_id || null });
     } else {
       const alan0 = (p.faydalar && p.faydalar.length) ? (faydaList.find((f) => f.kod === p.faydalar[0])?.alan || null) : null;
-      // aliskanlik (2026-09-21 EKLENDİ — bkz. ritHavuzaAl'daki aynı düzeltme notu): payload zaten p.aliskanlik
-      // taşıyordu (bkz. inboxAktiviteAjanda/paylaşım tarafı), ama buraya — Gelenler'den Kişisel Arşiv'e taşırken
-      // — hiç yazılmıyordu, kimlik kaybı burada da vardı.
-      await supabase.from('dog_activities').insert({ client_id: client.id, tur: 'aktivite', ad: p.ad, grup: g || alan0 || 'Genel', faydalar: p.faydalar || [], aciklama: p.aciklama || null, videolar: p.videolar || null, zaman: p.zaman || 'gün', zamanlar: p.zamanlar || null, gunler: p.gunler || null, sure_gun: p.sure_gun || null, kart_tipi: p.kartTipi || null, kart_config: p.kartConfig || null, aliskanlik: !!p.aliskanlik, kaynak_etiket: 'Paylaşılan', aktif: true });
+      // 2026-09-21 GERİ ALINDI (bkz. ritHavuzaAl'daki aynı geri-alma notu, satır ~3029): buraya eklenen
+      // `aliskanlik: !!p.aliskanlik` muhtemelen dog_activities'de olmayan bir kolona yazmaya çalışıp INSERT'i
+      // başarısız kılıyordu (Behnan'ın "Kaydedilenler'de göremiyorum" bug raporu) — `yeniHavuzTaslakAc` aynı
+      // tabloya yazarken bu alanı hiç kullanmıyor, kanıt bu. Geri alındı.
+      await supabase.from('dog_activities').insert({ client_id: client.id, tur: 'aktivite', ad: p.ad, grup: g || alan0 || 'Genel', faydalar: p.faydalar || [], aciklama: p.aciklama || null, videolar: p.videolar || null, zaman: p.zaman || 'gün', zamanlar: p.zamanlar || null, gunler: p.gunler || null, sure_gun: p.sure_gun || null, kart_tipi: p.kartTipi || null, kart_config: p.kartConfig || null, kaynak_etiket: 'Paylaşılan', aktif: true });
     }
     await supabase.from('dog_inbox').delete().eq('id', item.id);
     setIbGrupSec(null); setIbGrupVal('Genel');
