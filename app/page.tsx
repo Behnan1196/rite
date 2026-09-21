@@ -4702,11 +4702,23 @@ export default function Rite() {
               // yüzden ⋯ menüsü şimdilik görünmüyor (bkz. CardContainer: hiç `hizli` olmayan eylem yoksa ⋯ hiç
               // render edilmiyor) — adaylar ortaya çıktıkça buraya eklenir. Varsayılan AÇIK (`ajanda_gunler`,
               // Notlar'daki 'ajanda_notlar' ile aynı ikinci-parametre deseni), yani mevcut davranış DEĞİŞMEDİ.
+              // 2026-09-21 GÜNCELLEME (Behnan isteği — kart görünüm taksonomisi R&D'sinin ilk canlı denemesi:
+              // "Aktiviteler container'ının liste/kart toggle ikonunu aktive edelim"): `gorunum`/`onGorunumToggle`
+              // artık Notlar/Odak Alanları ile AYNI mekanizmayla (containerGorunumOf/containerGorunumToggle)
+              // bağlandı. Tek gerçek Aktiviteler'e özgü fark RUTİN gruplarında: liste modu bugünkü "kaynaşmış"
+              // görünümü AYNEN koruyor (başlık+üyeler tek kutuymuş gibi kenetli), kart modunda her rutin üyesi de
+              // (tek satırlık kartlar zaten öyle olduğu için) kendi bağımsız, tam yuvarlak köşeli, aralıklı kartı
+              // oluyor — bkz. rowBody içindeki `kartGorunum` kullanımı. Tekli kart/not satırları zaten `.card`
+              // varsayılanıyla (14px radius, 10px dış boşluk) bağımsız kart gibi durduğu için o satırlarda görsel
+              // fark YOK — bu BİLİNÇLİ bir ilk adım, "Geniş kart" tasarımı (mockup'taki taslak) henüz buraya
+              // taşınmadı, ayrı bir round'da ele alınacak.
               <CardContainer
                 baslik="Aktiviteler"
                 acik={containerAcikOf('ajanda_gunler', true)}
                 onToggle={() => containerToggle('ajanda_gunler', true)}
                 headerToggle
+                gorunum={containerGorunumOf('ajanda_gunler')}
+                onGorunumToggle={() => containerGorunumToggle('ajanda_gunler')}
               >
                 {habits.length === 0 && <div className="empty">Bugün için kart yok. Aşağıdaki ＋ ile ekleyebilirsin.</div>}
                 {habits.length > 0 && (() => {
@@ -4753,6 +4765,10 @@ export default function Rite() {
                   // Başlık + (açıksa) üyeler tek bir kutuymuş gibi görünsün diye kenarlar/köşeler birbirine
                   // kaynatılıyor: başlık açıkken alt kenarını kapatır, üyeler üstten kaynaşır, sadece SON üye
                   // kutuyu alttan kapatır (isLast). Girinti sadece sol iç boşlukla veriliyor.
+                  // kartGorunum (2026-09-21, bkz. CardContainer'ın gorunum prop'u, yukarısı): SADECE rutin
+                  // gruplarının kaynaşma/kaynaşmama davranışını değiştiriyor — tekli kart/not satırları zaten
+                  // `.card` varsayılanıyla (14px radius, 10px dış boşluk) bağımsız duruyor, onlara dokunmuyoruz.
+                  const kartGorunum = containerGorunumOf('ajanda_gunler') === 'kart';
                   const rowBody = (r: any) => {
                     if (r.kind === 'ayrac') {
                       const rt = r.members[0];
@@ -4774,7 +4790,7 @@ export default function Rite() {
                       const hepsi = r.members.length > 0 && doneCount === r.members.length;
                       const acik = expandedRutin.has(r.rutin);
                       return (
-                        <div className="card routine" style={acik ? { marginBottom: 0, borderBottomLeftRadius: 0, borderBottomRightRadius: 0, borderBottom: 'none', paddingBottom: 8 } : undefined}>
+                        <div className="card routine" style={(acik && !kartGorunum) ? { marginBottom: 0, borderBottomLeftRadius: 0, borderBottomRightRadius: 0, borderBottom: 'none', paddingBottom: 8 } : undefined}>
                           <div className="rh" style={{ border: 'none', padding: 0 }}>
                             <div className={'chk' + (hepsi ? ' on' : '')} onClick={(e) => { e.stopPropagation(); toggleRutinAll(r.members); }} title="Hepsini yaptım / geri al" style={{ width: 22, height: 22, flex: '0 0 22px' }}>{hepsi ? '✓' : ''}</div>
                             <div style={{ flex: 1, minWidth: 0 }}>
@@ -4796,7 +4812,11 @@ export default function Rite() {
                       return (
                         <div
                           className="card"
-                          style={{
+                          style={kartGorunum ? {
+                            padding: '2px 14px 2px 30px',
+                            margin: '0 0 8px',
+                            borderRadius: 14,
+                          } : {
                             padding: '2px 14px 2px 30px',
                             margin: r.isLast ? '0 0 10px' : 0,
                             borderTop: '1px dashed var(--line)',
