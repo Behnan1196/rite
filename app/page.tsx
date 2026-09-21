@@ -535,6 +535,34 @@ const KART_LAB: { tip: string; ornekConfig: any }[] = [
   { tip: 'video', ornekConfig: {} },
   { tip: 'standart', ornekConfig: {} },
 ];
+// 🧬 ALAN PALETİ DENEMESİ (2026-09-21, Behnan isteği — kart_tipi/Notion gerilimini somut bir mockup'la sınamak
+// için, bkz. proje hafızası "field-type palette" tartışması). Bugünkü kart_tipi modeli KAPALI (yeni tür kodda
+// tanımlanmalı, KARTLAR listesi sabit). Tartışılan orta yol: küçük, kapalı bir FIELD tipi paleti kodda sabit
+// kalsın, kart bundan KOMPOZE edilsin — yeni etkileşimli kart türü icat etmeden. Bu blok SADECE bir deneme —
+// dog_rituals/kart_tipi'ye hiç dokunmuyor, ekranAlanPaleti (screen==='alanpaleti', devMode+Ekle menüsünden)
+// tamamen cihazda yaşıyor. Amaç: Ölçüm ve Niyet gibi basit, var olan kart tiplerini bu modelle yeniden üretip
+// mevcut kod-tanımlı halleriyle yan yana karşılaştırmak — model gerçekten yeterli mi, elle görmek. Kalıcı bir
+// mimari karar DEĞİL.
+type AlanTipi = 'metin' | 'sayi' | 'tarih' | 'onay' | 'secim' | 'video';
+const FIELD_TIPLERI: { tip: AlanTipi; ad: string; ikon: string }[] = [
+  { tip: 'metin', ad: 'Metin', ikon: '✏️' },
+  { tip: 'sayi', ad: 'Sayı', ikon: '🔢' },
+  { tip: 'tarih', ad: 'Tarih', ikon: '📅' },
+  { tip: 'onay', ad: 'Onay (evet/hayır)', ikon: '✅' },
+  { tip: 'secim', ad: 'Seçenek listesi', ikon: '📋' },
+  { tip: 'video', ad: 'Video linki', ikon: '🎬' },
+];
+type SablonAlan = { id: string; tip: AlanTipi; label: string; birim?: string; secenekler?: string[] };
+type Sablon = { ad: string; ikon: string; alanlar: SablonAlan[] };
+// Ölçüm ve Niyet'in BUGÜNKÜ kod-tanımlı hallerinin (bkz. OlcumKart/NiyetKart) alan-paleti eşdeğerleri —
+// karşılaştırma için elle yazıldı, otomatik dönüştürme YOK.
+const SABLON_ORNEKLERI: Sablon[] = [
+  { ad: 'Ölçüm (palet ile)', ikon: '📏', alanlar: [{ id: 'kilo', tip: 'sayi', label: 'Kilo', birim: 'kg' }] },
+  { ad: 'Niyet (palet ile)', ikon: '🧭', alanlar: [
+    { id: 'niyet_metni', tip: 'metin', label: 'Bugün neye odaklanmak istiyorsun?' },
+    { id: 'niyet_kategori', tip: 'secim', label: 'Kategori', secenekler: ['Sağlık', 'Aile', 'Odak'] },
+  ] },
+];
 // KART_KATEGORI / KART_KATEGORILER / kartKategoriOf (2026-09-18 → 2026-09-19): "📦 Ajandadan Kaydedilenler"in
 // (ve eski Gelenler'in) kart-tipine göre otomatik 4-kovalı kategorileme pilotu — Behnan'ın kendi notuyla baştan
 // "pilot çalışma, sonra tekrar bakarız" olarak işaretlenmişti. Gelenler'i düz/kronolojik yaptığımızda (bkz.
@@ -1802,6 +1830,44 @@ function NiyetKart({ cfg, done, onKaydet }: { cfg: any; done: boolean; onKaydet:
     </div>
   );
 }
+// SablonKart: FIELD_TIPLERI'nden kompoze edilmiş bir Şablon'u render eden TEK, genel bileşen — OlcumKart/
+// NiyetKart gibi tek bir kart_tipi'ne özel değil, her şablonu aynı bileşen çiziyor (bkz. "Alan Paleti Denemesi"
+// notu, yukarısı). Kaydet SADECE mockup — hiçbir yere yazmıyor, `onKaydet` verilirse ham değerleri ona geri
+// veriyor (çağıran taraf isterse ekranda/JSON olarak gösteriyor).
+function SablonKart({ sablon, onKaydet }: { sablon: Sablon; onKaydet?: (vals: Record<string, any>) => void }) {
+  const [deg, setDeg] = useState<Record<string, any>>({});
+  const [ok, setOk] = useState(false);
+  function set(id: string, v: any) { setDeg((m) => ({ ...m, [id]: v })); }
+  function kaydet() {
+    onKaydet?.(deg);
+    setOk(true); setTimeout(() => setOk(false), 2500);
+  }
+  return (
+    <div style={{ margin: '4px 0 8px' }}>
+      <div className="k" style={{ marginBottom: 6 }}>{sablon.ikon} {sablon.ad}</div>
+      {sablon.alanlar.length === 0 && <div className="note" style={{ marginTop: 0 }}>Henüz alan eklenmedi.</div>}
+      {sablon.alanlar.map((a) => (
+        <div key={a.id} className="olcrow">
+          <label>{a.label}{a.birim ? ' (' + a.birim + ')' : ''}</label>
+          {a.tip === 'metin' && <input type="text" value={deg[a.id] ?? ''} onChange={(e) => set(a.id, e.target.value)} />}
+          {a.tip === 'sayi' && <input type="number" inputMode="decimal" step="any" value={deg[a.id] ?? ''} onChange={(e) => set(a.id, e.target.value)} />}
+          {a.tip === 'tarih' && <input type="date" value={deg[a.id] ?? ''} onChange={(e) => set(a.id, e.target.value)} />}
+          {a.tip === 'onay' && <span className={'chip' + (deg[a.id] ? ' on' : '')} onClick={() => set(a.id, !deg[a.id])}>{deg[a.id] ? '✅ Evet' : '⬜ Hayır'}</span>}
+          {a.tip === 'secim' && (a.secenekler || []).map((s) => (
+            <span key={s} className={'chip' + (deg[a.id] === s ? ' on' : '')} onClick={() => set(a.id, deg[a.id] === s ? null : s)} style={{ marginRight: 4 }}>{s}</span>
+          ))}
+          {a.tip === 'video' && <input type="url" value={deg[a.id] ?? ''} onChange={(e) => set(a.id, e.target.value)} placeholder="https://…" />}
+        </div>
+      ))}
+      {sablon.alanlar.length > 0 && (
+        <div className="rowbtns" style={{ marginTop: 8 }}>
+          <button className="btn" onClick={kaydet}>Kaydet (mockup)</button>
+          {ok && <span className="note" style={{ margin: 0, color: 'var(--green)', fontWeight: 700 }}>✓ Kaydedildi (sadece deneme)</span>}
+        </div>
+      )}
+    </div>
+  );
+}
 // Inbox notu kartı: dokunulabilir; tıklayınca editör açılır.
 function InboxNot({ v, onOpen }: { v: any; onOpen: () => void }) {
   const ikon = v.payload?.kartTipi === 'video' ? '🎬' : v.url ? '🔗' : v.payload?.resim ? '📷' : '📌';
@@ -1850,6 +1916,14 @@ export default function Rite() {
   // false kalıyor, gerçek değer mount'tan sonra localStorage'dan okunuyor (bkz. ilk mount useEffect'i).
   const [devMode, setDevMode] = useState(false);
   const [kartLabOpen, setKartLabOpen] = useState(false);
+  // 🧬 Alan Paleti Denemesi state'i (2026-09-21, bkz. FIELD_TIPLERI/Sablon tanımları yukarıda) — SADECE mockup,
+  // `screen==='alanpaleti'` tam sayfası içinde kullanılıyor. `apOzelSablon`: kullanıcının o an kurduğu ÖZEL
+  // şablon (canlı önizlemeyle); diğerleri ona yeni bir alan eklerken kullanılan geçici form alanları.
+  const [apOzelSablon, setApOzelSablon] = useState<Sablon>({ ad: 'Yeni şablon', ikon: '🧬', alanlar: [] });
+  const [apYeniTip, setApYeniTip] = useState<AlanTipi>('metin');
+  const [apYeniLabel, setApYeniLabel] = useState('');
+  const [apYeniBirim, setApYeniBirim] = useState('');
+  const [apYeniSecenekler, setApYeniSecenekler] = useState('');
   const devTapRef = useRef<{ n: number; t: number }>({ n: 0, t: 0 });
   // devTapN: SADECE görünür geri bildirim için (2026-09-18, "7 kez basıyorum ama açılmıyor" hatası sonrası
   // eklendi) — önceden dokunuşun sayılıp sayılmadığını görmenin hiçbir yolu yoktu, o yüzden gerçekten mi
@@ -5382,6 +5456,102 @@ export default function Rite() {
           </div>
         )}
 
+        {/* ---------- 🧬 ALAN PALETİ DENEMESİ (2026-09-21, Behnan isteği — kart R&D'sinin ilk adımı) ---------- */}
+        {/* SADECE mockup — hiçbir dog_rituals/dog_activities kaydına dokunmuyor, tamamen bu ekranın kendi
+            state'inde yaşıyor. Amaç: kart_tipi/Notion gerilimini (proje hafızası, "field-type palette"
+            tartışması) somut örneklerle sınamak. İki bölüm: (1) Ölçüm/Niyet'in bugünkü kod-tanımlı halini,
+            aynı örnek değerlerle, alan-paleti eşdeğeriyle yan yana göstermek; (2) Behnan'ın sıfırdan, sadece
+            FIELD_TIPLERI'nden kendi şablonunu kurabildiği bir mini form-builder + canlı önizleme + JSON çıktısı
+            (ileride kart_config olsaydı ne görünürdü, diye). */}
+        {screen === 'alanpaleti' && (() => {
+          function apAlanEkle() {
+            const label = apYeniLabel.trim();
+            if (!label) return;
+            const alan: SablonAlan = { id: 'a' + Date.now(), tip: apYeniTip, label };
+            if (apYeniTip === 'sayi' && apYeniBirim.trim()) alan.birim = apYeniBirim.trim();
+            if (apYeniTip === 'secim') alan.secenekler = apYeniSecenekler.split(',').map((s) => s.trim()).filter(Boolean);
+            setApOzelSablon((s) => ({ ...s, alanlar: [...s.alanlar, alan] }));
+            setApYeniLabel(''); setApYeniBirim(''); setApYeniSecenekler('');
+          }
+          function apAlanSil(id: string) {
+            setApOzelSablon((s) => ({ ...s, alanlar: s.alanlar.filter((a) => a.id !== id) }));
+          }
+          return (
+            <div>
+              <button className="linkbtn" onClick={() => setScreen('home')}>‹ Home</button>
+              <div className="card">
+                <h2 style={{ marginTop: 0 }}>🧬 Alan Paleti Denemesi</h2>
+                <p className="note" style={{ marginTop: 0 }}>🧪 Sadece deneme — hiçbir yere kaydetmiyor. Küçük, kapalı bir alan tipi paleti (metin/sayı/tarih/onay/seçenek/video) sabit kalıyor, kart bundan kompoze ediliyor.</p>
+              </div>
+
+              <h3 style={{ margin: '14px 0 6px' }}>Karşılaştırma — mevcut vs. palet ile</h3>
+              {SABLON_ORNEKLERI.map((s, i) => {
+                const eskiTip = i === 0 ? 'olcum' : 'niyet';
+                return (
+                  <div key={s.ad} className="card" style={{ marginBottom: 10 }}>
+                    <div className="note" style={{ marginTop: 0, fontWeight: 700 }}>{eskiTip === 'olcum' ? '📏 Ölçüm' : '🧭 Niyet'}</div>
+                    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                      <div style={{ flex: '1 1 220px', minWidth: 200 }}>
+                        <div className="note" style={{ margin: '0 0 4px', opacity: .7 }}>Mevcut (kod-tanımlı)</div>
+                        {eskiTip === 'olcum'
+                          ? <OlcumKart cfg={{ alanlar: [{ anahtar: 'kilo', label: 'Kilo', birim: 'kg' }] }} sonDegerler={{}} onKaydet={() => {}} />
+                          : <NiyetKart cfg={{ soru: 'Bugünün niyeti', degerler: ['Sağlık', 'Aile', 'Odak'] }} done={false} onKaydet={() => {}} />}
+                      </div>
+                      <div style={{ flex: '1 1 220px', minWidth: 200 }}>
+                        <div className="note" style={{ margin: '0 0 4px', opacity: .7 }}>Yeni (alan paleti ile)</div>
+                        <SablonKart sablon={s} />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+
+              <h3 style={{ margin: '18px 0 6px' }}>Kendi şablonunu kur</h3>
+              <div className="card">
+                <label className="fldlbl" style={{ marginTop: 0 }}>Şablon adı</label>
+                <input value={apOzelSablon.ad} onChange={(e) => setApOzelSablon((s) => ({ ...s, ad: e.target.value }))} />
+
+                {apOzelSablon.alanlar.length > 0 && (
+                  <div style={{ margin: '10px 0' }}>
+                    {apOzelSablon.alanlar.map((a) => (
+                      <div key={a.id} className="rowbtns" style={{ justifyContent: 'space-between', marginBottom: 4 }}>
+                        <span className="note" style={{ margin: 0 }}>{FIELD_TIPLERI.find((f) => f.tip === a.tip)?.ikon} {a.label}{a.birim ? ' (' + a.birim + ')' : ''}{a.secenekler ? ' — ' + a.secenekler.join('/') : ''}</span>
+                        <button className="btn ghost sm" onClick={() => apAlanSil(a.id)}>🗑</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div style={{ borderTop: '1px solid var(--line)', paddingTop: 10, marginTop: 10 }}>
+                  <label className="fldlbl" style={{ marginTop: 0 }}>Yeni alan ekle</label>
+                  <div style={{ marginBottom: 6 }}>
+                    {FIELD_TIPLERI.map((f) => (
+                      <span key={f.tip} className={'chip' + (apYeniTip === f.tip ? ' on' : '')} onClick={() => setApYeniTip(f.tip)} style={{ marginRight: 4, marginBottom: 4, display: 'inline-block' }}>{f.ikon} {f.ad}</span>
+                    ))}
+                  </div>
+                  <input value={apYeniLabel} onChange={(e) => setApYeniLabel(e.target.value)} placeholder="Alan etiketi (ör. Kilo)" style={{ marginBottom: 6 }} />
+                  {apYeniTip === 'sayi' && <input value={apYeniBirim} onChange={(e) => setApYeniBirim(e.target.value)} placeholder="Birim (ops., ör. kg)" style={{ marginBottom: 6 }} />}
+                  {apYeniTip === 'secim' && <input value={apYeniSecenekler} onChange={(e) => setApYeniSecenekler(e.target.value)} placeholder="Seçenekler, virgülle (ör. Sağlık, Aile, Odak)" style={{ marginBottom: 6 }} />}
+                  <button className="btn" disabled={!apYeniLabel.trim()} onClick={apAlanEkle}>+ Alan ekle</button>
+                </div>
+              </div>
+
+              {apOzelSablon.alanlar.length > 0 && (
+                <>
+                  <h3 style={{ margin: '18px 0 6px' }}>Canlı önizleme</h3>
+                  <div className="card">
+                    <SablonKart sablon={apOzelSablon} />
+                  </div>
+                  <details style={{ margin: '10px 0 24px' }}>
+                    <summary className="note" style={{ cursor: 'pointer' }}>Şablonun JSON hali (kart_config olsaydı)</summary>
+                    <pre style={{ fontSize: 12, whiteSpace: 'pre-wrap', background: 'var(--card)', padding: 8, borderRadius: 6 }}>{JSON.stringify(apOzelSablon, null, 2)}</pre>
+                  </details>
+                </>
+              )}
+            </div>
+          );
+        })()}
+
         {ibDetay && (
           <div className="modal top" onMouseDown={() => setIbDetay(null)}>
           <div className="sheet topsheet" onMouseDown={(e) => e.stopPropagation()}>
@@ -6768,6 +6938,12 @@ export default function Rite() {
                   normal kullanıcılar bu seçeneği hiç görmez. */}
               {devMode && (
                 <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); setKartLabOpen(true); }}><span className="ekic">🧪</span>Lab</button>
+              )}
+              {/* 🧬 Alan Paleti Denemesi (2026-09-21, bkz. yukarıdaki screen==='alanpaleti' bloğu) — Kart
+                  Laboratuvarı ile AYNI şart (sadece devMode), ama gerçek bir kart eklemiyor, tam sayfa bir
+                  deneme ekranı açıyor. */}
+              {devMode && (
+                <button className="ekleOpt" onClick={() => { setEkleMenuOpen(false); setScreen('alanpaleti'); }}><span className="ekic">🧬</span>Alan Paleti</button>
               )}
             </div>
           </div>
