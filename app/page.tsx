@@ -466,6 +466,10 @@ const LS_CONTAINER_RENK = 'rite_container_renk';
 // AYRI ve daha basit bir anahtar — sadece CardContainer'ın iki kararı burada da uygulandı: (1) UI artık iki ayrı
 // çip (☰ Liste / ▦ Kart) değil, CardContainer'daki gibi TEK ikon (tıklayınca değer flip'leniyor); (2) tercih artık
 // localStorage'a kalıcı (öncesinde sadece React state'ti, sayfa yenilenince sıfırlanıyordu).
+// 2026-09-21 GÜNCELLEME (kart görünüm taksonomisi R&D'si, kapsam daraltıldı): "ÜÇÜNDE de" artık GEÇERLİ DEĞİL —
+// Kişisel Arşiv sabit VS Code tarzı satıra geçti (bkz. aktKartSade), Çöp Kutusu zaten hep sabitti, mekanizma
+// (state + localStorage anahtarı) DEĞİŞMEDİ ama fiilen SADECE Gelenler'de kullanılıyor (bkz. gelKartFn, Havuz
+// başlığındaki toggle butonunun `havuzFolder === 'gelenler'` koşulu).
 const LS_HAVUZ_GORUNUM = 'rite_havuz_gorunum';
 
 const POOL: Record<string, { ad: string; dsc: string; zaman: string; flag?: string }[]> = {
@@ -5041,35 +5045,37 @@ export default function Rite() {
               )}
             </span>
           );
-          const aktKart = (a: any) => (
-            <div key={a.id} className="actcard" style={{ opacity: havuzPano === a.id ? .45 : 1 }} onClick={() => openDetay(a, 'aktivite')}>
-              <div style={{ flex: 1 }}><div className="n">{a.tur === 'program' ? '🧩 ' : ''}{a.ad}{a.puan ? <span className="puanp"> {'★'.repeat(a.puan)}</span> : ''}</div><div className="o">{a.tur === 'program' ? (a.adimlar || []).length + ' adım' + (a.sure_gun ? ' · ' + a.sure_gun + ' gün' : '') : (a.kaynak_etiket === 'Mezun' ? 'Mezun · ' : '') + Array.from(new Set((a.faydalar || []).map((k: string) => faydaMap[k]?.alan).filter(Boolean))).join(' · ')}</div></div>
+          // aktKartSade / sadeIkon (2026-09-21, kart görünüm taksonomisi R&D'si, Behnan kararı — kart-
+          // gorunumleri.html §4/§5): Kişisel Arşiv'in eski Liste/Geniş ikilisi (aktKart/aktKartGenis, toggle'lı,
+          // KALDIRILDI) YERİNE VS Code'un dosya gezgini tarzı ÜÇÜNCÜ, tek bir minimal tasarım — türe göre küçük
+          // bir ikon + kalın olmayan tek satır isim. Behnan: "vscode daki gibi bir gösterim ... tipine göre bir
+          // ikon ve bold olmayan adıyla göstersek." Artık SABİT (toggle'sız) — Çöp Kutusu'nun sade/sabit
+          // ilkesiyle aynı gerekçe: burası yerleşmiş/sakin bir referans listesi, Liste/Geniş ayrımının gerçek bir
+          // triyaj faydası yok (o fayda Gelenler'de kalıyor, bkz. gelKartFn + yukarıdaki toggle notu). Bilinçli
+          // olarak fayda/alan etiketleri ve "Mezun" ibaresi de düştü — VS Code satırı BİLGİ YOĞUNLUĞUNU DEĞİL,
+          // tarama hızını hedefliyor (detaya girince zaten hepsi var). Tıklama davranışı DEĞİŞMEDİ (openDetay
+          // zaten tam detay ekranını açıyor — Behnan'ın "olması gereken bir opsiyon" dediği "detaya ulaşma"
+          // zaten vardı, eksik değildi), ⋯ menüsü de aynı aktMenu.
+          // sadeIkon: RitItem'daki bilgiIkon mantığının (bkz. RitItem tanımı, ~satır 4295) Kişisel Arşiv'e
+          // taşınmış hâli — 'bilgi' alt tiplerinde aynı ayrım (randevu/alışkanlık/yapılacak/not), programlarda
+          // 🧩, diğer kart_tipi'lerinde genel KARTLAR eşlemesi (kartIkon).
+          const sadeIkon = (a: any) => {
+            if (a.tur === 'program') return '🧩';
+            const tip = a.kart_tipi || 'standart';
+            if (tip === 'bilgi') {
+              const cfg = a.kart_config || {};
+              return cfg.randevu ? '📅' : a.aliskanlik ? '🎓' : cfg.gorev ? '☑️' : '📄';
+            }
+            return kartIkon(tip) || '•';
+          };
+          const aktKartSade = (a: any) => (
+            <div key={a.id} className="vsrow" style={{ opacity: havuzPano === a.id ? .45 : 1 }} onClick={() => openDetay(a, 'aktivite')}>
+              <span className="iko">{sadeIkon(a)}</span>
+              <span className="nm">{a.ad}{a.puan ? <span className="puanp"> {'★'.repeat(a.puan)}</span> : ''}</span>
               {aktMenu(a)}
             </div>
           );
-          // aktKartGenis (2026-09-18, Havuz yeniden tasarımı — 5. adım): aktKart'ın "kart görünümü" karşılığı —
-          // aynı tıklama davranışı (openDetay), ama faydalar tek satırda birleştirilmiş metin yerine ayrı ayrı
-          // etiket/chip (tagp p-alan, uygulamanın başka yerlerinde de kullandığı görsel dil) olarak gösteriliyor.
-          const aktKartGenis = (a: any) => {
-            const alanlar = Array.from(new Set((a.faydalar || []).map((k: string) => faydaMap[k]?.alan).filter(Boolean)));
-            return (
-              <div key={a.id} className="card" style={{ cursor: 'pointer', opacity: havuzPano === a.id ? .45 : 1 }} onClick={() => openDetay(a, 'aktivite')}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 4 }}>
-                  <div style={{ fontSize: 13.5, fontWeight: 700, flex: 1 }}>{a.tur === 'program' ? '🧩 ' : ''}{a.ad}{a.puan ? <span className="puanp"> {'★'.repeat(a.puan)}</span> : ''}</div>
-                  {aktMenu(a)}
-                </div>
-                {a.tur === 'program' ? (
-                  <div className="note" style={{ marginTop: 4 }}>{(a.adimlar || []).length} adım{a.sure_gun ? ' · ' + a.sure_gun + ' gün' : ''}</div>
-                ) : (
-                  <>
-                    {a.kaynak_etiket === 'Mezun' && <div className="note" style={{ marginTop: 4 }}>Mezun</div>}
-                    {alanlar.length > 0 && <div style={{ marginTop: 6 }}>{alanlar.map((al: any) => <span key={al} className="tagp p-alan">{al}</span>)}</div>}
-                  </>
-                )}
-              </div>
-            );
-          };
-          const aktKartFn = havuzGorunum === 'kart' ? aktKartGenis : aktKart;
+          const aktKartFn = aktKartSade;
           // gelKartIcerik (2026-09-18, Havuz yeniden tasarımı — 6. adım, Behnan: "sanki toggle tek olup, tüm
           // klasörler için geçerli olsa daha uygun olur"): bir aktivite-türü Gelenler satırının tüm içeriği
           // (başlık, faydalar, aksiyon butonları, ibGrupSec formu) — hem gelKart (kart görünümü, dıştan bir
@@ -5160,13 +5166,23 @@ export default function Rite() {
                     3 kökünde de geçerli — bkz. havuzGorunum tanımındaki not ve gelKartListe.
                     2026-09-19 (CardContainer genelleme, bkz. LS_HAVUZ_GORUNUM): felsefe AYNEN korundu (hâlâ tek,
                     global bir değer — container-bazlı DEĞİL), sadece UI artık iki ayrı çip yerine CardContainer'ın
-                    tek-ikon standardı, ve tercih artık kalıcı (havuzGorunumToggle). */}
-                <button
-                  type="button"
-                  title={havuzGorunum === 'kart' ? 'Liste görünümüne geç' : 'Kart görünümüne geç'}
-                  onClick={havuzGorunumToggle}
-                  style={{ background: 'none', border: 'none', padding: '0 4px', fontSize: 16, fontWeight: 700, color: '#8a8169', cursor: 'pointer', lineHeight: 1 }}
-                >{havuzGorunum === 'kart' ? '☰' : '▦'}</button>
+                    tek-ikon standardı, ve tercih artık kalıcı (havuzGorunumToggle).
+                    2026-09-21 GÜNCELLEME (kart görünüm taksonomisi R&D'si, Behnan kararı — kart-gorunumleri.html
+                    §5): toggle artık SADECE Gelenler'de görünüyor. Gerekçe: Gelenler'in kartında kendine özgü
+                    triyaj aksiyonları var (🗓️ Ajandama ekle, 🗄️ Kişisel arşive taşı) — Liste/Geniş ayrımının orada
+                    gerçek bir "ne yapayım" kararına faydası oluyor. Kişisel Arşiv zaten yerleşmiş/sakin bir
+                    referans listesi (artık sabit VS Code tarzı satır, bkz. aktKartSade) ve Çöp Kutusu zaten
+                    sabitti — ikisinde de toggle'a ihtiyaç yok. `havuzGorunum`/`havuzGorunumToggle` mekanizmasının
+                    kendisi DEĞİŞMEDİ (Gelenler hâlâ onu kullanıyor, bkz. gelKartFn), sadece bu buton artık
+                    `havuzFolder === 'gelenler'` değilken render edilmiyor. */}
+                {havuzFolder === 'gelenler' && (
+                  <button
+                    type="button"
+                    title={havuzGorunum === 'kart' ? 'Liste görünümüne geç' : 'Kart görünümüne geç'}
+                    onClick={havuzGorunumToggle}
+                    style={{ background: 'none', border: 'none', padding: '0 4px', fontSize: 16, fontWeight: 700, color: '#8a8169', cursor: 'pointer', lineHeight: 1 }}
+                  >{havuzGorunum === 'kart' ? '☰' : '▦'}</button>
+                )}
               </div>
             </div>
             {havuzAramaAcik && (
@@ -5269,7 +5285,8 @@ export default function Rite() {
                 HavuzKlasor'un altKlasorEkle'si) — kaGrup burada SADECE "hangi Grup'a Alt Grup ekleniyor" bilgisini
                 taşıyor (null = kökte yeni Grup). Kart görünümü (grid/tile) BİLİNÇLİ olarak YOK (Behnan: "bu
                 container diğerlerinden farklı, kart görünümü kötü görünür") — klasörler hep bu sade liste/ağaç
-                halinde; kartların kendisi hâlâ havuzGorunum'a göre liste/kart (aktKartFn, değişmedi). */}
+                halinde. 2026-09-21 GÜNCELLEME: kartların kendisi de artık havuzGorunum'dan BAĞIMSIZ, hep sabit
+                VS Code tarzı ikon+isim satırı (aktKartFn artık aktKartSade — bkz. tanımı yukarıda). */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '8px 0 10px' }}>
               <b style={{ flex: 1 }}>🗄️ Kişisel Arşiv</b>
               <span style={{ position: 'relative' }}>
