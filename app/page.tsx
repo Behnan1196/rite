@@ -2284,9 +2284,6 @@ export default function Rite() {
       setVideoEkleAcik(false);
     }
   }, [detay, taze]);
-  const [grupEditOpen, setGrupEditOpen] = useState(false);
-  const [grupEditVal, setGrupEditVal] = useState('');
-  const [grupEditAltVal, setGrupEditAltVal] = useState('');
   const [paylasOpen, setPaylasOpen] = useState(false);
   // Sohbet mockup (2026-09-20, Behnan isteği — "sohbet ve video ekranını bir çeşit mockup olarak oluşturalım,
   // özellikle sohbette neyi nasıl paylaşacağımızı düşünelim"): GERÇEK bir chat altyapısı (Stream.io ya da kendi
@@ -3160,7 +3157,7 @@ export default function Rite() {
   });
   // Tek detay kartı: hem ritüel (Ajanda) hem aktivite (Havuz) buradan açılır.
   async function openDetay(obj: any, tur: string, extra?: any) {
-    setDetay({ obj, tur, ...(extra || {}) }); setGrupEditOpen(false); setGrupEditVal('');
+    setDetay({ obj, tur, ...(extra || {}) });
     if (tur === 'ritual') {
       setAdInput(obj.ad || ''); setRemInput(obj.hatirlatma_saat || ''); setUrlInput(obj.url || ''); setAciklamaInput(obj.aciklama || ''); setKartUrlInput((obj.kart_config && obj.kart_config.url) || obj.url || ''); setKisiselNotInput(obj.kisisel_not || '');
       const n = sureGun(obj); setSureInput(n > 0 ? String(n) : '21');
@@ -3204,7 +3201,6 @@ export default function Rite() {
     await supabase.from('dog_activities').update({ grup: g, alt_grup: ag }).eq('id', id);
     setDetay((d: any) => (d ? { ...d, obj: { ...d.obj, grup: g, alt_grup: ag } } : d));
     setDetayAct((a: any) => (a ? { ...a, grup: g, alt_grup: ag } : a));
-    setGrupEditOpen(false);
     loadActivities();
   }
   async function setRitUrl(id: string, url: string) {
@@ -4270,7 +4266,15 @@ export default function Rite() {
     return Array.from(new Set([...kalici, ...kullanilan]));
   }
 
-  function RitItem({ rt }: { rt: any }) {
+  // `genis` (2026-09-21, kart görünüm taksonomisi R&D — Behnan: "Geniş — Aktivite: taslak doğru yönde, bence
+  // uygulanabilir kodda" + "Aktivite/Not ortak anatomi: ... görünümde ayrışması yeter"): RitItem'a eklenen
+  // isteğe bağlı Geniş-görünüm modu — AYRI bir bileşen yazmak yerine (ortak anatomi kararına uygun) aynı
+  // bileşene iki yeni, Liste'de hiç görünmeyen unsur ekliyor: Açıklama önizlemesi (kart_config.icerik'in İLK
+  // SATIRI HARİÇ kalanı — ilk satır zaten `rt.ad` olarak başlıkta görünüyor, bkz. icerikBaslikTuret) ve
+  // varsa video rozeti (kart_config.videolar.length). kart-gorunumleri.html mockup'ındaki §1/§2 taslaklarının
+  // koda taşınan hâli — mockup'ın 2-sütunlu grid'i sadece o sayfaya özgüydü, gerçek Ajanda'da Havuz'un
+  // aktKartGenis'i gibi tek-sütun bir "daha bilgili satır" olarak uygulandı, grid YOK.
+  function RitItem({ rt, genis }: { rt: any; genis?: boolean }) {
     const done = ritDone(rt.id);
     const total = ritTotal(rt.id);
     const tip = rt.kart_tipi || 'standart';
@@ -4295,6 +4299,14 @@ export default function Rite() {
     // yok (şekil+renk zaten "not" olduğunu anlatıyor), "bitiş" yazısı yok, bildirim varsa sağ altta küçük bir
     // rozet, kaldırma zaten var (aşağıdaki ⋯ menüsünden) — yapıp kaldırmak (kullanıcı isteği) buradan oluyor.
     const notRow = isNotKart(rt);
+    // aciklamaOnizleme (genis modu): kişisel bilgi kartlarında ayrı bir "Açıklama" alanı yok, tek içerik alanı
+    // kart_config.icerik — ilk satırı zaten başlık (rt.ad) olarak türüyor (icerikBaslikTuret), o yüzden burada
+    // SADECE ilk satırdan SONRAKİ kısmı önizliyoruz ki başlık iki kez görünmesin. Bugün bu alan tam düz metin
+    // (sözdizimi işlenmiyor, bkz. proje hafızası/parklanan editör konusu) — .desclite CSS'i (globals.css) 2
+    // satırda kırpıyor, biçimlendirme yok.
+    const icerikSatirlari = (cfg.icerik || '').split('\n');
+    const aciklamaOnizleme = genis ? icerikSatirlari.slice(1).join('\n').trim() : '';
+    const videoSayisi = genis && Array.isArray(cfg.videolar) ? cfg.videolar.length : 0;
     return (
       <div>
         <div className={'rit' + (meridyen && !stilP ? ' rit-mer' : '')} style={{ ...(stilP ? { borderLeft: '3px solid ' + stilP.ac, paddingLeft: 9 } : undefined), ...(notRow ? { position: 'relative', paddingBottom: rt.hatirlatma_saat ? 20 : undefined } : undefined) }}>
@@ -4317,6 +4329,11 @@ export default function Rite() {
                 zaten sadece başlangıçla aynı gün ya da (gecikince) null, ayrıca anlamlı bir bilgi taşımıyor;
                 onun yerine gecikme varsa o gösteriliyor. */}
             {!notRow && <div className="m">{[cfg.randevu && cfg.saat && '🕑 ' + cfg.saat, rt.hatirlatma_saat && '🔔 ' + rt.hatirlatma_saat, gecikti > 0 && ('⏰ ' + gecikti + ' gün gecikti'), (!cfg.gorev && !cfg.randevu && rt.bitis) && 'bitiş ' + kisaTarih(rt.bitis), ipucu].filter(Boolean).join(' · ')}</div>}
+            {/* Geniş-görünüm eki (genis) — Liste'de hiç görünmeyen iki unsur: düz metin Açıklama önizlemesi ve
+                video rozeti. notRow (yapışkan Not) dahil HER kişisel bilgi kartında aynı — "ortak anatomi"
+                kararı gereği ayrı bir dal yazılmadı. */}
+            {genis && aciklamaOnizleme && <div className="desclite">{aciklamaOnizleme}</div>}
+            {genis && videoSayisi > 0 && <div className="mediabadge">🎬 {videoSayisi} video</div>}
           </div>
           {vurl && <a className="playbtn" href={vurl} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} title="Aç">▶</a>}
           {/* Tek başına ✕ (Kaldır) yerine ⋯ menüsü geldi (kullanıcı isteği) — şimdilik tek seçeneği Sil, ileride
@@ -4842,7 +4859,12 @@ export default function Rite() {
                     // .card'a uygulanıyor (kullanıcı isteği — "tamamen sarı olur, köşeler yuvarlak olmaz");
                     // .rit'in kendi arka planı/köşe/boşluk ayarları kaldırıldı, artık sadece bu dış kutu boyuyor.
                     const notCard = isNotKart(r.members[0]);
-                    return <div className="card" style={notCard ? { padding: '12px 14px', background: '#fdf6d3', border: 'none', borderRadius: 3 } : { padding: '4px 10px' }}><RitItem rt={r.members[0]} /></div>;
+                    // genis (2026-09-21, ilk koda taşınan Geniş görünüm — bkz. RitItem'in `genis` prop'u,
+                    // yukarısı): kart modunda düz Aktivite/Not satırlarına biraz daha nefes alanı veriliyor
+                    // (10px 14px, .card'ın kendi varsayılanına yakın) — Liste'nin sıkışık 4px 10px'i Açıklama
+                    // önizlemesi + video rozetiyle birlikte fazla dar kalıyordu. Not'un kendi sticky-note
+                    // dolgusu (12px 14px) zaten yeterliydi, dokunulmadı.
+                    return <div className="card" style={notCard ? { padding: '12px 14px', background: '#fdf6d3', border: 'none', borderRadius: 3 } : (kartGorunum ? { padding: '10px 14px' } : { padding: '4px 10px' })}><RitItem rt={r.members[0]} genis={kartGorunum} /></div>;
                   };
 
                   // 2026-09-20 GÜNCELLEME (sürükle-bırak iskeletinin standartlaştırılması, Behnan: "cevap belli
@@ -4992,6 +5014,18 @@ export default function Rite() {
                   <div onClick={(e: any) => { e.stopPropagation(); setAktMenuAcik(null); }} style={{ position: 'fixed', inset: 0, zIndex: 4 }} />
                   <div style={{ position: 'absolute', right: 0, top: 26, background: '#fff', border: '1px solid var(--line)', borderRadius: 10, boxShadow: '0 4px 14px rgba(0,0,0,.12)', zIndex: 5, minWidth: 152, overflow: 'hidden' }}>
                     <button className="minlink" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 12px', textDecoration: 'none' }} onClick={(e: any) => { e.stopPropagation(); setAktMenuAcik(null); setHavuzKlasorPano(null); setHavuzPano((p: string | null) => (p === a.id ? null : a.id)); }}>{havuzPano === a.id ? '❌ Kesmeyi iptal et' : '✂️ Kes'}</button>
+                    {/* ↪️ Paylaş (2026-09-21, kart görünüm taksonomisi R&D'si — Behnan kararı: "Paylaş da ⋯'ya
+                        taşınmalı"): önceden SADECE detay ekranının alt buton şeridinde vardı, satırı açmadan
+                        paylaşmak mümkün değildi. Aynı `paylasilamaz` kuralı burada `a.sablon_id`'ye bakarak
+                        tekrarlanıyor (detay ekranındaki `paylasilamaz` değişkeni `o`/`detay.obj` scope'una bağlı,
+                        buradan erişilemiyor). Detayı açıp üstüne paylaşım panelini tetikliyor — ayrı bir liste-
+                        seviyesi paylaşım akışı yazmak yerine var olanı (openDetay + paylasOpen) yeniden kullanıyor. */}
+                    {!a.sablon_id && (
+                      <>
+                        <div style={{ borderTop: '1px solid var(--line)' }} />
+                        <button className="minlink" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 12px', textDecoration: 'none' }} onClick={(e: any) => { e.stopPropagation(); setAktMenuAcik(null); openDetay(a, 'aktivite'); setPaylasOpen(true); setKMsg(''); }}>↪️ Paylaş</button>
+                      </>
+                    )}
                     <div style={{ borderTop: '1px solid var(--line)' }} />
                     <button className="minlink" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 12px', textDecoration: 'none', color: 'var(--red)' }} onClick={(e: any) => { e.stopPropagation(); setAktMenuAcik(null); if (havuzPano === a.id) setHavuzPano(null); silAktivite(a); }}>🗑 Sil</button>
                   </div>
@@ -6084,34 +6118,18 @@ export default function Rite() {
                 otomatik olarak içerik kutusunun ilk satırına taşınıyor (baslikKaynagi), yani hiçbir isim
                 kaybolmuyor, sadece artık başka bir alanda görünüyor. `adInput`/`setRitAd` altyapısı kişisel-
                 OLMAYAN ritüellerin (Meridyen/program kaynaklı) kendi başlık şeridinde hâlâ kullanılıyor. */}
+            {/* "· değiştir ✎" (grup/alt-grup'u burada, detay ekranını açıp değiştirme) KALDIRILDI (2026-09-21,
+                kart görünüm taksonomisi R&D'si — Behnan kararı: "Kaldırılsın"). Kişisel Arşiv satırının ⋯
+                menüsündeki ✂️ Kes + hedef klasörde 📋 Yapıştır artık AYNI işi (satırı hiç açmadan, çoğu zaman
+                daha hızlı) yapıyor — bu yüzden burada ikinci bir yol tutmaya gerek kalmadı. Grup adı artık
+                sade, salt-okunur bir metin; taşımak isteyen ⋯ → Kes'i kullanıyor. `setAktGrup`'a dokunulmadı
+                (Kes/Yapıştır hâlâ onu çağırıyor) — sadece BURADAKİ ikinci giriş noktası kalktı.*/}
             <div className="m">
               {isRit ? null : (
-                personal ? (
-                  <span style={{ cursor: 'pointer' }} onClick={() => { setGrupEditVal(personalGroupOf(o)); setGrupEditAltVal(o.alt_grup || ''); setGrupEditOpen(true); }}>{personalGroupOf(o)}{o.alt_grup ? ' › ' + o.alt_grup : ''} · değiştir ✎</span>
-                ) : (o.grup || '')
+                personal ? personalGroupOf(o) + (o.alt_grup ? ' › ' + o.alt_grup : '') : (o.grup || '')
               )}
               {act?.kanit_duzeyi && <span className="evi">kanıt: {act.kanit_duzeyi}</span>}
             </div>
-            {!isRit && personal && grupEditOpen && (
-              <div style={{ margin: '2px 0 10px' }}>
-                {personalGroups.length > 0 && <div style={{ margin: '0 0 6px' }}>{personalGroups.map((g) => <span key={g} className={'chip' + (grupEditVal === g ? ' on' : '')} onClick={() => { setGrupEditVal(g); setGrupEditAltVal(''); }}>{g}</span>)}</div>}
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <input value={grupEditVal} onChange={(e) => setGrupEditVal(e.target.value)} placeholder="yeni grup için yaz" style={{ flex: 1 }} />
-                </div>
-                {/* Alt grup — sadece seçili Grup'un kayıtlı alt grupları varsa gösteriliyor; serbest metin de yazılabilir. */}
-                {altGruplarOf(grupEditVal).length > 0 && (
-                  <div style={{ margin: '6px 0' }}>
-                    <div className="note" style={{ margin: '0 0 4px' }}>Alt grup (ops.)</div>
-                    <span className={'chip' + (!grupEditAltVal ? ' on' : '')} onClick={() => setGrupEditAltVal('')}>Yok</span>
-                    {altGruplarOf(grupEditVal).map((ag) => <span key={ag} className={'chip' + (grupEditAltVal === ag ? ' on' : '')} onClick={() => setGrupEditAltVal(ag)}>{ag}</span>)}
-                  </div>
-                )}
-                <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-                  <button className="btn sm" onClick={() => setAktGrup(o.id, grupEditVal, grupEditAltVal)}>Kaydet</button>
-                  <button className="btn ghost sm" onClick={() => setGrupEditOpen(false)}>Vazgeç</button>
-                </div>
-              </div>
-            )}
             {areas.length > 0 && <div style={{ margin: '6px 0' }}>{areas.map((a) => <span key={a} className="tagp p-alan">{a}</span>)}</div>}
 
             {isRit && kTip !== 'bilgi' && kTip !== 'tarif' && (o.kaynak === 'Kendi' ? (

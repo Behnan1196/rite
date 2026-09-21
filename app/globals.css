@@ -234,6 +234,13 @@ input{width:100%;font-size:15px;padding:11px 12px;border:1px solid var(--line);b
 .vidlink{display:block;font-size:12.5px;color:var(--green);font-weight:700;padding:6px 0;text-decoration:none;}
 .dikkat{background:#fbf3e3;border:1px solid #eaddb9;border-radius:10px;padding:9px 11px;font-size:12px;color:#8a5a2e;line-height:1.5;margin-top:4px;}
 .tagp.p-alan{background:#e6f0ee;color:#2f6b5e;}
+/* .desclite / .mediabadge (2026-09-21, kart görünüm taksonomisi R&D — RitItem'in "genis" (Geniş kart) modu):
+   Açıklama önizlemesi düz metin, 2 satırda kırpılmış (bkz. kart_tipi='bilgi' Açıklama alanının bugün tam düz
+   metin olması, editör konusu ayrıca parklandı) ve video rozeti (kart_config.videolar.length) — Liste
+   görünümünde hiç gösterilmeyen, sadece Geniş'te ilk kez görünen iki yeni bilgi. kart-gorunumleri.html
+   mockup'ındaki .desclite/.mediabadge ile birebir aynı token'lar kullanıldı. */
+.desclite{font-size:11.5px;color:var(--muted);line-height:1.5;margin-top:6px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.mediabadge{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:700;color:#2f6b5e;background:#e6f0ee;border-radius:20px;padding:3px 9px;margin-top:6px;}
 .rmx{background:none;border:none;color:#c4bca8;font-size:15px;cursor:pointer;padding:4px 2px;flex:0 0 auto;line-height:1;}
 .rmx:hover{color:var(--red);}
 .routine{padding:8px 14px 4px;}
