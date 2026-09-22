@@ -34,6 +34,8 @@ Bu pivota ilham veren somut gözlem: Datça'da (emeklilerin yoğun olduğu bir y
 
 **PostgREST gotcha'sı**: `dog_activities`/`dog_inbox`/`dog_rituals` sorguları bilerek `select('*')` kullanıyor, açık kolon listesi DEĞİL — bir migration'dan önce eklenen bir kolon açık listede geçerse PostgREST tüm sorguyu reddediyor, `select('*')` bu sınıf hatayı yapısal olarak ortadan kaldırıyor. Yeni bir sorgu eklerken bu deseni koru.
 
+**Danışman modu için genişleme gerekiyor (2026-09-22 R&D, henüz kodlanmadı)**: bireysel danışmanlık feasibility turu, bugünkü tek-kaynak veri modelinin bir danışman-danışan İLİŞKİ tablosuna ihtiyaç duyduğunu gösterdi — `kaynak` alanındaki düz `'Meridyen'` string'i HANGİ danışmandan geldiğini ayırt etmiyor, bir danışanın birden fazla danışmanı (ör. sınav koçu + diyetisyen) olabildiği senaryoda yetersiz kalıyor. Tasarlanan yön: `iliski_id`-benzeri bir referans, bir kartın hangi danışman-danışan ilişkisine ait olduğunu tutar (çoklu-danışman filtrelemesi için gerekli). **Reconciliation notu**: repo'da önceden yazılmış ama henüz ÇALIŞTIRILMAMIŞ bir `rite_auth_migration.sql` var — `dog_clients.auth_id`/`meridyen_bagli` + TEK bir `dog_meridyen_uyelik` (client_id/baslangic/bitis) tablosu ekliyor. Bu, Meridyen'e ÖZEL ve TEK-ilişkili bir model; bugün tasarlanan çoklu-danışman `iliski_id` modeli daha geneldir, bu migration'ın genelleştirilmesi (ya da yerine yeni bir ilişki tablosu tasarlanması) gerekecek — kodlama aşamasında ele alınacak, henüz karar verilmedi. Detaylar için §7.
+
 ---
 
 ## 3. Kart sistemi
@@ -48,7 +50,7 @@ Her kart tipinin kendi React bileşeni var (`AnketKart`, `ChoktanKart`, vb. — 
 |---|---|---|---|
 | `standart` | • | — (opsiyonel resim + ortak `aciklama`) | Varsayılan, boş kart |
 | `bilgi` | 📄 | `{ videolar: {baslik?,url,bas?,bit?,ozelNot?}[] }` | **Kişisel Not/Aktivite'nin asıl motoru** — çoklu video, `BilgiKartEdit` ile düzenlenir. `KART_LAB`'da yok (kendi zengin editörü var) |
-| `video` | 🎬 | `{ url }` | **LEGACY** — tek link, eski mekanizma. `bilgi`'nin `videolar[]`'ı onu fiilen geçersiz kıldı, "bir ara tamamen iptal" bekliyor (bkz. §8) |
+| `video` | 🎬 | `{ url }` | **LEGACY** — tek link, eski mekanizma. `bilgi`'nin `videolar[]`'ı onu fiilen geçersiz kıldı, "bir ara tamamen iptal" bekliyor (bkz. §9) |
 | `anket` | 📋 | `{ sorular: string[] }` | Açık uçlu, çoklu soru; yanıtlar kaydedilmiyor, sadece "gönderildi" durumu |
 | `coktan` | ❓ | `{ soru, secenekler[], dogru }` | Doğru/yanlış geri bildirimli, yanıt tabloya yazılmaz (ephemeral) |
 | `diyet` | 🍽 | `{ ogunler: {ad,miktar,kalori,alternatifler?,hazirlanis?}[], makro? }` | |
@@ -134,7 +136,7 @@ Herhangi bir kişisel kart (`kaynak='Kendi', kart_tipi='bilgi'`) ⋯ menüsünde
 
 Bu, ilk somut kullanım örneğiyle (Rusça video serisi, 4-5 gün süren izleme) motive edildi: kullanıcı Home'dan doğrudan o kartın detayına atlayıp kaldığı yerden devam edebiliyor.
 
-**"Proje Kartı" / Odak Alanı ilişkisi** (henüz tam netleşmedi, §8'de açık soru): bir Odak Alanı = aynı adı taşıyan bir Kişisel Arşiv klasörü; klasörün kendisini özetleyen bir "Proje Kartı" (güvenilen video/yazılı özet) + karmaşık konularda alt-konu başına ayrı bilgi kartları düşünülüyor. Fikir olgunlaştı ama henüz uygulanmadı.
+**"Proje Kartı" / Odak Alanı ilişkisi** (henüz tam netleşmedi, §9'da açık soru): bir Odak Alanı = aynı adı taşıyan bir Kişisel Arşiv klasörü; klasörün kendisini özetleyen bir "Proje Kartı" (güvenilen video/yazılı özet) + karmaşık konularda alt-konu başına ayrı bilgi kartları düşünülüyor. Fikir olgunlaştı ama henüz uygulanmadı.
 
 ### 4.4 Yapı taşları (API özeti)
 
@@ -159,15 +161,18 @@ Outlook'un mail/klasör mantığından esinlenilmiş, 3 kökü var:
 
 ---
 
-## 6. Sohbet & dış entegrasyon yönü
+## 6. Sohbet, video & dış entegrasyon yönü
 
 Sohbet sekmesi bugün **cihaz-yerel bir mockup** — gerçek bir chat/görüntülü-görüşme altyapısına henüz bağlı değil, hiçbir mesaj bir backend'e yazılmıyor. Amaç, gerçek altyapıya karar vermeden önce "neyi nasıl paylaşacağız" formatını elle denemek. Üç mesaj tipi var: `metin`, `kart` (§3.2'deki paylaşım şemasıyla aynı), `anket` (gerçek `AnketKart` bileşeni balonun içine gömülü — bir anketin sohbette dolarak Rite'a aktarılması senaryosunun denemesi).
 
-**Gerçek altyapı kararı henüz verilmedi.** İki uç:
-- **Stream.io** (hazır SaaS) — hız/kolaylık, ama veri onların altyapısında durur, özel mesaj tiplerini (kart/anket) kendi veri modeline sıkıştırmak gerekir.
-- **Kendi VPS'i** — tam kontrol, mesaj = doğrudan Rite'ın kendi şeması olabilir (ekstra eşleme katmanı yok), ama gerçek-zamanlı altyapı/görüntülü-görüşme (WebRTC/TURN) yükü kendine kalır.
+**Altyapı kararı verildi (2026-09-22 R&D)**:
+- **Sohbet/mesajlaşma → Supabase Realtime + Rite'ın kendi mesaj tablosu** (Stream.io DEĞİL). Gerekçe: sohbet balonlarında Rite'ın kendi kart render sistemini (`kart_tipi`/`kart_config`, `KartSatiri` vb.) göstermek gerekiyor — üçüncü-parti bir SDK'nın (Stream) kendi mesaj/attachment modeline sıkıştırmak yerine, mesaj tamamen Rite'ın kendi şemasında tutulup kendi bileşenleriyle render edilirse bu sorun hiç oluşmuyor. Henüz "kurup görmeliyiz" aşamasında, prototip yapılacak.
+- **Görüntülü görüşme → yönetilen bir SaaS (Stream Video / Daily.co / LiveKit Cloud / Twilio gibi), sağlayıcı henüz SEÇİLMEDİ.** Chat'i Stream'den uzaklaştıran gerekçe (kart render'ı) video görüşmeye taşınmıyor — orada kamera/mikrofon/ekran paylaşımı var, özel içerik render derdi yok. DIY WebRTC (kendi sinyalizasyon + TURN sunucusu) chat'ten çok daha ağır/riskli görüldü (NAT traversal, güvenilirlik, iOS PWA'da WebRTC'nin bilinen tuhaflıkları) — bu yüzden elenmedi, tam tersine yönetilen SaaS tercihini güçlendirdi. Karar inşa zamanına bırakıldı.
+- Her iki karar da aynı önkoşula dayanıyor: **Supabase Auth zaten paylaşım/danışmanlık için zorunlu olacağından** (bkz. §7), sohbet/video için ayrı bir üçüncü-parti kimlik/token katmanı (Stream'in kendi mekanizması gibi) ek bir mimari maliyet DEĞİL, gereksiz bir tekrar — bu da Stream Chat'i eleme kararını destekledi.
 
-Önerilen orta yol: hangi altyapı seçilirse seçilsin, "mesaj içine Rite kartı gömme" ihtiyacını en baştan bir soyutlama olarak tasarlamak (mesaj tipi = metin | kart-referansı | anket, referans tipleri her zaman Rite'ın kendi tablosundaki bir satıra işaret eder) — bu, Stream.io'dan kendi altyapısına geçişi nispeten ağrısız kılar.
+Önerilen soyutlama (korunuyor, artık seçilen Supabase Realtime yaklaşımıyla daha da doğal): mesaj tipi = metin | kart-referansı | anket, referans tipleri her zaman Rite'ın kendi tablosundaki bir satıra işaret eder.
+
+**Paylaş (`dog_inbox`) ile Sohbet'in bir arada durması — açık, ertelendi**: bugünkü tek-yönlü Paylaş akışı çalışır durumda; Sohbet paralel inşa edilirken hangisinin öne çıkacağı / ikisinin nasıl bir arada duracağı o sırada netleşecek, şimdi karar verilmiyor.
 
 **Dış widget entegrasyon modelleri** (henüz sadece tasarım, kod yok) — iki örnekten (Hostinger veritabanı, Greentask'ın Resmi Gazete taraması) çıkan iki farklı desen:
 - **"Çek" (pull) modeli**: Rite kullanıcının 3. parti kimlik bilgisini TUTUP kendisi çekiyor. Ağır güven yükü — paylaşılan tek bir "kimlik kasası + zamanlanmış çekici" alt sistemi gerekiyor (şifreli saklama, sunucu tarafı sorgu, sadece SONUÇ bir önbellek tablosuna yazılır, ham kimlik client'a hiç gitmez). Kullanıcının kendi AI API key'ini girme sorunuyla AYNI sınıf.
@@ -175,7 +180,69 @@ Sohbet sekmesi bugün **cihaz-yerel bir mockup** — gerçek bir chat/görüntü
 
 ---
 
-## 7. Teknik konvansiyonlar
+## 7. Danışman modu (bireysel danışmanlık) mimarisi — R&D, henüz kodlanmadı
+
+**Durum**: 2026-09-22'de yürütülen kapsamlı bir feasibility turu, "Meridyen/Rite Studio olmadan sadece Rite ile bireysel danışmanlık yapılabilir mi" sorusuna OLUMLU yanıt verdi — sınav koçluğu, diyetisyenlik, fitness/PT ve kısaca dil/müzik/yaşam koçluğu domainleri tarandı, hiçbiri bugünkü mimariyi kırmadı. Aşağıdaki tasarım bu turun SONUCU — henüz kod yok, üst-karar KOŞULLU (bkz. §9 ve `URUN-VIZYONU.md` §6).
+
+### 7.1 Auth gating sınırı
+
+Supabase Auth (e-posta ile kayıt) şu roller/eylemler için ZORUNLU: paylaşım yapmak, sohbet/video görüşmesi yapmak, ya da bir danışan/danışman ilişkisinde taraf olmak — danışan tarafı da dahil (önceden "danışan daha hafif kalabilir mi" belirsizdi, artık netleşti: HAYIR, ikisi de gerekiyor). Tamamen kişisel/anonim kullanım (paylaşımsız, sohbetsiz, danışmanlıksız) hesapsız kalmaya devam ediyor. Repo'daki `rite_auth_migration.sql` bu ihtiyacın bir kısmını (auth_id + tek-ilişkili `dog_meridyen_uyelik`) zaten karşılıyor ama tek-sağlayıcı varsayımıyla yazılmış — §2'de not edilen genelleştirme gerekiyor.
+
+### 7.2 İlişki ve kart sahipliği modeli
+
+- Flat `kaynak='Meridyen'` yerine bir **danışman-danışan ilişki referansı** (`iliski_id`-benzeri) — bir kartın hangi ilişkiye ait olduğunu tutar.
+- **Çoklu danışman desteklenir**, yakın vadeli bir ihtiyaç olarak doğrulandı (ör. bir danışanın hem sınav koçu hem diyetisyeni olması) — tasarım baştan bunu gözetiyor, ertelenmedi.
+- **Danışman görünürlüğü per-ilişki filtrelenir**: bir danışman sadece KENDİ ilişkisine ait kartları görür; danışanın kişisel kartlarını ya da başka bir danışmanın kartlarını görmez. (İstisna, kapsam dışı: danışan bazı kişisel kartlarını bilerek bir danışmana açabilir — düşünüldü, şimdi yapılmıyor.)
+- **Kart tipleri koçluk türüne göre SCOPE'lanır**: "＋" ile kart eklerken danışman kendi alanına özgü kart tiplerini (sınav koçu için Çalışma/Soru Çözüm, diyetisyen için öğün/Akıllı Tabak, vb.) görür — genel/kapalı tek bir liste değil, ilişkinin/danışmanlık türünün belirlediği bir alt-küme.
+
+### 7.3 Şablon-sonra-ata (hafif)
+
+Rite Studio'nun bugünkü `program` gruplaması (`dog_rituals.program` ortak kimlikle senkron kalan +7/-7 gün mantığı) SIKI BAĞLI bir instance modeli. Danışmanlık akışı için istenen daha HAFİF: bir haftayı bir danışan için hazırladıktan sonra ŞABLON olarak kaydedip başka bir danışana ATAmak; atandıktan hemen sonra kopyalar birbirinden TAMAMEN BAĞIMSIZLAŞIR (danışan/danışman ayrı ayrı yer değiştirip özelleştirebilir, senkron kalmaz).
+
+### 7.4 İzin modeli (kısmen açık)
+
+| Eylem | Kural |
+|---|---|
+| Gün-içi sıralama | Serbest (danışan) |
+| Gün değiştirme | Koçluk türüne göre AYARLANABİLİR bir izin — henüz kesinleşmedi. İzin verilirse kartın güncel tarihi koça geri beslenmeli |
+| Silme | Her zaman SADECE koç — danışan silemez; yapılmamış iş, gelişim kaydında "tamamlanmadı" olarak durur |
+
+Koç danışanın GERÇEK/canlı ajandasını gördüğü için (simülasyon değil), gün değiştirme izni verilirse ayrı bir "geri besleme" mekanizması gerekmeyebilir — koç aynı satırı zaten canlı okuyor; asıl açık soru izin sorusu, teknik değil.
+
+### 7.5 UI navigasyonu — hibrit çözüm
+
+- **Home → "Danışanlarım" Widget'ı** (mevcut Widget mimarisine uyuyor, `{ikon?, baslik, bilgi?, onClick}`): YÖNETİM/genel bakış — danışan listesi (başlama tarihi, süre gibi meta), ekleme/çıkarma/askıya alma. Canlı gösterge: "N danışan" ya da "M'sinde bu hafta program eksik" gibi bir özet.
+- **Ajanda sekmesi → danışan seçici (context-switcher dropdown)**: AKTİF ÇALIŞMA — bir danışan seçilince haftalık ızgara açılır, görev/kart hazırlama burada yapılır.
+- **"Kimin ajandasındayım" göstergesi**: sadece bir banner değil, danışan seçiliyken TÜM Ajanda ekranının arka plan rengi/teması değişir — kişisel/danışan-modu karışma riski önemli görüldüğü için bilinçli bir tercih.
+- **Gelişim (danışan için)**: Ajanda'nın context-switch'ine BAĞLANMAZ — Danışanlarım Widget'ının kendi iç akışında ayrı bir sayfa (danışan satırından doğrudan gelişim/sınav-sonuçları sayfasına gidilir). Widget bu yüzden diğer sade widget'lardan (Ölçümler/Gelenler/Notlar) biraz daha zengin/kendi iç navigasyonu olan bir widget — beklenen bir fark, sorun değil.
+
+### 7.6 Haftalık görünüm — yeni altyapı, henüz yok
+
+Bugün Rite'ta kart-dolu bir haftalık ızgara YOK (Ajanda'nın "Hafta" görünümü sadece 7-günlük ✓ tracker çubuğu, kart içeriğiyle dolu bir ızgara değil). Danışman modu için gereken, sıfırdan kurulacak yeni bir ekran/bileşen:
+- Dar ekran (telefon): günler ALT ALTA (dikey stack).
+- Geniş ekran (iPad / web = aynı PWA): YAN YANA / responsive grid (ör. 4 üstte + 3 altta).
+- Zaman-dilimi (Sabah/Gün içi/Akşam) gruplaması GEREKMEZ — bu kişisel bir kurgu, koç görünümü günlere göre düz bir liste.
+- Danışan tarafı da (geniş ekranda) haftalık görünüme ihtiyaç duyar; dar ekranda muhtemelen saklı/gün-navigasyonuyla gezilir — kesin değil.
+- "iPad kullanımının UI tasarımlarını nasıl etkileyeceği" sorusu BİLİNÇLİ olarak ayrı/sonraki bir iş — bu turda ele alınmadı.
+
+### 7.7 Domain doğrulaması (2026-09-22 taraması)
+
+| Domain | Sonuç |
+|---|---|
+| Sınav koçluğu | Basit — Çalışma/Soru Çözüm kart tipleri + ders/konu/kaynak (PDF/video-link) referans tabloları, TYT/AYT ağırlıkları gibi zaten doğrulanmış bir DB-içerik deseniyle |
+| Diyetisyenlik | Öğün kartı basit; **Akıllı Tabak** (canlı kalori/makro hesaplama, kalan öğünleri yeniden dağıtma, alternatif öneri) tek gerçek çıkıntı — statik içerik değil, kendi iş mantığı olan bir mini-araç; [[nutricore]]'un `equivalenceEngine.ts` motorundan büyük ölçüde yararlanılacak. Diyet domaininin TAMAMI (beslenme+hareket+uyku birlikte, alışveriş listesi vb.) ayrı bir araştırma turuna ERTELENDİ — şimdilik sadece klasik öğün kartıyla devam |
+| Fitness / Bireysel Antrenörlük | En düşük risk — mevcut `workout` kart tipine (§3.1) ve mevcut çoklu-video desteğine (`kart_config.videolar[]`, `bilgi` tipinde zaten var) doğrudan oturuyor |
+| Dil / müzik / yaşam-executive koçluğu | Kısa tarama — mimariyi kıracak bir şey görülmedi; yaşam/executive koçluk, mevcut Home/Odak Alanları öz-değerlendirme yapısına neredeyse birebir oturan bir aday |
+
+### 7.8 Ayrı/çözülmemiş konular (danışman moduyla karıştırılmamalı)
+
+- **Online/local (senkron-tazelik) görsel ayrımı** — bugünkü `kaynak==='Meridyen'` mavi çerçevenin GERÇEK amacı buydu (hangi kartın güncelliğinden internetsizken emin olunabileceği), "hangi danışmandan geldiği" sorusuyla karıştırılmamalı. Hâlâ çözülmemiş, ayrı bir teknik konu.
+- **"Hangi danışmandan geldi" görsel ayrımı** — SAF bir kart TASARIMI meselesi (renk kodlaması değil, her domainin kendi kart anatomisiyle ayrışması) — kart görünüm taksonomisi turunda çözülecek.
+- **RLS (row-level security) genişletmesi** — bir koçun başka bir danışanın satırlarına yazabilmesi için veritabanı güvenlik kurallarının (sadece UI değil) genişletilmesi gerekecek — henüz tasarlanmadı, kodlama öncesi ele alınmalı.
+
+---
+
+## 8. Teknik konvansiyonlar
 
 - **Migration'sız işaret deseni**: yeni bir boolean/meta bilgi gerektiğinde (ör. `home_gizli`, `home_kisayol`, `_kaynak_rit_id`) önce var olan bir JSONB alana (`kart_config`) mevcut içerik SPREAD ile korunarak eklenir — şema migration'ı gerektirmez, hızlı iterasyona uygun. Kalıcı/çapraz-cihaz bir bayrak gerektiğinde tercih edilen yol bu.
 - **`localStorage` vs DB**: cihaza özel, "bu ekranı açık mı tutuyorum" gibi tercihler (`containerAcik`, `widgetGorunur`, `widgetSira`) `localStorage`'da; kullanıcının kimliğiyle taşınması gereken, cihazlar arası senkron olması gereken şeyler (`home_gizli`, `home_kisayol`) DB'de (JSONB içinde).
@@ -184,13 +251,21 @@ Sohbet sekmesi bugün **cihaz-yerel bir mockup** — gerçek bir chat/görüntü
 
 ---
 
-## 8. Açık sorular / ertelenmiş kararlar
+## 9. Açık sorular / ertelenmiş kararlar
 
 - Eski tek-link `kart_tipi==='video'` mekanizmasının tamamen kaldırılması (yerini `bilgi`'nin `videolar[]`'ı zaten aldı) — acil değil, kaldırılırken Inbox hızlı-link-ekleme ve Rutin video-attach kullanım yerlerinin gözden geçirilmesi gerekiyor.
 - Home kısayollarının (pinlenen kişisel kartlar) kendi aralarında sürüklenerek sıralanması — v1'de yok.
 - "Proje Kartı" kart tipinin/Odak Alanı ilişkisinin netleşmesi ve uygulanması.
-- Sohbet/görüntülü görüşme altyapısı kararı (Stream.io vs kendi VPS'i).
 - Dış widget entegrasyon modellerinin (pull/push) gerçek kodla ilk örneği.
 - İlaç hatırlatıcı widget'ı, AI API'ye bağlı widget örnekleri (dil kartları vb.) — "uygun bir zamanda" yapılacak.
 - Kart sisteminde (xtiles/Notion tarzı) formatlama zenginleştirmesi — Behnan şu an araştırma aşamasında, henüz somut bir öneri yok.
 - Widget'ların mobile geçişte App Store onayı açısından hangilerinin kullanıcıya sunulacağı — bilinçli olarak sona bırakıldı.
+- **(2026-09-22, danışman modu R&D'sinden)** `rite_auth_migration.sql`'in çoklu-danışman `iliski_id` modeline göre genelleştirilmesi — kodlama öncesi ele alınacak (§2, §7.1).
+- **(2026-09-22)** İzin modelinin kesinleştirilmesi — gün değiştirme, koçluk türüne göre (§7.4).
+- **(2026-09-22)** Video görüşme sağlayıcısının seçimi (Stream Video / Daily.co / LiveKit Cloud / Twilio) — inşa zamanına bırakıldı (§6).
+- **(2026-09-22)** Kart taksonomisine sınav koçluğu (Çalışma/Soru Çözüm)/diyetisyenlik (öğün/Akıllı Tabak)/fitness alanlarına özgü kart tiplerinin eklenmesi — kart görünüm taksonomisi turunda (§7.7).
+- **(2026-09-22)** Diyet domaininin GENİŞLETİLMİŞ hâli (beslenme+hareket+uyku birlikte, alışveriş listesi vb.) — ayrı bir araştırma turuna ertelendi (§7.7).
+- **(2026-09-22)** Wellbeing kartlarının (şükran/anket/su vb., bugün zaten var olan kişisel tipler) danışman moduyla kime açılacağı — küçük, henüz çözülmemiş bir detay.
+- **(2026-09-22)** RLS (row-level security) genişletmesi — bir danışmanın danışan satırlarına yazabilmesi için (§7.8).
+- **(2026-09-22)** Online/local görsel ayrım mekanizması — "hangi danışmandan geldi" sorusundan AYRI, hâlâ çözülmemiş (§7.8).
+- **BÜYÜK KOŞULLU KARAR'ın teyidi** — Meridyen/Rite Studio'nun kurumsal katmanının tamamen kaldırılıp kaldırılmayacağı, Behnan'ın ayrı bir kararına bağlı (parça parça koda mı aktarılacak, yoksa yeni bir isimle bağımsız bir yapıdan mı başlanacak) — bkz. `URUN-VIZYONU.md` §6.

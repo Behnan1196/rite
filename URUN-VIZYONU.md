@@ -33,10 +33,10 @@ Rite'ı tek bir ürün olarak tutan, ama içinde birkaç farklı kullanım biçi
 | Katman | İçerik |
 |---|---|
 | **Çekirdek** | Ajanda (Aktivite/Süre modeli), Gelişim (ölçüm/istatistik takibi), Havuz/Kişisel Arşiv, fayda katmanı (görünmez temel mantık) |
-| **İkinci katman** | Home (Odak Alanları, Widget'lar, kısayollar), Sohbet + paylaşım, aile grubu, kart tipi çeşitliliği, kart kaynağı ayrımı (yerel/online, bkz. §5) |
-| **Faz-sonrası** | Koçluk platform modeli (çoklu platform, admin-tanımlı koç-öğrenci), Rite Studio'nun resmi ürün bileşeni haline gelmesi, kanal/grup bazlı Sohbet mimarisi, peer-to-peer geri besleme, field-type palette / kullanıcı esnekliği, akıllı/context-aware kartlar, mobil geçiş, widget kataloğunun deneysel kısmı |
+| **İkinci katman** | Home (Odak Alanları, Widget'lar, kısayollar), Sohbet + paylaşım, aile grubu, kart tipi çeşitliliği, kart kaynağı ayrımı (yerel/online, bkz. §5), **danışman modu** (bireysel danışmanlık — sınav koçluğu/diyetisyenlik/fitness/vb., çoklu-danışman destekli; bkz. §6) |
+| **Faz-sonrası** | field-type palette / kullanıcı esnekliği, akıllı/context-aware kartlar, mobil geçiş, widget kataloğunun deneysel kısmı |
 
-Bu sınıflandırma sabit değil — ürün olgunlaştıkça bir madde katmanlar arasında yer değiştirebilir.
+Bu sınıflandırma sabit değil — ürün olgunlaştıkça bir madde katmanlar arasında yer değiştirebilir. **2026-09-22 güncellemesi**: "Koçluk platform modeli" faz-sonrasından ikinci katmana yükseltildi — bir feasibility turu, Meridyen/Rite Studio olmadan Rite'ın kendisinin danışman-danışan ilişkilerini ("danışman modu") taşıyabileceğini gösterdi. Bu, Rite Studio'yu "resmi ürün bileşeni" yapma fikrinin yerini alan KOŞULLU bir yön — Behnan'ın ayrı bir kararına bağlı, henüz TEYİT edilmedi (bkz. §6).
 
 ---
 
@@ -74,13 +74,24 @@ Rite'ın en küçük yapı taşı **kart**. Kullanıcı kendi kart TÜRÜNÜ yar
 
 ## 6. Koçluk, paylaşım ve platform modeli
 
-**Platform kavramı.** Rite'ın "teslim noktası" fikri, aslında genel bir örüntünün özel bir örneği: bir **platform** (dersler/konular tanımlanır, koçlar tanımlanır, koç-danışan eşleştirilir, koç haftalık kart hazırlar) ve bir **teslimat noktası** (danışan bu kartları ajandasında görür, işaretler/veri girer). Bu örüntü tek bir kuruma (Meridyen) bağlı değil — aynı altyapı, farklı alanlarda (akademik koçluk, fitness koçluğu, beslenme danışmanlığı gibi) farklı platformlara bağlanabilir. Bir kullanıcı aynı anda birden fazla platforma bağlı olabilmeli (ör. hem fitness hem beslenme danışmanlığı) — ajanda ve gelişim ekranı ortak kalır, sadece kart kaynağı değişir.
+**Platform kavramı.** Rite'ın "teslim noktası" fikri, aslında genel bir örüntünün özel bir örneği: bir **platform** (dersler/konular tanımlanır, koçlar tanımlanır, koç-danışan eşleştirilir, koç haftalık kart hazırlar) ve bir **teslimat noktası** (danışan bu kartları ajandasında görür, işaretler/veri girer). Bu örüntü tek bir kuruma (Meridyen) bağlı değil — aynı altyapı, farklı alanlarda (akademik koçluk, fitness koçluğu, beslenme danışmanlığı gibi) farklı platformlara bağlanabilir. Bir kullanıcı aynı anda birden fazla platforma bağlı olabilmeli (ör. hem fitness hem beslenme danışmanlığı) — bu artık uzak bir ihtimal değil, **2026-09-22 feasibility turunda yakın vadeli bir ihtiyaç olarak doğrulandı**; ajanda ve gelişim ekranı ortak kalır, sadece kart kaynağı değişir.
 
-**Kurumsal koçluk ile emsal (peer) koçluk arasındaki fark.** Kurumsal modelde roller sabit ve tek yönlüdür: koç kart yaratır ve (platform üzerinden) sonucu görür, danışan sadece uygular. Ama Rite'ın kullanım alanlarından biri de **iki Rite kullanıcısı arasındaki simetrik ilişki** — biri diğerine görev/aktivite atayabiliyor ve takip edebiliyor, roller platform tarafından atanmış değil, ilişkiye göre değişken (bir aile üyesi diğerini destekler, bir arkadaş bir arkadaşa önerir). Bugünkü paylaşım akışı (Havuz → "Kendi Havuzuma al") tek yönlü bir teslimat; alıcının ilerlemesini kaynak kullanıcıya geri gösteren bir kanal yok. **Açık madde:** bu geri besleme, Sohbet üzerinden bir sistem mesajı ile mi, yoksa kaynak-kopya bağlantısı (kartın `_kaynak_rit_id` izini kullanan bir gözlem mekanizması) ile mi çözülecek, henüz karar verilmedi.
+**BÜYÜK, KOŞULLU STRATEJİK KARAR (2026-09-22, henüz TEYİT EDİLMEDİ).** "Meridyen/Rite Studio olmadan, SADECE Rite kullanılarak bireysel danışmanlık yapılabilir mi" sorusuna kapsamlı bir feasibility turuyla (auth modeli, ilişki/kart-sahipliği modeli, izin modeli, şablon-ata akışı, UI navigasyonu, Sohbet/video altyapısı, 4+ koçluk domaini çapraz kontrolü — bkz. `VIZYON.md` §7) OLUMLU yanıt verildi: hiçbir domain bugünkü mimariyi kırmadı. Bunun üzerine gündeme gelen bir yön: **Meridyen'in KURUMSAL katmanını — çok-rollü Rite Studio kabuğu (Sekreter/Hekim/Koordinatör/vb.), admin arayüzü — bir yedek aldıktan sonra TAMAMEN KALDIRIP, TEK bir uygulamada (Rite) hem bireysel kullanımı hem "danışman modu" ile solo koçları/danışmanları karşılamak.** Bu henüz KESİN KARAR değil — koşullu ("eğer ... gelirse") ve ayrıca ayrı bir uygulama kararına (parça parça mevcut koda mı aktarılacak, yoksa yeni bir isimle bağımsız bir yapıdan mı başlanacak) bağlı, bu belgenin güncellendiği tarihte henüz verilmemiş.
 
-**Rite Studio.** Meridyen markasından bağımsız, kart tasarlayıp platform-bağlantılı kullanıcılara gönderebileceğimiz bir yazma/deney ortamı. **Şu anki fazda**, tek-operatörlü (gayrı-resmi) bir test platformu olarak kullanılıyor — kullanıcının kendi oluşturmadığı, Rite'a farklılık katan kartların tasarlanıp gönderildiği ve geri bildirimin toplandığı yer. Rite Studio'nun kendisinin — çok-platformlu, admin arayüzlü, diğer koçluk sistemlerine örnek olacak resmi bir ürün bileşeni haline gelmesi — **ayrı bir faz**; şimdiden inşa edilecek bir şey değil.
+**Danışman modu — özet mimari** (detay: `VIZYON.md` §7):
+- Supabase Auth: paylaşım/sohbet/video/danışman-danışan rolü olan HERKES için zorunlu (danışan tarafı da dahil); salt-kişisel kullanım hesapsız kalmaya devam eder.
+- Flat `kaynak` yerine bir danışman-danışan **ilişki referansı** — çoklu-danışman filtrelemesi ve per-ilişki görünürlük (bir danışman sadece kendi ilişkisine ait kartları görür) sağlar.
+- **Hafif şablon-sonra-ata**: Rite Studio'nun bugünkü sıkı-bağlı `program` senkron mantığından bağımsız — bir haftayı hazırlayıp şablon kaydet, başka danışana ata; atandıktan sonra kopyalar tamamen bağımsızlaşır.
+- **İzin modeli**: silme her zaman koç-only, gün-içi sıralama serbest, gün değiştirme koçluk türüne göre ayarlanabilir bir izin (henüz kesinleşmedi).
+- **UI**: Home'da "Danışanlarım" Widget'ı (yönetim) + Ajanda sekmesinde danışan-seçici dropdown (aktif çalışma, haftalık ızgara) — hibrit. Danışan seçiliyken Ajanda'nın teması/arka planı değişir ("kimin ajandasındayım" göstergesi). Danışan gelişimi Widget'ın kendi alt-akışında, Ajanda context-switch'ine bağlı değil.
+- **Haftalık görünüm**: yeni bir altyapı — bugün Rite'ta kart-dolu bir haftalık ızgara yok, kurulacak (dar ekranda dikey stack, geniş ekranda responsive grid).
+- **Domain doğrulaması**: sınav koçluğu (basit), diyetisyenlik (öğün basit, Akıllı Tabak Nutricore motorundan yararlanacak tek çıkıntı; diyetin GENİŞLETİLMİŞ hâli ayrı bir araştırma turuna ertelendi), fitness/PT (en düşük risk, mevcut `workout` kart tipine oturuyor), dil/müzik/yaşam koçluğu (kısa tarama, engel görülmedi).
 
-**Sohbet'in kanal/grup mimarisine evrilmesi (faz-sonrası).** Bir kullanıcının birden fazla platforma/ilişkiye bağlı olabilmesi, Sohbet'in tek bir akış yerine kanal/grup bazlı (stream.io veya genel chat uygulamalarındaki kanal mantığına benzer) çalışmasını gerektirecek — her platform/ilişki kendi kanalı. Bugünkü Sohbet mockup'ı (her konuşma kendi mesaj listesiyle) bu yöne doğal olarak genişleyebilir.
+**Kurumsal koçluk ile emsal (peer) koçluk arasındaki fark.** Kurumsal modelde roller sabit ve tek yönlüdür: koç kart yaratır ve (platform üzerinden) sonucu görür, danışan sadece uygular. Ama Rite'ın kullanım alanlarından biri de **iki Rite kullanıcısı arasındaki simetrik ilişki** — biri diğerine görev/aktivite atayabiliyor ve takip edebiliyor, roller platform tarafından atanmış değil, ilişkiye göre değişken (bir aile üyesi diğerini destekler, bir arkadaş bir arkadaşa önerir). Bugünkü paylaşım akışı (Havuz → "Kendi Havuzuma al") tek yönlü bir teslimat; alıcının ilerlemesini kaynak kullanıcıya geri gösteren bir kanal yok. **Yön netleşti (henüz kesin tasarım yok, 2026-09-22):** gerçek Sohbet altyapısı (Supabase Realtime, bkz. `VIZYON.md` §6) geldiğinde, bu geri besleme muhtemelen bir sistem mesajı olarak Sohbet üzerinden akacak — kaynak-kopya bağlantısı (kartın `_kaynak_rit_id` izini kullanan bir gözlem mekanizması) alternatifi elenmedi ama Sohbet daha doğal görünüyor; kesin tasarım henüz yapılmadı.
+
+**Rite Studio.** Meridyen markasından bağımsız, kart tasarlayıp platform-bağlantılı kullanıcılara gönderebileceğimiz bir yazma/deney ortamı. **Şu anki fazda**, tek-operatörlü (gayrı-resmi) bir test platformu olarak kullanılıyor — kullanıcının kendi oluşturmadığı, Rite'a farklılık katan kartların tasarlanıp gönderildiği ve geri bildirimin toplandığı yer. Rite Studio'nun kendisinin çok-platformlu/admin-arayüzlü, diğer koçluk sistemlerine örnek olacak resmi bir ürün bileşeni haline gelmesi fikri **artık gündemde değil** — yukarıdaki KOŞULLU KARAR onaylanırsa Rite Studio'nun kurumsal katmanı tamamen kaldırılacak, onaylanmazsa mevcut haliyle (tek-operatörlü test ortamı) kalmaya devam edecek. Her iki durumda da "çok-platformlu, admin arayüzlü, resmi ürün bileşeni" hedefi terk edildi.
+
+**Sohbet'in kanal/grup mimarisine evrilmesi (faz-sonrası, gerekliliği zayıfladı).** Bir kullanıcının birden fazla platforma/ilişkiye bağlı olabilmesi ihtiyacı, artık danışman modu tasarımında **ilişki referansı (`iliski_id`) ile Ajanda/kart düzeyinde per-ilişki filtreleme** şeklinde çözülüyor (yukarı bkz.) — Sohbet'in kendisinin kanal/grup mimarisine evrilmesi (her platform/ilişki kendi kanalı, stream.io tarzı) hâlâ makul bir gelecek adım olabilir, ama artık kart-görünürlüğü sorununu çözmek için ZORUNLU değil.
 
 ---
 
@@ -93,7 +104,7 @@ Rite'ın kullanıcı kitlesi ve kullanım amaçları, kişisel kullanım ve geç
 - **Alışkanlık oluşturma öğrenimleri.** Basit, az sayıda görevle başlayıp kademeli zorlaştırmak; maddi/motivasyonel bir ödül mekanizmasına bağlamak işe yarayabiliyor ama tek başına yeterli değil — hatırlatma/yönlendirme sürmesi gerekebiliyor, ve motivasyon kaynağı (ödül ya da ilgi) azaldığında sürdürülebilirlik zayıflayabiliyor. "21 gün alışkanlık" gibi basit kuralların tam doğru olmadığı gözlemlendi.
 - **Audience segmentation — esneklik herkese göre değil.** Aynı anda birçok ilgi/proje alanı olan kullanıcılar için esnek, çok-amaçlı organizasyon araçları (tile/pencere tarzı) gerçekten değerli. Ama az sayıda, basit ihtiyacı olan bir kullanıcı için aynı esneklik gereksiz karmaşıklık, hatta "zihni çalıştırmak" yerine yük olarak algılanabiliyor — bazı kullanıcılar bilinçli olarak "aklımda tutmayı tercih ederim" diyebiliyor. Bu, hedef kitleyi tek tip "esneklik isteyen" olarak varsaymamak gerektiğini gösteriyor; sadelik de bir tasarım değeri olarak eşit ağırlıkta kalmalı.
 - **Fayda katmanının kökeni.** Tek bir yaşam alanına (ör. beslenme) odaklanmanın yetmediği, hareket ve stres yönetimi gibi alanların da birlikte düşünülmesi gerektiği gözlemlendi — fayda katmanı kavramı buradan doğdu.
-- **"Kendi kendine danışmanlık."** Adlandırması henüz netleşmemiş ama özü net: ikinci bir kişi (koç/aile/arkadaş) olmadan, kullanıcının kendi kendine yararlı alışkanlıkları belirleyip uygulaması ve sonucu mümkün olduğunca ölçmesi. Bugün "bireysel koçluk" şemsiyesi altında, koçluk-eşlikli kullanımla karışık duruyor — ikisi ayrı terimlerle ayrışmalı: kendi başına yürüyen kullanım vs. bir başkasının eşlik ettiği kullanım.
+- **"Kendi kendine danışmanlık."** Adlandırması henüz netleşmemiş ama özü net: ikinci bir kişi (koç/aile/arkadaş) olmadan, kullanıcının kendi kendine yararlı alışkanlıkları belirleyip uygulaması ve sonucu mümkün olduğunca ölçmesi. Bugün "bireysel koçluk" şemsiyesi altında, koçluk-eşlikli kullanımla karışık duruyor — ikisi ayrı terimlerle ayrışmalı: kendi başına yürüyen kullanım vs. bir başkasının eşlik ettiği kullanım. **(2026-09-22)**: bu ayrım artık "danışman modu" (bir başkası eşlik ediyor, bkz. §6) kavramıyla somutlaştı — adlandırma hâlâ kesin değil ama iki kullanım biçimi artık mimari düzeyde ayrışıyor.
 
 ---
 
@@ -108,6 +119,8 @@ Rite'ın kullanıcı kitlesi ve kullanım amaçları, kişisel kullanım ve geç
 
 **Gelir modeli**: PWA kalıcı olarak ücretsiz kalır. Mobil uygulama, App Store üzerinden küçük, sabit bir abonelik (yön, henüz kesinleşmedi). **Ek model adayı (yön):** koçluk/platform bağlamında, ücretin kullanıcı yerine platform/kurum tarafından karşılanması — geçmiş bir koçluk yazılımı deneyiminde mobil uygulama kullanıcıya tamamen ücretsizdi, çünkü bedel platform tarafında (dershane) karşılanıyordu. Rite Studio üzerinden yürüyecek platform ilişkilerinde benzer bir B2B2C model değerlendirilebilir.
 
+**Yeni fikir (2026-09-22, B-plan/ikincil, birincil tercih DEĞİL)**: Rite'ın teslimat (tüketim/takip) kısmı ücretsiz kalır, koçluk ve bazı bölümler uygulama-içi satın alma ile aktive edilir — bu, danışman modu feasibility turunun tetikleyicisi olan bir yan-fikirdi. Henüz karar değil; birincil B2B2C/mobil-abonelik modeliyle çelişmiyor, tamamlayıcı bir olasılık olarak not ediliyor.
+
 **Mobilin "neden parayla" hikayesi — gizlilik**: mobili değerli kılacak şey "daha fazla özellik" değil, **veri modelinin kendisi**: veri cihazda yaşar, yedek kullanıcının kendi bulut hesabından şifreli alınır, Rite'ın sunucusu kişisel içeriği hiç görmez.
 
 **Kanal/efor**: Ücretli reklam yok. İlk enerji kişisel çevre üzerinden beta kullanıcı toplamaya gidiyor.
@@ -121,7 +134,7 @@ Rite'ın kullanıcı kitlesi ve kullanım amaçları, kişisel kullanım ve geç
 Faz geçişleri takvime değil, somut olgunluk/tetikleyici noktalarına bağlanıyor:
 
 - **PWA → Mobil geçiş**: gerçek kullanıcı geri bildirimiyle "mobile taşınmaya değer" noktasına ulaşmak — şimdiden tarih verilmiyor.
-- **Rite Studio'nun kurumsallaşması (çoklu platform, admin arayüzü)**: somut bir tetikleyici var — mevcut bir koçluk ortaklığının bu yıl sona ermesi, bu yapının yeniden ele alınmasını gerektirebilir. Bu, Rite Studio'nun "hazır" olmasının zaman baskısı taşıyan tek maddesi.
+- **Rite Studio'nun kurumsallaşması (çoklu platform, admin arayüzü)**: somut bir tetikleyici var — mevcut bir koçluk ortaklığının bu yıl sona ermesi, bu yapının yeniden ele alınmasını gerektirebilir. Bu, Rite Studio'nun "hazır" olmasının zaman baskısı taşıyan tek maddesiydi. **2026-09-22 güncellemesi**: bu yönün TAM TERSİ bir alternatif de artık masada — Rite Studio'yu kurumsallaştırmak yerine TAMAMEN KALDIRIP Rite'a konsolide etmek (bkz. §6, BÜYÜK KOŞULLU KARAR). Hangi yönün izleneceği aynı tetikleyiciyle (ortaklığın sona ermesi) netleşecek — iki alternatif de bu tetikleyiciye bağlı, henüz karar yok.
 - **Kart_tipi/field-type palette kararı**: §5'teki gözlemler netleştikçe (gerçek kullanıcı çeşitliliği görüldükçe) karara bağlanacak.
 - **Peer-to-peer geri besleme mekanizması**: aile grubu paylaşımı gerçek kullanımda darboğaz yaratırsa önceliklenecek.
 
@@ -133,7 +146,15 @@ Faz geçişleri takvime değil, somut olgunluk/tetikleyici noktalarına bağlan�
 - Mobil abonelik fiyatlandırması.
 - Aile grubu paylaşım sunucusunun tam kapsamı (kimlik doğrulama, grup yönetimi) — henüz tasarlanmadı.
 - Hangi widget/kart fikirlerinin gerçek kullanıcıya sunulacağı, App Store onay riski gözetilerek zamanla ayıklanacak.
-- Kart kaynağı (yerel/online) görsel ayrımının somut tasarımı (renk paleti, VIZYON.md'ye işlenecek).
-- Peer-to-peer geri besleme: Sohbet-mesajı mı, kaynak-kopya bağlantısı mı — karar verilmedi.
+- Kart kaynağı (yerel/online) görsel ayrımının somut tasarımı — **2026-09-22'de netleşti ki bu, "hangi danışmandan geldiği" sorusundan AYRI bir konu** (online/local = senkron-tazelik; danışman-kimliği = saf kart tasarımı meselesi) — ikisi de ayrı ayrı hâlâ çözülmedi, bkz. `VIZYON.md` §7.8.
+- Peer-to-peer geri besleme: yön netleşti (Sohbet üzerinden, bkz. §6), kesin tasarım henüz yok.
 - Field-type palette / kullanıcı esnekliği — §5'te tarif edilen orta yol, henüz onaylanmadı.
-- Rite Studio'nun resmi ürün bileşeni haline gelmesinin kapsamı — ayrı bir faz, henüz tasarlanmadı.
+- Rite Studio'nun resmi ürün bileşeni haline gelmesi — **artık gündemde değil**; yerine BÜYÜK KOŞULLU KARAR (Meridyen'i tamamen kaldırma) geldi, bkz. §6 — henüz teyit edilmedi.
+- **(2026-09-22, danışman modu R&D'si)** Danışman modu izin modelinin kesinleştirilmesi (gün değiştirme, koçluk türüne göre) — bkz. `VIZYON.md` §7.4.
+- **(2026-09-22)** `rite_auth_migration.sql`'in çoklu-danışman ilişki modeline göre genelleştirilmesi — kodlama öncesi ele alınacak, bkz. `VIZYON.md` §2/§7.1.
+- **(2026-09-22)** Kart taksonomisine sınav koçluğu (Çalışma/Soru Çözüm)/diyetisyenlik (öğün/Akıllı Tabak)/fitness alanlarına özgü kart tiplerinin eklenmesi.
+- **(2026-09-22)** Diyet domaininin GENİŞLETİLMİŞ hâli (beslenme+hareket+uyku birlikte, alışveriş listesi vb.) — ayrı bir araştırma turuna ertelendi.
+- **(2026-09-22)** Video görüşme sağlayıcısı seçimi (Stream Video / Daily.co / LiveKit Cloud / Twilio) — inşa zamanına bırakıldı.
+- **(2026-09-22)** Wellbeing kartlarının (şükran/anket/su vb.) danışman moduyla kime açılacağı.
+- **(2026-09-22)** RLS (row-level security) genişletmesi — bir danışmanın danışan satırlarına yazabilmesi için.
+- **(2026-09-22)** Sohbet (yeni gerçek altyapı) ile mevcut Paylaş (`dog_inbox`) mekanizmasının bir arada nasıl duracağı.
