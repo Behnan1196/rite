@@ -7142,6 +7142,30 @@ export default function Rite() {
             <button className="x" onClick={() => setDanismanlikOpen(false)}>×</button>
             <h2>Danışmanlık</h2>
 
+            <div className="mrow" style={{ borderTop: 'none' }}>
+              <span>Danışman kodun</span>
+              <b style={{ letterSpacing: 1 }}>{client.share_code || '…'}</b>
+            </div>
+            <div className="note" style={{ marginTop: 2 }}>Danışman olarak bu kodu danışanlarına ver — bu ekrana girip aşağıdaki "Bir danışmana bağlan" kutusuna bu kodu yazarlar, onayladığında bağlanmış olursunuz.</div>
+
+            <label className="fldlbl" style={{ marginTop: 18 }}>Danışanların</label>
+            {danisanlarim.length === 0 ? <div className="note" style={{ marginTop: 0 }}>Henüz yok.</div> : danisanlarim.map((r: any) => (
+              <div key={r.id} className="mrow">
+                <span>{r.ad} <span className="note" style={{ margin: 0 }}>· {iliskiDurumEtiket(r.durum)}</span></span>
+                <span style={{ display: 'flex', gap: 6 }}>
+                  {r.durum === 'beklemede' && (<>
+                    <button className="btn ghost sm" onClick={() => iliskiDurumGuncelle(r.id, 'aktif')}>Onayla</button>
+                    <button className="btn ghost sm" style={{ color: 'var(--red)', borderColor: '#e6c4bd' }} onClick={() => iliskiDurumGuncelle(r.id, 'sonlandi')}>Reddet</button>
+                  </>)}
+                  {r.durum === 'aktif' && (
+                    <button className="btn ghost sm" style={{ color: 'var(--red)', borderColor: '#e6c4bd' }} onClick={() => iliskiDurumGuncelle(r.id, 'sonlandi')}>Sonlandır</button>
+                  )}
+                </span>
+              </div>
+            ))}
+
+            <hr style={{ margin: '18px 0', border: 'none', borderTop: '1px solid var(--line)' }} />
+
             <label className="fldlbl" style={{ marginTop: 0 }}>Bir danışmana bağlan</label>
             <div className="note" style={{ marginTop: 2 }}>Danışmanının verdiği kodu gir, onayladığında bağlanmış olursun.</div>
             <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
@@ -7159,22 +7183,6 @@ export default function Rite() {
                     {r.durum === 'beklemede' ? 'İsteği geri çek' : 'Bağlantıyı kes'}
                   </button>
                 )}
-              </div>
-            ))}
-
-            <label className="fldlbl" style={{ marginTop: 18 }}>Danışanların</label>
-            {danisanlarim.length === 0 ? <div className="note" style={{ marginTop: 0 }}>Henüz yok.</div> : danisanlarim.map((r: any) => (
-              <div key={r.id} className="mrow">
-                <span>{r.ad} <span className="note" style={{ margin: 0 }}>· {iliskiDurumEtiket(r.durum)}</span></span>
-                <span style={{ display: 'flex', gap: 6 }}>
-                  {r.durum === 'beklemede' && (<>
-                    <button className="btn ghost sm" onClick={() => iliskiDurumGuncelle(r.id, 'aktif')}>Onayla</button>
-                    <button className="btn ghost sm" style={{ color: 'var(--red)', borderColor: '#e6c4bd' }} onClick={() => iliskiDurumGuncelle(r.id, 'sonlandi')}>Reddet</button>
-                  </>)}
-                  {r.durum === 'aktif' && (
-                    <button className="btn ghost sm" style={{ color: 'var(--red)', borderColor: '#e6c4bd' }} onClick={() => iliskiDurumGuncelle(r.id, 'sonlandi')}>Sonlandır</button>
-                  )}
-                </span>
               </div>
             ))}
           </div>
