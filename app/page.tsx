@@ -2561,7 +2561,7 @@ export default function Rite() {
   // uygulama öne gelince/sekme aktif olunca sessizce tazele, elle yenilemeye gerek kalmasın.
   useEffect(() => {
     if (!client) return;
-    const tazele = () => { loadData(client.id); loadInbox(client.id); };
+    const tazele = () => { loadData(client.id); loadInbox(client.id); loadIliskiler(client.id); };
     const onVis = () => { if (document.visibilityState === 'visible') tazele(); };
     window.addEventListener('focus', tazele);
     document.addEventListener('visibilitychange', onVis);
@@ -2583,6 +2583,17 @@ export default function Rite() {
     const t = setInterval(() => loadGruplar(client.id), 30000);
     return () => clearInterval(t);
   }, [client, screen]);
+
+  // Danışmanlık modalı için aynı "tazele" felsefesi (bkz. yukarıdaki Rite Studio notu, gerçek zamanlı yayın
+  // yerine ucuz poll): dog_iliskiler'deki değişiklik (danışman onayladı/reddetti, danışan bağlandı) karşı
+  // tarafın AÇIK OLAN modalına anında yansımıyordu — Behnan test ederken fark etti ("realtime olmadı, sayfayı
+  // yenileyince oldu"). Modal açıkken 10 saniyede bir sessizce tazeleniyor, ayrıca açılır açılmaz da bir kez.
+  useEffect(() => {
+    if (!client || !danismanlikOpen) return;
+    loadIliskiler(client.id);
+    const t = setInterval(() => loadIliskiler(client.id), 10000);
+    return () => clearInterval(t);
+  }, [client, danismanlikOpen]);
 
   // Çöp kutusu "lazy purge" (2026-09-18, Havuz yeniden tasarımı — 8. adım, bkz. copKutusuTemizle tanımı):
   // gerçek bir arka plan cron yok — Havuz VEYA Ajanda ekranına her girişte 30 günden eski çöp kutusu satırları
