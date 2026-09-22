@@ -2452,6 +2452,14 @@ export default function Rite() {
   const [profilEditOpen, setProfilEditOpen] = useState(false);
   const [baglantiOpen, setBaglantiOpen] = useState(false);
   const [paylasimAyarOpen, setPaylasimAyarOpen] = useState(false);
+  // Danışman modu — davet/onay akışı (2026-09-22, dog_iliskiler tablosu, bkz. rite_auth_migration.sql +
+  // rite_danisman_rls_*.sql). Meridyen bağlantısından (meridyen_bagli/dog_meridyen_uyelik) AYRI, GENEL amaçlı
+  // bir danışman-danışan ilişki mekanizması — biri diğerini kaldırmıyor, birlikte duruyorlar.
+  const [danismanlikOpen, setDanismanlikOpen] = useState(false);
+  const [danismanKodu, setDanismanKodu] = useState('');
+  const [danismanlikMsg, setDanismanlikMsg] = useState('');
+  const [danisanlarim, setDanisanlarim] = useState<any[]>([]); // ben danışmanım, bunlar danışanlarım
+  const [danismanlarim, setDanismanlarim] = useState<any[]>([]); // ben danışanım, bunlar bağlı olduğum danışmanlar
   const [avatarSec, setAvatarSec] = useState('');
   const [profilMsg, setProfilMsg] = useState('');
   const [newPass, setNewPass] = useState('');
@@ -2501,7 +2509,7 @@ export default function Rite() {
     setSelDate(iso(new Date()));
     try {
       const s = localStorage.getItem(LS);
-      if (s) { const c = JSON.parse(s); setClient(c); loadData(c.id); loadInbox(c.id); loadKisiler(c.id); ensureShareCode(c); reassignPush(c.id); }
+      if (s) { const c = JSON.parse(s); setClient(c); loadData(c.id); loadInbox(c.id); loadKisiler(c.id); loadIliskiler(c.id); ensureShareCode(c); reassignPush(c.id); }
     } catch (_) {}
     // Başlangıç sekmesi tercihi (bkz. LS_BASLANGIC) — Behnan isteği: "program açık değilse hep Home'a geliyor,
     // ilk gelecek sekmeyi Ayarlar'dan seçebilsem". Kayıtlı değer BASLANGIC_SEKMELERI'nde geçerli bir anahtarsa
@@ -2737,7 +2745,7 @@ export default function Rite() {
   }
   async function girisSonrasiYukle(cli: Client) {
     setClient(cli); localStorage.setItem(LS, JSON.stringify(cli)); setAuthMsg('');
-    loadData(cli.id); loadInbox(cli.id); loadKisiler(cli.id); ensureShareCode(cli); reassignPush(cli.id);
+    loadData(cli.id); loadInbox(cli.id); loadKisiler(cli.id); loadIliskiler(cli.id); ensureShareCode(cli); reassignPush(cli.id);
   }
   async function authGiris() {
     const email = authEmail.trim();
@@ -2963,6 +2971,61 @@ export default function Rite() {
   }
   const kisiSil = (i: number) => kisilerKaydet(kisiler.filter((_, j) => j !== i));
   const kisiAd = (kod: string) => kisiler.find((x) => x.kod === kod)?.ad;
+  const iliskiDurumEtiket = (d: string) => d === 'beklemede' ? 'bekliyor' : d === 'aktif' ? 'aktif' : d === 'askida' ? 'askıda' : 'sonlandı';
+  // ---------- Danışman modu — davet/onay (dog_iliskiler) ----------
+  async function loadIliskiler(cid: string) {
+    const [dr, nr] = await Promise.all([
+      supabase.from('dog_iliskiler').select('id,danisman_id,danisan_id,tur,durum,baslangic').eq('danisman_id', cid),
+      supabase.from('dog_iliskiler').select('id,danisman_id,danisan_id,tur,durum,baslangic').eq('danisan_id', cid),
+    ]);
+    const danisanRows = dr.data || [];
+    const danismanRows = nr.data || [];
+    const ids = Array.from(new Set([...danisanRows.map((r: any) => r.danisan_id), ...danismanRows.map((r: any) => r.danisman_id)]));
+    let adMap: Record<string, string> = {};
+    if (ids.length) {
+      const cr = await supabase.from('dog_clients').select('id,ad').in('id', ids);
+      (cr.data || []).forEach((c: any) => { adMap[c.id] = c.ad; });
+    }
+    setDanisanlarim(danisanRows.map((r: any) => ({ ...r, ad: adMap[r.danisan_id] || '?' })));
+    setDanismanlarim(danismanRows.map((r: any) => ({ ...r, ad: adMap[r.danisman_id] || '?' })));
+  }
+  async function danismanaBaglanIste() {
+    if (!client) return;
+    const kod = danismanKodu.trim().toUpperCase();
+    if (!kod) return;
+    setDanismanlikMsg('Kontrol ediliyor…');
+    const cr = await supabase.from('dog_clients').select('id,ad').eq('share_code', kod).maybeSingle();
+    if (cr.error || !cr.data) return setDanismanlikMsg('Bu kodla bir danışman bulunamadı.');
+    if (cr.data.id === client.id) return setDanismanlikMsg('Kendi kodunu giremezsin.');
+    const existing = await supabase.from('dog_iliskiler').select('id,durum').eq('danisman_id', cr.data.id).eq('danisan_id', client.id).eq('tur', 'genel').maybeSingle();
+    if (existing.data) {
+      if (existing.data.durum === 'sonlandi') {
+        const u = await supabase.from('dog_iliskiler').update({ durum: 'beklemede' }).eq('id', existing.data.id);
+        if (u.error) return setDanismanlikMsg('Hata: ' + u.error.message);
+        setDanismanlikMsg('İstek gönderildi, ' + cr.data.ad + ' onayını bekliyorsun.');
+      } else if (existing.data.durum === 'beklemede') {
+        setDanismanlikMsg('Zaten bekleyen bir isteğin var.');
+      } else {
+        setDanismanlikMsg(cr.data.ad + ' ile zaten bağlısın.');
+      }
+    } else {
+      const i = await supabase.from('dog_iliskiler').insert({ danisman_id: cr.data.id, danisan_id: client.id, tur: 'genel', durum: 'beklemede' });
+      if (i.error) return setDanismanlikMsg('Hata: ' + i.error.message);
+      setDanismanlikMsg('İstek gönderildi, ' + cr.data.ad + ' onayını bekliyorsun.');
+    }
+    setDanismanKodu('');
+    loadIliskiler(client.id);
+  }
+  async function iliskiDurumGuncelle(iliskiId: string, yeniDurum: string) {
+    const u = await supabase.from('dog_iliskiler').update({ durum: yeniDurum }).eq('id', iliskiId);
+    if (u.error) return setDanismanlikMsg('Hata: ' + u.error.message);
+    if (client) loadIliskiler(client.id);
+  }
+  async function danismanlikBaglantiyiKes(iliskiId: string) {
+    const u = await supabase.from('dog_iliskiler').update({ durum: 'sonlandi' }).eq('id', iliskiId);
+    if (u.error) return setDanismanlikMsg('Hata: ' + u.error.message);
+    if (client) loadIliskiler(client.id);
+  }
   // Ritüel / aktivite / programı bir ya da birden çok paylaşım koduna yolla (dog_inbox).
   async function paylas(o: any, isRit: boolean, kodlar: string[]) {
     if (paylasBusy) return; // çift dokunma/çift paylaşımı önle (kullanıcı geri bildirimi)
@@ -5898,6 +5961,24 @@ export default function Rite() {
               <div className="rowbtns" style={{ marginTop: 6 }}><button className="btn ghost sm" onClick={() => setPaylasimAyarOpen(true)}>Yönet</button></div>
             </div>
 
+            <div className="card">
+              <div className="mrow" style={{ borderTop: 'none' }}>
+                <span>Danışmanlık</span>
+                <span className="pstat">
+                  {(() => {
+                    const aktifDanisman = danismanlarim.filter((r: any) => r.durum === 'aktif').length;
+                    const bekleyen = danisanlarim.filter((r: any) => r.durum === 'beklemede').length;
+                    const aktifDanisan = danisanlarim.filter((r: any) => r.durum === 'aktif').length;
+                    if (bekleyen > 0) return bekleyen + ' bekleyen istek';
+                    if (aktifDanisman > 0) return aktifDanisman + ' danışmana bağlı';
+                    if (aktifDanisan > 0) return aktifDanisan + ' danışan';
+                    return 'bağlantı yok';
+                  })()}
+                </span>
+              </div>
+              <div className="rowbtns" style={{ marginTop: 6 }}><button className="btn ghost sm" onClick={() => { setDanismanlikMsg(''); setDanismanlikOpen(true); }}>Yönet</button></div>
+            </div>
+
             <div className="card"><h3>Bildirimler</h3>
               <p className="note">Ana ekrana eklersen uygulama kapalıyken de hatırlatma alırsın.</p>
               <div className="rowbtns"><button className="btn ghost sm" onClick={enableNotifs}>{pushOn ? '🔔 Açık' : '🔔 Bildirimleri aç'}</button><button className="btn ghost sm" onClick={testPush}>Test gönder</button></div>
@@ -7051,6 +7132,51 @@ export default function Rite() {
               <div><input value={kiAd} onChange={(e) => setKiAd(e.target.value)} placeholder="Ad (ör. Eşim)" /></div>
               <div style={{ display: 'flex', gap: 6 }}><input value={kiKod} onChange={(e) => setKiKod(e.target.value)} placeholder="RT-XXXXX" autoCapitalize="characters" /><button className="btn sm" onClick={kisiEkle}>Ekle</button></div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {danismanlikOpen && (
+        <div className="modal" onMouseDown={() => setDanismanlikOpen(false)}>
+          <div className="sheet" onMouseDown={(e) => e.stopPropagation()}>
+            <button className="x" onClick={() => setDanismanlikOpen(false)}>×</button>
+            <h2>Danışmanlık</h2>
+
+            <label className="fldlbl" style={{ marginTop: 0 }}>Bir danışmana bağlan</label>
+            <div className="note" style={{ marginTop: 2 }}>Danışmanının verdiği kodu gir, onayladığında bağlanmış olursun.</div>
+            <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+              <input value={danismanKodu} onChange={(e) => setDanismanKodu(e.target.value)} placeholder="RT-XXXXX" autoCapitalize="characters" />
+              <button className="btn sm" onClick={danismanaBaglanIste}>Bağlan</button>
+            </div>
+            {danismanlikMsg && <div className="msg">{danismanlikMsg}</div>}
+
+            <label className="fldlbl" style={{ marginTop: 18 }}>Bağlı olduğun danışmanlar</label>
+            {danismanlarim.length === 0 ? <div className="note" style={{ marginTop: 0 }}>Henüz yok.</div> : danismanlarim.map((r: any) => (
+              <div key={r.id} className="mrow">
+                <span>{r.ad} <span className="note" style={{ margin: 0 }}>· {iliskiDurumEtiket(r.durum)}</span></span>
+                {(r.durum === 'aktif' || r.durum === 'beklemede') && (
+                  <button className="btn ghost sm" style={{ color: 'var(--red)', borderColor: '#e6c4bd' }} onClick={() => danismanlikBaglantiyiKes(r.id)}>
+                    {r.durum === 'beklemede' ? 'İsteği geri çek' : 'Bağlantıyı kes'}
+                  </button>
+                )}
+              </div>
+            ))}
+
+            <label className="fldlbl" style={{ marginTop: 18 }}>Danışanların</label>
+            {danisanlarim.length === 0 ? <div className="note" style={{ marginTop: 0 }}>Henüz yok.</div> : danisanlarim.map((r: any) => (
+              <div key={r.id} className="mrow">
+                <span>{r.ad} <span className="note" style={{ margin: 0 }}>· {iliskiDurumEtiket(r.durum)}</span></span>
+                <span style={{ display: 'flex', gap: 6 }}>
+                  {r.durum === 'beklemede' && (<>
+                    <button className="btn ghost sm" onClick={() => iliskiDurumGuncelle(r.id, 'aktif')}>Onayla</button>
+                    <button className="btn ghost sm" style={{ color: 'var(--red)', borderColor: '#e6c4bd' }} onClick={() => iliskiDurumGuncelle(r.id, 'sonlandi')}>Reddet</button>
+                  </>)}
+                  {r.durum === 'aktif' && (
+                    <button className="btn ghost sm" style={{ color: 'var(--red)', borderColor: '#e6c4bd' }} onClick={() => iliskiDurumGuncelle(r.id, 'sonlandi')}>Sonlandır</button>
+                  )}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       )}
