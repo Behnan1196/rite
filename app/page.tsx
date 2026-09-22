@@ -2713,6 +2713,19 @@ export default function Rite() {
       const gecikenIds = new Set(gecikenler.map((rt: any) => rt.id));
       ritualRows = ritualRows.map((rt: any) => gecikenIds.has(rt.id) ? { ...rt, bitis: null } : rt);
     }
+    // Danışman(lar)ımdan bana atanan kartlar (2026-09-22, Behnan: "danışanın ajandasına düşmesi gerekmiyor
+    // mu?" — haklıydı, önceki sürüm bunları sadece Ayarlar'daki ayrı bir listede gösteriyordu). Aynı tabloda
+    // yaşadıkları (dog_rituals, sadece client_id yerine iliski_id taşıyorlar) için normal ritualRows dizisine
+    // eklemek yetiyor — haftalık ızgara/gün görünümü ayrıca değiştirilmeden onları da gösteriyor. Gecikme
+    // düzeltmesi (yukarısı) BİLEREK bunlara uygulanmıyor — kapsamı kişisel kartlarla sınırlı tutuyoruz.
+    const ai = await supabase.from('dog_iliskiler').select('id').eq('danisan_id', clientId).eq('durum', 'aktif');
+    if (ai.error) console.error('atanan ilişkiler sorgusu hata:', ai.error);
+    else if (ai.data && ai.data.length) {
+      const iliskiIds = ai.data.map((x: any) => x.id);
+      const ar = await supabase.from('dog_rituals').select('*').in('iliski_id', iliskiIds).is('silindi_tarih', null);
+      if (ar.error) console.error('atanan kartlar sorgusu hata:', ar.error);
+      else ritualRows = [...ritualRows, ...(ar.data || [])];
+    }
     setRituals(ritualRows);
     setLogs(logRows);
     const e = await supabase.from('dog_episodes').select('id,program_ad,birincil_ilgi,status').eq('client_id', clientId).order('created_at', { ascending: false }).limit(1);
@@ -3075,7 +3088,13 @@ export default function Rite() {
   }
   async function baglamKartEkle() {
     if (!ajandaBaglamIliski || !baglamYeniAd.trim()) return;
-    const i = await supabase.from('dog_rituals').insert({ iliski_id: ajandaBaglamIliski, client_id: null, ad: baglamYeniAd.trim(), zaman: 'gün', kaynak: 'Danisman', tip: 'gorev', kart_tipi: 'gorev', aliskanlik: false, aktif: true, mezun: false, baslangic: today, bitis: null, sira: 0, blok_sira: Date.now() });
+    // kart_tipi: 'gorev' YANLIŞTI — KARTLAR listesinde öyle bir tür yok (sadece video/ölçüm/egzersiz gibi
+    // İÇERİK türleri orada). "Yapılacak" (tek seferlik, tikle tamamlanan) olması kart_config.gorev:true ile
+    // belirleniyor (bkz. kisiselTur hesaplaması: aliskanlik ? 'aliskanlik' : (kCfg?.gorev||kCfg?.randevu) ?
+    // 'yapilacak' : 'not') — Behnan'ın "danışanın ajandasına düşmesi gerekmiyor mu" uyarısı üzerine bu kartlar
+    // artık loadData tarafından danışanın normal haftalık ızgarasına da çekiliyor, o yüzden orada doğru
+    // sınıflanmaları (tikli "Yapılacak" olarak) önemli.
+    const i = await supabase.from('dog_rituals').insert({ iliski_id: ajandaBaglamIliski, client_id: null, ad: baglamYeniAd.trim(), zaman: 'gün', kaynak: 'Danisman', tip: 'gorev', kart_config: { gorev: true }, aliskanlik: false, aktif: true, mezun: false, baslangic: today, bitis: null, sira: 0, blok_sira: Date.now() });
     if (i.error) return setBaglamMsg('Eklenemedi: ' + i.error.message);
     setBaglamYeniAd('');
     loadBaglamKartlar(ajandaBaglamIliski);
