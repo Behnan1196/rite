@@ -2465,6 +2465,15 @@ export default function Rite() {
   const [danismanlikMsg, setDanismanlikMsg] = useState('');
   const [danisanlarim, setDanisanlarim] = useState<any[]>([]); // ben danışmanım, bunlar danışanlarım
   const [danismanlarim, setDanismanlarim] = useState<any[]>([]); // ben danışanım, bunlar bağlı olduğum danışmanlar
+  // Ajanda danışan-seçici (2026-09-22, daraltılmış kapsam — Behnan onayıyla): danışmanın bir danışanına
+  // atadığı kartlar (client_id YOK, sadece iliski_id) için AYRI, düz bir liste — kişisel Ajanda'nın zengin
+  // gruplar/ölçüm/episode altyapısına hiç dokunmuyor, tamamen kendi state'inde yaşıyor.
+  const [ajandaDanisanOpen, setAjandaDanisanOpen] = useState(false);
+  const [ajandaBaglamIliski, setAjandaBaglamIliski] = useState<string | null>(null);
+  const [baglamKartlar, setBaglamKartlar] = useState<any[]>([]);
+  const [baglamYeniAd, setBaglamYeniAd] = useState('');
+  const [baglamMsg, setBaglamMsg] = useState('');
+  const [atananKartlar, setAtananKartlar] = useState<any[]>([]); // danışan tarafı: danışman(lar)ımdan bana atanan kartlar, salt-okunur
   const [avatarSec, setAvatarSec] = useState('');
   const [profilMsg, setProfilMsg] = useState('');
   const [newPass, setNewPass] = useState('');
@@ -2994,16 +3003,27 @@ export default function Rite() {
       supabase.from('dog_iliskiler').select('id,danisman_id,danisan_id,tur,durum,baslangic').eq('danisman_id', cid),
       supabase.from('dog_iliskiler').select('id,danisman_id,danisan_id,tur,durum,baslangic').eq('danisan_id', cid),
     ]);
+    // 2026-09-22 (Behnan: "bağlı olduğum danışmanı göstermiyor" — hem widget hem Ayarlar boş): sorgular hata
+    // verirse (RLS reddi, ağ, vb.) önceden sessizce boş listeye düşüyorduk, teşhis edilemiyordu — artık konsola
+    // ve (Danışmanlık modalı açıksa) ekrana yazıyoruz.
+    if (dr.error) console.error('loadIliskiler (danisman_id sorgusu) hata:', dr.error);
+    if (nr.error) console.error('loadIliskiler (danisan_id sorgusu) hata:', nr.error);
+    if ((dr.error || nr.error) && danismanlikOpen) setDanismanlikMsg('Yüklenemedi: ' + (dr.error?.message || nr.error?.message));
     const danisanRows = dr.data || [];
     const danismanRows = nr.data || [];
     const ids = Array.from(new Set([...danisanRows.map((r: any) => r.danisan_id), ...danismanRows.map((r: any) => r.danisman_id)]));
     let adMap: Record<string, string> = {};
     if (ids.length) {
       const cr = await supabase.from('dog_clients').select('id,ad').in('id', ids);
+      if (cr.error) console.error('loadIliskiler (dog_clients ad sorgusu) hata:', cr.error);
       (cr.data || []).forEach((c: any) => { adMap[c.id] = c.ad; });
     }
     setDanisanlarim(danisanRows.map((r: any) => ({ ...r, ad: adMap[r.danisan_id] || '?' })));
-    setDanismanlarim(danismanRows.map((r: any) => ({ ...r, ad: adMap[r.danisman_id] || '?' })));
+    const zenginDanismanRows = danismanRows.map((r: any) => ({ ...r, ad: adMap[r.danisman_id] || '?' }));
+    setDanismanlarim(zenginDanismanRows);
+    // atananKartlar, danismanlarim state'inin kendisine değil taze hesaplanan satırlara bakıyor — setState
+    // asenkron olduğu için burada state'i beklemek yerine doğrudan zenginDanismanRows'u geçiriyoruz.
+    loadAtananKartlar(cid, zenginDanismanRows);
   }
   async function danismanaBaglanIste() {
     if (!client) return;
@@ -3041,6 +3061,41 @@ export default function Rite() {
     const u = await supabase.from('dog_iliskiler').update({ durum: 'sonlandi' }).eq('id', iliskiId);
     if (u.error) return setDanismanlikMsg('Hata: ' + u.error.message);
     if (client) loadIliskiler(client.id);
+  }
+  // ---------- Ajanda danışan-seçici — danışman tarafı: seçili ilişkinin (iliski_id) kartları, düz liste ----------
+  async function loadBaglamKartlar(iliskiId: string) {
+    const r = await supabase.from('dog_rituals').select('id,ad,kart_tipi,baslangic,bitis').eq('iliski_id', iliskiId).is('silindi_tarih', null).order('baslangic', { ascending: true, nullsFirst: false });
+    if (r.error) { console.error('loadBaglamKartlar hata:', r.error); setBaglamMsg('Yüklenemedi: ' + r.error.message); return; }
+    setBaglamKartlar(r.data || []);
+  }
+  async function baglamDanisanSec(iliskiId: string | null) {
+    setAjandaBaglamIliski(iliskiId);
+    setBaglamMsg(''); setBaglamKartlar([]);
+    if (iliskiId) loadBaglamKartlar(iliskiId);
+  }
+  async function baglamKartEkle() {
+    if (!ajandaBaglamIliski || !baglamYeniAd.trim()) return;
+    const i = await supabase.from('dog_rituals').insert({ iliski_id: ajandaBaglamIliski, client_id: null, ad: baglamYeniAd.trim(), zaman: 'gün', kaynak: 'Danisman', tip: 'gorev', kart_tipi: 'gorev', aliskanlik: false, aktif: true, mezun: false, baslangic: today, bitis: null, sira: 0, blok_sira: Date.now() });
+    if (i.error) return setBaglamMsg('Eklenemedi: ' + i.error.message);
+    setBaglamYeniAd('');
+    loadBaglamKartlar(ajandaBaglamIliski);
+  }
+  async function baglamKartSil(id: string) {
+    if (!ajandaBaglamIliski) return;
+    const d = await supabase.from('dog_rituals').delete().eq('id', id);
+    if (d.error) return setBaglamMsg('Silinemedi: ' + d.error.message);
+    loadBaglamKartlar(ajandaBaglamIliski);
+  }
+  // ---------- Ajanda danışan-seçici — danışan tarafı: danışman(lar)ımdan bana atanan kartlar, salt-okunur ----------
+  async function loadAtananKartlar(cid: string, danismanRows?: any[]) {
+    const kaynak = danismanRows || danismanlarim;
+    const iliskiIds = kaynak.filter((r: any) => r.durum === 'aktif').map((r: any) => r.id);
+    if (iliskiIds.length === 0) { setAtananKartlar([]); return; }
+    const r = await supabase.from('dog_rituals').select('id,ad,kart_tipi,baslangic,bitis,iliski_id').in('iliski_id', iliskiIds).is('silindi_tarih', null).order('baslangic', { ascending: true, nullsFirst: false });
+    if (r.error) { console.error('loadAtananKartlar hata:', r.error); return; }
+    const adMap: Record<string, string> = {};
+    kaynak.forEach((r2: any) => { adMap[r2.id] = r2.ad; });
+    setAtananKartlar((r.data || []).map((k: any) => ({ ...k, danismanAd: adMap[k.iliski_id] || '?' })));
   }
   // Ritüel / aktivite / programı bir ya da birden çok paylaşım koduna yolla (dog_inbox).
   async function paylas(o: any, isRit: boolean, kodlar: string[]) {
@@ -4784,6 +4839,16 @@ export default function Rite() {
                   onClick={() => { setAyCursor(day); setAyPopupOpen(true); }}
                   style={{ background: 'none', border: '1px solid var(--line)', borderRadius: '50%', width: 30, height: 30, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: '0 0 auto', padding: 0 }}
                 >📅</button>
+                {/* Ajanda danışan-seçici girişi (2026-09-22, daraltılmış kapsam): sadece aktif danışanın varsa
+                    görünür — yoksa herkeste boş yer kaplayan bir buton olmasın diye. */}
+                {danisanlarim.filter((r: any) => r.durum === 'aktif').length > 0 && (
+                  <button
+                    type="button"
+                    title="Danışan Ajandası"
+                    onClick={() => setAjandaDanisanOpen(true)}
+                    style={{ background: 'none', border: '1px solid var(--line)', borderRadius: '50%', width: 30, height: 30, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: '0 0 auto', padding: 0 }}
+                  >🤝</button>
+                )}
                 {/* Ajanda'nın kendi ekleme girişi (2026-09, Behnan kararı — bottom_nav'ın genel ＋'sı kaldırıldı,
                     bkz. nav'daki not) — "en üst sağa bir + koyup, oradan ekleyelim şimdilik", genel bir ekran
                     tasarımı düzeltme oturumunda yeri/görünümü değişebilir. Aynı ekleMenuOpen modalini açıyor,
@@ -7198,6 +7263,59 @@ export default function Rite() {
                 )}
               </div>
             ))}
+
+            {/* Danışmanından gelen görevler (2026-09-22, daraltılmış kapsam): danışmanın Ajanda'daki "Danışan
+                Ajandası"ndan sana atadığı kartlar — salt-okunur (silme/düzenleme her zaman danışmanın işi,
+                bkz. rite_danisman_baglam_kart_migration.sql'deki dog_rituals_danisan_select notu). */}
+            {atananKartlar.length > 0 && (
+              <>
+                <hr style={{ margin: '18px 0', border: 'none', borderTop: '1px solid var(--line)' }} />
+                <label className="fldlbl" style={{ marginTop: 0 }}>Danışmanından gelen görevler</label>
+                {atananKartlar.map((k: any) => (
+                  <div key={k.id} className="mrow">
+                    <span>{kartIkon(k.kart_tipi) || '📌'} {k.ad} <span className="note" style={{ margin: 0 }}>· {k.danismanAd}</span></span>
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {ajandaDanisanOpen && (
+        <div className="modal" onMouseDown={() => setAjandaDanisanOpen(false)}>
+          <div className="sheet" onMouseDown={(e) => e.stopPropagation()}>
+            <button className="x" onClick={() => setAjandaDanisanOpen(false)}>×</button>
+            <h2>Danışan Ajandası</h2>
+            <div className="note" style={{ marginTop: 0 }}>Bir danışan seç, ona görev ata — bu görevler kendi Ajandana karışmaz, sadece seçtiğin danışana ait olur ve o da kendi Ayarlar &gt; Danışmanlık ekranında görür.</div>
+
+            <label className="fldlbl">Danışan</label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+              {danisanlarim.filter((r: any) => r.durum === 'aktif').map((r: any) => (
+                <span
+                  key={r.id}
+                  className={'chip' + (ajandaBaglamIliski === r.id ? ' on' : '')}
+                  onClick={() => baglamDanisanSec(ajandaBaglamIliski === r.id ? null : r.id)}
+                >{r.ad}</span>
+              ))}
+            </div>
+
+            {ajandaBaglamIliski && (
+              <>
+                <label className="fldlbl" style={{ marginTop: 18 }}>Görevler</label>
+                {baglamKartlar.length === 0 ? <div className="note" style={{ marginTop: 0 }}>Henüz görev yok.</div> : baglamKartlar.map((k: any) => (
+                  <div key={k.id} className="mrow">
+                    <span>{kartIkon(k.kart_tipi) || '📌'} {k.ad}</span>
+                    <button className="btn ghost sm" style={{ color: 'var(--red)', borderColor: '#e6c4bd' }} onClick={() => baglamKartSil(k.id)}>Sil</button>
+                  </div>
+                ))}
+                <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+                  <input value={baglamYeniAd} onChange={(e) => setBaglamYeniAd(e.target.value)} placeholder="Yeni görev…" onKeyDown={(e: any) => { if (e.key === 'Enter') baglamKartEkle(); }} />
+                  <button className="btn sm" onClick={baglamKartEkle}>Ekle</button>
+                </div>
+                {baglamMsg && <div className="msg">{baglamMsg}</div>}
+              </>
+            )}
           </div>
         </div>
       )}
