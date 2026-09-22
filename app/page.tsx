@@ -410,6 +410,11 @@ const WIDGET_KATALOG: { anahtar: string; ad: string; aciklama: string; uygulandi
   { anahtar: 'yaklasan_aktiviteler', ad: 'Yaklaşan aktiviteler', aciklama: 'Belirli bir tarihi olan en yakın aktiviteyi özetler, dokununca ilgili günü Ajanda’da açar.', uygulandi: true },
   { anahtar: 'gelenler', ad: 'Gelenler (Inbox)', aciklama: 'Okunmamış sayısını gösterir, dokununca Gelenler’i tam sayfa açar.', uygulandi: true },
   { anahtar: 'notlar_widget', ad: 'Notlar', aciklama: 'Ajanda’ya girmeden Notlar’a Home’dan hızlı erişim.', uygulandi: true },
+  // 'danisanlarim' (2026-09-22, danışman modu — davet/onay akışının ilk sürümü): Ayarlar > Danışmanlık'ta zaten
+  // yaşayan veriyi (dog_iliskiler) Home'a özet olarak taşıyor — bekleyen istek varsa öncelikli gösterilir.
+  // Behnan'ın seçimiyle bilinçli olarak KÜÇÜK tutuldu: Ajanda'da danışan-seçici/context-switch bu turda YOK,
+  // widget sadece Ayarlar'daki Danışmanlık modalına kısayol.
+  { anahtar: 'danisanlarim', ad: 'Danışanlarım', aciklama: 'Bekleyen istek ve aktif danışan/danışman sayını özetler, dokununca Ayarlar’daki Danışmanlık ekranını açar.', uygulandi: true },
   { anahtar: 'gun_ozeti', ad: 'Bugünün özeti', aciklama: '"5/8 aktivite tamamlandı" gibi bir ilerleme göstergesi, dokununca bugünkü Ajanda’yı açar.', uygulandi: false },
   { anahtar: 'seri', ad: 'Alışkanlık serisi', aciklama: 'Bir rutinin kaç gündür kesintisiz yapıldığını gösterir.', uygulandi: false },
   { anahtar: 'biriktirme', ad: 'Su / Pomodoro toplamı', aciklama: 'Bugünkü biriktirmeli ölçüm (su, pomodoro) toplamlarını gösterir.', uygulandi: false },
@@ -433,7 +438,7 @@ const LS_WIDGET_GORUNUR = 'rite_widget_gorunur';
 // sürüklenmesi) — iki iç içe SiraliListe/SortableRow aynı pointer/delay ayarlarıyla aynı anda aktive olmaya
 // çalışırsa çakışma riski var (ikisi de aynı touchAction/delay deseni). Bunu çözmek ayrı bir mühendislik konusu,
 // bugünkü kapsam sadece widget'lar arası sıralama — Odak Alanları Home'da hep EN ÜSTTE sabit kalıyor.
-const WIDGET_SIRA_VARSAYILAN = ['olcumler', 'yaklasan_aktiviteler', 'gelenler', 'notlar_widget'];
+const WIDGET_SIRA_VARSAYILAN = ['olcumler', 'yaklasan_aktiviteler', 'gelenler', 'notlar_widget', 'danisanlarim'];
 const LS_WIDGET_SIRA = 'rite_widget_sira';
 // LS_CONTAINER (2026-09-19, Behnan isteği — "CardContainer" standardizasyonu): Home/Ajanda/Havuz'da tekrar eden
 // başlık-şeridi desenini (bkz. CardContainer bileşeni, yukarısı) tek bir yerde toplamanın ilk adımı — v1 SADECE
@@ -4362,6 +4367,12 @@ export default function Rite() {
   // çöp kutusu listesini kurarken kullanılıyor, gerisi hep inboxAktif üzerinden.
   const inboxAktif = inbox.filter((v: any) => !v.silindi_tarih);
   const ibBadge = inboxAktif.filter((x) => x.durum === 'yeni').length;
+  // danismanlikBilgi (2026-09-22): hem Ayarlar'daki Danışmanlık kartının özetinde hem Home widget'ında aynı
+  // metin kullanılsın diye TEK yerde hesaplanıyor — bekleyen istek varsa öncelikli (en aksiyon gerektiren durum).
+  const danismanlikBekleyen = danisanlarim.filter((r: any) => r.durum === 'beklemede').length;
+  const danismanlikAktifDanisan = danisanlarim.filter((r: any) => r.durum === 'aktif').length;
+  const danismanlikAktifDanisman = danismanlarim.filter((r: any) => r.durum === 'aktif').length;
+  const danismanlikBilgi = danismanlikBekleyen > 0 ? `${danismanlikBekleyen} bekleyen istek` : danismanlikAktifDanisman > 0 ? `${danismanlikAktifDanisman} danışmana bağlı` : danismanlikAktifDanisan > 0 ? `${danismanlikAktifDanisan} danışan` : 'Bağlantı yok';
   // personalActs = Kişisel Arşiv'in ağacı. 2026-09-19 (Behnan: "acaba bunu Kişisel Arşiv içinde bir
   // Kaydedilenler klasörü mü yapsak" → "Gerçekten birleşsin"): eski "📦 Ajandadan Kaydedilenler" kökü kalktı,
   // o kartlar artık BURADAN geliyor — sıradan bir "Kaydedilenler" klasörü olarak (bkz. ritHavuzaAl,
@@ -4721,6 +4732,7 @@ export default function Rite() {
                 if (k === 'yaklasan_aktiviteler') return <Widget ikon="📅" baslik="Yaklaşan aktiviteler" bilgi={yaklasanBilgi} onClick={() => { if (yaklasanAktivite) setSelDate(yaklasanAktivite.baslangic); setScreen('ajanda'); }} />;
                 if (k === 'gelenler') return <Widget ikon="📥" baslik="Gelenler" bilgi={ibBadge > 0 ? `${ibBadge} yeni` : 'Yeni yok'} onClick={() => { setHavuzFolder('gelenler'); setScreen('havuz'); }} />;
                 if (k === 'notlar_widget') return <Widget ikon="📝" baslik="Notlar" bilgi={notlar.length > 0 ? `${notlar.length} not` : 'Henüz not yok'} onClick={() => setScreen('notlar')} />;
+                if (k === 'danisanlarim') return <Widget ikon="🤝" baslik="Danışanlarım" bilgi={danismanlikBilgi} onClick={() => { setDanismanlikMsg(''); setDanismanlikOpen(true); setScreen('bilgi'); }} />;
                 return null;
               }}
             </SiraliListe>
@@ -5975,17 +5987,7 @@ export default function Rite() {
             <div className="card">
               <div className="mrow" style={{ borderTop: 'none' }}>
                 <span>Danışmanlık</span>
-                <span className="pstat">
-                  {(() => {
-                    const aktifDanisman = danismanlarim.filter((r: any) => r.durum === 'aktif').length;
-                    const bekleyen = danisanlarim.filter((r: any) => r.durum === 'beklemede').length;
-                    const aktifDanisan = danisanlarim.filter((r: any) => r.durum === 'aktif').length;
-                    if (bekleyen > 0) return bekleyen + ' bekleyen istek';
-                    if (aktifDanisman > 0) return aktifDanisman + ' danışmana bağlı';
-                    if (aktifDanisan > 0) return aktifDanisan + ' danışan';
-                    return 'bağlantı yok';
-                  })()}
-                </span>
+                <span className="pstat">{danismanlikBilgi}</span>
               </div>
               <div className="rowbtns" style={{ marginTop: 6 }}><button className="btn ghost sm" onClick={() => { setDanismanlikMsg(''); setDanismanlikOpen(true); }}>Yönet</button></div>
             </div>
