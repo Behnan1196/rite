@@ -2473,6 +2473,12 @@ export default function Rite() {
   const [baglamKartlar, setBaglamKartlar] = useState<any[]>([]);
   const [baglamYeniAd, setBaglamYeniAd] = useState('');
   const [baglamMsg, setBaglamMsg] = useState('');
+  // Haftalık plan gezinmesi (2026-09-22, Behnan: "danışman haftalık plan hazırlayacak, günleri bilmeli") —
+  // BİLEREK boş başlıyor: `today`/`weekDays` bu state bloğundan SONRA tanımlanıyor (aşağısı), useState
+  // initializer'ında kullanılamaz (TDZ) — gerçek varsayılan değer baglamDanisanSec'te, bir danışan seçilince
+  // atanıyor. weekDays/parseD/iso/MONTHS/WD zaten var olan Ajanda tarih yardımcıları, hiçbiri değiştirilmedi.
+  const [baglamHaftaBaslangic, setBaglamHaftaBaslangic] = useState('');
+  const [baglamEkleGun, setBaglamEkleGun] = useState('');
   const [atananKartlar, setAtananKartlar] = useState<any[]>([]); // danışan tarafı: danışman(lar)ımdan bana atanan kartlar, salt-okunur
   const [avatarSec, setAvatarSec] = useState('');
   const [profilMsg, setProfilMsg] = useState('');
@@ -3084,7 +3090,16 @@ export default function Rite() {
   async function baglamDanisanSec(iliskiId: string | null) {
     setAjandaBaglamIliski(iliskiId);
     setBaglamMsg(''); setBaglamKartlar([]);
-    if (iliskiId) loadBaglamKartlar(iliskiId);
+    if (iliskiId) {
+      setBaglamHaftaBaslangic(weekDays(today)[0]);
+      setBaglamEkleGun(today);
+      loadBaglamKartlar(iliskiId);
+    }
+  }
+  function baglamHaftaKaydir(delta: number) {
+    const dt = parseD(baglamHaftaBaslangic || today);
+    dt.setDate(dt.getDate() + delta * 7);
+    setBaglamHaftaBaslangic(iso(dt));
   }
   async function baglamKartEkle() {
     if (!ajandaBaglamIliski || !baglamYeniAd.trim()) return;
@@ -3094,7 +3109,8 @@ export default function Rite() {
     // 'yapilacak' : 'not') — Behnan'ın "danışanın ajandasına düşmesi gerekmiyor mu" uyarısı üzerine bu kartlar
     // artık loadData tarafından danışanın normal haftalık ızgarasına da çekiliyor, o yüzden orada doğru
     // sınıflanmaları (tikli "Yapılacak" olarak) önemli.
-    const i = await supabase.from('dog_rituals').insert({ iliski_id: ajandaBaglamIliski, client_id: null, ad: baglamYeniAd.trim(), zaman: 'gün', kaynak: 'Danisman', tip: 'gorev', kart_config: { gorev: true }, aliskanlik: false, aktif: true, mezun: false, baslangic: today, bitis: null, sira: 0, blok_sira: Date.now() });
+    const gun = baglamEkleGun || today;
+    const i = await supabase.from('dog_rituals').insert({ iliski_id: ajandaBaglamIliski, client_id: null, ad: baglamYeniAd.trim(), zaman: 'gün', kaynak: 'Danisman', tip: 'gorev', kart_config: { gorev: true }, aliskanlik: false, aktif: true, mezun: false, baslangic: gun, bitis: null, sira: 0, blok_sira: Date.now() });
     if (i.error) return setBaglamMsg('Eklenemedi: ' + i.error.message);
     setBaglamYeniAd('');
     loadBaglamKartlar(ajandaBaglamIliski);
@@ -7321,14 +7337,44 @@ export default function Rite() {
 
             {ajandaBaglamIliski && (
               <>
-                <label className="fldlbl" style={{ marginTop: 18 }}>Görevler</label>
-                {baglamKartlar.length === 0 ? <div className="note" style={{ marginTop: 0 }}>Henüz görev yok.</div> : baglamKartlar.map((k: any) => (
-                  <div key={k.id} className="mrow">
-                    <span>{kartIkon(k.kart_tipi) || '📌'} {k.ad}</span>
-                    <button className="btn ghost sm" style={{ color: 'var(--red)', borderColor: '#e6c4bd' }} onClick={() => baglamKartSil(k.id)}>Sil</button>
-                  </div>
-                ))}
-                <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+                {/* Haftalık plan (2026-09-22, Behnan: "danışman haftalık plan hazırlayacak, günleri bilmeli") —
+                    Ajanda'nın kendi zengin haftalık ızgarasına HİÇ dokunmuyor, sadece var olan tarih
+                    yardımcılarını (weekDays/parseD/iso/dayLabel'daki desenin aynısı) burada, kendi düz listesi
+                    üzerinde kullanıyor. */}
+                <label className="fldlbl" style={{ marginTop: 18 }}>Haftalık plan</label>
+                <div className="datenav">
+                  <button className="arrow" onClick={() => baglamHaftaKaydir(-1)}>‹</button>
+                  <div className="dlabel">{weekLabel(baglamHaftaBaslangic || today)}</div>
+                  <button className="arrow" onClick={() => baglamHaftaKaydir(1)}>›</button>
+                </div>
+                {weekDays(baglamHaftaBaslangic || today).map((gun: string) => {
+                  const gunKartlari = baglamKartlar.filter((k: any) => k.baslangic === gun);
+                  return (
+                    <div key={gun} style={{ marginTop: 10 }}>
+                      <div className="note" style={{ margin: 0, fontWeight: 700 }}>
+                        {WD[parseD(gun).getDay()]} {parseD(gun).getDate()} {MONTHS[parseD(gun).getMonth()]}{gun === today ? ' · bugün' : ''}
+                      </div>
+                      {gunKartlari.length === 0 ? <div className="note" style={{ marginTop: 2 }}>—</div> : gunKartlari.map((k: any) => (
+                        <div key={k.id} className="mrow">
+                          <span>{kartIkon(k.kart_tipi) || '📌'} {k.ad}</span>
+                          <button className="btn ghost sm" style={{ color: 'var(--red)', borderColor: '#e6c4bd' }} onClick={() => baglamKartSil(k.id)}>Sil</button>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+
+                <label className="fldlbl" style={{ marginTop: 18 }}>Yeni görev ekle</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+                  {weekDays(baglamHaftaBaslangic || today).map((gun: string) => (
+                    <span
+                      key={gun}
+                      className={'chip' + (baglamEkleGun === gun ? ' on' : '')}
+                      onClick={() => setBaglamEkleGun(gun)}
+                    >{WD[parseD(gun).getDay()]} {parseD(gun).getDate()}</span>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
                   <input value={baglamYeniAd} onChange={(e) => setBaglamYeniAd(e.target.value)} placeholder="Yeni görev…" onKeyDown={(e: any) => { if (e.key === 'Enter') baglamKartEkle(); }} />
                   <button className="btn sm" onClick={baglamKartEkle}>Ekle</button>
                 </div>
