@@ -419,7 +419,13 @@ const WIDGET_KATALOG: { anahtar: string; ad: string; aciklama: string; uygulandi
   { anahtar: 'seri', ad: 'Alışkanlık serisi', aciklama: 'Bir rutinin kaç gündür kesintisiz yapıldığını gösterir.', uygulandi: false },
   { anahtar: 'biriktirme', ad: 'Su / Pomodoro toplamı', aciklama: 'Bugünkü biriktirmeli ölçüm (su, pomodoro) toplamlarını gösterir.', uygulandi: false },
   { anahtar: 'ozlu_soz', ad: 'Günün sözü', aciklama: 'Günlük bir özlü söz/alıntı gösterir, Odak Alanları’yla uyumlu.', uygulandi: false },
-  { anahtar: 'ilac_hatirlatici', ad: 'İlaç hatırlatıcı', aciklama: 'Ajanda’da her gün yer kaplamadan ilaç hatırlatmaları.', uygulandi: false },
+  // 2026-09-23 GÜNCELLEME (Behnan kararı — Ritos/piyasa karşılaştırması turu, uygulandı): 'ilac_hatirlatici' →
+  // 'gunluk_hatirlatici' — piyasada (Medisafe/MyTherapy vs. genel Reminder uygulamaları) ilaca özel adı hak eden
+  // doz/uyum takibi burada yok, mekanizma zaten tamamen genel (bkz. isHatirlaticiKart). Odak Alanları gibi
+  // Home'da SABİT bir blok — widgetSira/görünürlük sistemine (aşağısı) DAHİL DEĞİL, o yüzden burada
+  // "uygulandı" görünse de Ayarlar > Widget kataloğu'ndan göster/gizle YAPILAMIYOR (bilinçli, Odak Alanları'yla
+  // aynı istisna).
+  { anahtar: 'gunluk_hatirlatici', ad: 'Günlük Hatırlatıcı', aciklama: 'İlaç ve benzeri, her gün tekrar eden hatırlatmalar — Ajanda’da yer kaplamadan, Home’da kendi sabit girişi.', uygulandi: true },
   { anahtar: 'dil_kartlari', ad: 'Dil öğrenme kartları', aciklama: 'AI ile üretilen günlük kelime/örnek cümle önerileri — bir Odak Alanı/Proje Kartı’yla eşleşir.', uygulandi: false },
   { anahtar: 'home_assistant', ad: 'Home Assistant', aciklama: 'Ev otomasyonu entegrasyonu (ör. Raspberry Pi üzerindeki Home Assistant).', uygulandi: false },
   { anahtar: 'harici_db', ad: 'Harici veritabanı widget’ı', aciklama: 'Kullanıcının kendi veritabanından (ör. Hostinger) günlük görev çeker — "çek" modeli, kimlik kasası gerektirir.', uygulandi: false },
@@ -501,7 +507,16 @@ const SLOTS: [string, string][] = [...TODS, [ZAMANSIZ, 'Serbest']]; // seçim ge
 // Haftagünü: getDay değeri (0=Paz..6=Cmt), Pazartesi-önce görüntü sırası
 const GUNLER: [number, string][] = [[1, 'Pzt'], [2, 'Sal'], [3, 'Çar'], [4, 'Per'], [5, 'Cum'], [6, 'Cmt'], [0, 'Paz']];
 // Akıllı kart tipleri: kod · etiket · ikon
-const KARTLAR: [string, string, string][] = [['standart', 'Standart', '•'], ['bilgi', 'Bilgi', '📄'], ['video', 'Video', '🎬'], ['anket', 'Anket', '📋'], ['coktan', 'Çoktan seçmeli', '❓'], ['diyet', 'Diyet', '🍽'], ['tarif', 'Tarif', '🍳'], ['olcum', 'Ölçüm', '📏'], ['nefes', 'Nefes', '🫁'], ['ruhhali', 'Ruh hali', '🙂'], ['workout', 'Egzersiz', '🏋️'], ['sukran', 'Şükran', '🙏'], ['topraklama', '5-4-3-2-1', '🖐'], ['pomodoro', 'Odak', '🍅'], ['beden', 'Beden taraması', '🧘'], ['uykuoncesi', 'Uyku hazırlığı', '🌙'], ['su', 'Su sayacı', '💧'], ['maruz', 'Maruz bırakma', '🎯'], ['niyet', 'Niyet', '🧭'], ['randevu', 'Randevu', '📅']];
+// 'hatirlatici' (2026-09-23, Behnan kararı — Ritos/piyasa karşılaştırması turu): bkz. HATIRLATICI_TUR ve
+// isHatirlaticiKart altındaki not — burada sadece genel KARTLAR tablosunda (arama/çöp kutusu/paylaşım gibi
+// genel kart listelerinde) doğru ikon/etiketle görünsün diye; kendi ekranında HATIRLATICI_TUR'un kendi
+// ikonunu (💊/🔔) kullanıyor.
+const KARTLAR: [string, string, string][] = [['standart', 'Standart', '•'], ['bilgi', 'Bilgi', '📄'], ['video', 'Video', '🎬'], ['anket', 'Anket', '📋'], ['coktan', 'Çoktan seçmeli', '❓'], ['diyet', 'Diyet', '🍽'], ['tarif', 'Tarif', '🍳'], ['olcum', 'Ölçüm', '📏'], ['nefes', 'Nefes', '🫁'], ['ruhhali', 'Ruh hali', '🙂'], ['workout', 'Egzersiz', '🏋️'], ['sukran', 'Şükran', '🙏'], ['topraklama', '5-4-3-2-1', '🖐'], ['pomodoro', 'Odak', '🍅'], ['beden', 'Beden taraması', '🧘'], ['uykuoncesi', 'Uyku hazırlığı', '🌙'], ['su', 'Su sayacı', '💧'], ['maruz', 'Maruz bırakma', '🎯'], ['niyet', 'Niyet', '🧭'], ['randevu', 'Randevu', '📅'], ['hatirlatici', 'Hatırlatıcı', '🔔']];
+// HATIRLATICI_TUR (2026-09-23, Günlük Hatırlatıcı — bkz. isHatirlaticiKart): kart_config.hatirlatici_tur için
+// küçük, genişleyebilir bir tür listesi — bugün sadece ilk gerçek kullanım örneği (ilaç) + bilinçli olarak açık
+// bırakılmış bir "genel" seçeneği var (Behnan: "başka ne alanda kullanılır düşünemedim ama onla ilgili bir
+// ikon"). RANDEVU_FORMAT ile aynı [anahtar, etiket, ikon] kalıbı.
+const HATIRLATICI_TUR: [string, string, string][] = [['ilac', 'İlaç', '💊'], ['genel', 'Genel', '🔔']];
 // KART_LAB (2026-09-18, Behnan isteği — Geliştirici modu / "Kart Laboratuvarı"): Rite Studio'yu hiç açmadan,
 // KARTLAR'daki var olan kart türlerinden birini seçip Ajanda'ya GERÇEK bir kart olarak düşürmek için — hem
 // kullanılabilsin (nefes egzersizi gerçekten yapılabilsin) hem incelenebilsin (kart_config'i görülüp
@@ -676,6 +691,14 @@ function isNotKart(rt: any): boolean {
   // cfg.genel eski/kaldırılmış "Kart" tipinin işaretiydi (bkz. 2026-09-16 kaldırma notu) — artık kontrol
   // edilmiyor, olası eski bir kayıt varsa da diğer alanlara göre Not/Aktivite/Randevu'dan birine düşüyor.
   return rt?.kart_tipi === 'bilgi' && rt?.kaynak === 'Kendi' && !cfg.randevu && !cfg.gorev && !rt?.aliskanlik;
+}
+// isHatirlaticiKart (2026-09-23, Günlük Hatırlatıcı — Behnan kararı, Ritos/piyasa karşılaştırması turu):
+// isNotKart'la AYNI amaç için ayrı bir yardımcı — Ajanda'nın gün listesi (habits) ve ay takvimindeki gün
+// noktaları (gunRit) bu tip kartları hiç görmemeli (gerekçe: "6-10 ilaç her gün hatırlatılacak, bunun ajanda'da
+// olması gereksiz"). Hatırlatma altyapısının kendisi (hatirlatma_saat + api/cron/reminders) hiç değişmedi, zaten
+// tamamen genel — yeni olan sadece bu kart_tipi'nin Ajanda'dan dışlanması ve kendi Home girişi/ekranı.
+function isHatirlaticiKart(rt: any): boolean {
+  return rt?.kart_tipi === 'hatirlatici';
 }
 // Adım pencerelerini çöz: ardisik=true ise önceki adımın bitişinden başlar.
 function programSpans(adimlar: any[], sure?: number | null) {
@@ -2242,6 +2265,12 @@ export default function Rite() {
   const [meas, setMeas] = useState<any[]>([]);
   const [cNot, setCNot] = useState<string>('');
   const [yeniRit, setYeniRit] = useState('');
+  // Günlük Hatırlatıcı ekle-formu (2026-09-23): bkz. isHatirlaticiKart üstündeki not. Sadece 3 alan — ad, saat,
+  // tür (💊 İlaç / 🔔 Genel) — v1 bilinçli olarak minimal (Behnan: "bildirim altyapımız olduğu için çok kolay
+  // olacak"), saat sonradan düzenlenemiyor, sil+yeniden ekle yeterli.
+  const [hatAdInput, setHatAdInput] = useState('');
+  const [hatSaatInput, setHatSaatInput] = useState('');
+  const [hatTurInput, setHatTurInput] = useState('ilac');
   const [inbox, setInbox] = useState<any[]>([]);
   const [ibDetay, setIbDetay] = useState<any>(null);
   const [ibdAd, setIbdAd] = useState('');
@@ -3918,6 +3947,31 @@ export default function Rite() {
     }
     loadData(client.id);
   }
+  // Günlük Hatırlatıcı — ekleme/silme (2026-09-23): ritEkle'yi KASITLI olarak kullanmıyoruz, çünkü ritEkle
+  // hatirlatma_saat'i parametre olarak almıyor (oluşturduktan sonra ayrı bir patch gerekirdi, id de dönmüyor) —
+  // burada tek seferde, bitissiz/tekrar eden (aliskanlik) bir kayıt olarak dosdoğru insert ediyoruz. Silme,
+  // ritSil'in basit dalıyla aynı desen (silindi_tarih damgası → 30 gün Çöp kutusu'ndan geri alınabilir) ama
+  // ritSil'deki "geçmişi var mı" ayrımı burada anlamsız (Ajanda'ya hiç girmiyorlar), o yüzden ayrı, sade bir
+  // fonksiyon.
+  async function hatirlaticiEkle(ad: string, saat: string, tur: string) {
+    if (!client || !ad.trim() || !saat) return;
+    const r = await supabase.from('dog_rituals').insert({
+      client_id: client.id, ad: ad.trim(), zaman: 'gün', kaynak: 'Kendi', tip: 'aliskanlik',
+      kart_tipi: 'hatirlatici', kart_config: { hatirlatici_tur: tur },
+      hatirlatma_saat: saat, aliskanlik: true, aktif: true, mezun: false,
+      baslangic: today, bitis: null, blok_sira: Date.now(),
+    });
+    if (r.error) { alert('Eklenemedi: ' + r.error.message); return; }
+    setHatAdInput(''); setHatSaatInput('');
+    loadData(client.id);
+  }
+  async function hatirlaticiSil(id: string) {
+    if (!client) return;
+    if (!confirm('Bu hatırlatıcı silinsin mi? (30 gün içinde Ajanda\'daki 🗑️ Çöp kutusu\'ndan geri alabilirsin)')) return;
+    const r = await supabase.from('dog_rituals').update({ silindi_tarih: new Date().toISOString() }).eq('id', id);
+    if (r.error) { alert('Silinemedi: ' + r.error.message); return; }
+    loadData(client.id);
+  }
   async function ritGeriAl(id: string) {
     if (!client) return;
     const r = await supabase.from('dog_rituals').update({ silindi_tarih: null }).eq('id', id);
@@ -4345,7 +4399,7 @@ export default function Rite() {
   // Not artık habits'e (günün listesine) hiç girmiyor (kullanıcı isteği: "notun işlevi o değil" — her gün
   // görünmesi bitis=null altyapısını Alışkanlık'la paylaşmanın yan etkisiydi). Not'un kendi, günlerden bağımsız
   // gösterimi aşağıdaki `notlar` listesi ve Ajanda'nın altındaki "Notlar" şeridi (bkz. rowbody JSX'i).
-  const habits = rituals.filter((r) => !r.mezun && !isNotKart(r) && activeOn(r, day));
+  const habits = rituals.filter((r) => !r.mezun && !isNotKart(r) && !isHatirlaticiKart(r) && activeOn(r, day));
   // Notlar: güne bağlı değil, mezun olmamış tüm kişisel Not'lar — Ajanda'nın altında, hangi gün seçili olursa
   // olsun hep aynı şekilde görünen ayrı bir şerit (kullanıcı isteği). blok_sira ile sıralı (Aktivite listesindeki
   // blokSira ile aynı alan) — yeni bir Not oluşunca taslakKaydet Date.now() yazıyor, bu yüzden varsayılan olarak
@@ -4358,6 +4412,9 @@ export default function Rite() {
   // Date.now() ile karışmaması için: yeni oluşan bir not hâlâ çok daha büyük bir blok_sira alacağı için otomatik
   // en üste düşmeye devam ediyor, elle sürüklenenler küçük tam sayılarla aynı sırada kalıyor.
   const notlar = rituals.filter((r) => !r.mezun && isNotKart(r)).sort((a, b) => (Number(b.blok_sira) || 0) - (Number(a.blok_sira) || 0));
+  // hatirlaticilar (2026-09-23): Notlar'la aynı desen — güne bağlı değil, mezun/silinmemiş TÜM hatırlatıcılar,
+  // saatine göre sıralı (Home'daki "Günlük Hatırlatıcı" ve kendi ekranı bunu kullanıyor).
+  const hatirlaticilar = rituals.filter((r) => !r.mezun && !r.silindi_tarih && isHatirlaticiKart(r)).sort((a, b) => (a.hatirlatma_saat || '') < (b.hatirlatma_saat || '') ? -1 : 1);
   async function notlarSiraKaydet(yeniSirali: any[]) {
     if (!client) return;
     const n = yeniSirali.length;
@@ -4808,6 +4865,25 @@ export default function Rite() {
               </div>
               )}
             </CardContainer>
+            {/* Günlük Hatırlatıcı (2026-09-23, Behnan kararı — Ritos/piyasa karşılaştırması turu): bilinçli
+                olarak Widget rayının (widgetSira/SiraliListe) DIŞINDA — Odak Alanları'yla aynı gerekçe, Home'da
+                sabit, göze çarpan "geniş bir buton" olması isteniyordu ("ilacı anımsatan bir ikon, bir de şu an
+                başka ne alanda kullanılır düşünemedim ama onla ilgili bir ikon"). İsim bilinçli olarak "İlaç
+                Hatırlatıcı" değil — bkz. isHatirlaticiKart üstündeki not, piyasada (Medisafe/MyTherapy) ilaca
+                özel adı hak eden doz/uyum takibi burada yok, ilaç sadece ilk kullanım örneği. */}
+            <button
+              type="button"
+              onClick={() => setScreen('hatirlatici')}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', background: '#efe8da', border: 'none', borderRadius: 12, padding: '13px 14px', marginTop: 10, textAlign: 'left', cursor: 'pointer' }}
+            >
+              <span style={{ fontSize: 22, flex: '0 0 auto' }}>🔔</span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 14 }}>Günlük Hatırlatıcı</div>
+                <div className="note" style={{ marginTop: 2 }}>{hatirlaticilar.length > 0 ? hatirlaticilar.length + ' hatırlatıcı' : 'İlaç ve benzeri hatırlatmalar'}</div>
+              </span>
+              <span style={{ color: 'var(--muted)', fontSize: 13 }}>›</span>
+            </button>
+
             {/* Widget'lar (2026-09-20, Behnan isteği — "birkaç örneği de hemen yapıp home da nasıl göründüğünü ve
                 sürükle bırak ile yerleştirimini deneyebiliriz"): Ölçümler ("Ölçümün widget olmasına hemen hemen
                 karar verdik" kararının ilk uygulaması) + bugün eklenen 3 yeni örnek (Yaklaşan aktiviteler,
@@ -4916,7 +4992,7 @@ export default function Rite() {
               // bağımsız düz, tarihe göre sıralı bir liste — bkz. ajArama tanımındaki not.
               const q = ajArama.trim().toLowerCase();
               const eslesir = (baslik?: string | null, aciklama?: string | null) => (baslik || '').toLowerCase().includes(q) || (aciklama || '').toLowerCase().includes(q);
-              const sonuclar = rituals.filter((r: any) => !r.mezun && eslesir(r.ad, r.aciklama)).sort((a: any, b: any) => (a.baslangic || '') < (b.baslangic || '') ? -1 : 1);
+              const sonuclar = rituals.filter((r: any) => !r.mezun && !isHatirlaticiKart(r) && eslesir(r.ad, r.aciklama)).sort((a: any, b: any) => (a.baslangic || '') < (b.baslangic || '') ? -1 : 1);
               return sonuclar.length === 0 ? (
                 <div className="note" style={{ textAlign: 'center', marginTop: 10 }}>&quot;{ajArama}&quot; için sonuç bulunamadı.</div>
               ) : (
@@ -5231,7 +5307,7 @@ export default function Rite() {
                           if (!ds) return <div key={i} className="calcell empty" />;
                           // Sayıma yalnız "yapılabilir" (done'lanabilir) ritüeller: mesaj tipi video (done:false), ayraçlar ve
                           // Not (sticky note — checkbox'ı/tamamlanma kavramı yok, Ayraç gibi bir görev değil) hariç.
-                          const gunRit = rituals.filter((r) => !r.mezun && activeOn(r, ds) && r.kart_tipi !== 'ayrac' && !isNotKart(r) && !(r.kart_tipi === 'video' && r.kart_config && r.kart_config.done === false));
+                          const gunRit = rituals.filter((r) => !r.mezun && activeOn(r, ds) && r.kart_tipi !== 'ayrac' && !isNotKart(r) && !isHatirlaticiKart(r) && !(r.kart_tipi === 'video' && r.kart_config && r.kart_config.done === false));
                           const n = gunRit.length;
                           const done = gunRit.filter((r) => logs.some((l) => l.ritual_id === r.id && l.tarih === ds && l.yapildi)).length;
                           return (
@@ -5804,6 +5880,53 @@ export default function Rite() {
             >
               {notlar.length === 0 ? <div className="note">Henüz not yok.</div> : notlarIcerik()}
             </CardContainer>
+          </div>
+        )}
+
+        {/* ---------- 🔔 GÜNLÜK HATIRLATICI (2026-09-23, Behnan kararı) ---------- */}
+        {/* Notlar ekranıyla aynı iskelet (‹ Home geri linki + kendi içeriği) — ama CardContainer'a sarmıyoruz,
+            çünkü Home'daki giriş zaten kendi başına bir "Tool" (bugünkü Widget/CardContainer/Tool ayrımına göre):
+            kendi ekle-formu + kendi listesi olan, tek başına bir iş akışı. hatirlatma_saat/cron/push hiç
+            değişmedi (bkz. isHatirlaticiKart üstündeki not) — "aldım" işaretlemesi de var olan toggleRit/
+            dog_ritual_logs mekanizmasını (alışkanlık tamamlama ile birebir aynı) aynen kullanıyor. */}
+        {screen === 'hatirlatici' && (
+          <div>
+            <button className="linkbtn" onClick={() => setScreen('home')}>‹ Home</button>
+            <h2 style={{ marginTop: 8 }}>🔔 Günlük Hatırlatıcı</h2>
+            <p className="note" style={{ marginTop: -6, marginBottom: 12 }}>Ajanda'ya girmeden, her gün tekrar eden hatırlatmalar — ilaç ve benzeri.</p>
+
+            <div className="card">
+              <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                {HATIRLATICI_TUR.map(([k, l, ic]) => (
+                  <span key={k} className={'chip' + (hatTurInput === k ? ' on' : '')} onClick={() => setHatTurInput(k)}>{ic} {l}</span>
+                ))}
+              </div>
+              <input value={hatAdInput} onChange={(e: any) => setHatAdInput(e.target.value)} placeholder="Ad (ör. Parol — sabah dozu)" style={{ marginBottom: 8 }} />
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <input type="time" value={hatSaatInput} onChange={(e: any) => setHatSaatInput(e.target.value)} style={{ flex: '0 0 auto' }} />
+                <button type="button" className="btn" style={{ flex: 1 }} disabled={!hatAdInput.trim() || !hatSaatInput} onClick={() => hatirlaticiEkle(hatAdInput, hatSaatInput, hatTurInput)}>Ekle</button>
+              </div>
+            </div>
+
+            {hatirlaticilar.length === 0 ? (
+              <div className="note" style={{ textAlign: 'center', marginTop: 16 }}>Henüz hatırlatıcı yok.</div>
+            ) : (
+              hatirlaticilar.map((r: any) => {
+                const tur = HATIRLATICI_TUR.find(([k]) => k === (r.kart_config?.hatirlatici_tur || 'genel'));
+                const yapildi = ritDone(r.id);
+                return (
+                  <div key={r.id} className="card" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontSize: 18, flex: '0 0 auto' }}>{tur ? tur[2] : '🔔'}</span>
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600 }}>{r.ad}</div>
+                      <div className="note" style={{ marginTop: 2 }}>🕐 {r.hatirlatma_saat}</div>
+                    </span>
+                    <button type="button" className="btn ghost sm" style={yapildi ? { background: 'var(--green)', color: '#fff', borderColor: 'var(--green)' } : undefined} onClick={() => toggleRit(r.id)}>{yapildi ? '✓ Alındı' : 'Bugün'}</button>
+                    <button type="button" className="linkbtn" style={{ color: 'var(--red)' }} onClick={() => hatirlaticiSil(r.id)}>🗑</button>
+                  </div>
+                );
+              })
+            )}
           </div>
         )}
 
