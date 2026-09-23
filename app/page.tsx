@@ -4879,7 +4879,9 @@ export default function Rite() {
               <span style={{ fontSize: 22, flex: '0 0 auto' }}>🔔</span>
               <span style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 700, fontSize: 14 }}>Günlük Hatırlatıcı</div>
-                <div className="note" style={{ marginTop: 2 }}>{hatirlaticilar.length > 0 ? hatirlaticilar.length + ' hatırlatıcı' : 'İlaç ve benzeri hatırlatmalar'}</div>
+                {/* 2026-09-23 GÜNCELLEME (Behnan kararı — "widget dediğim şey hep bilgi çeken geniş bir buton"):
+                    toplam sayı yerine GÜNÜN durumu — iOS'un geniş widget'ları gibi canlı bilgi taşısın diye. */}
+                <div className="note" style={{ marginTop: 2 }}>{hatirlaticilar.length > 0 ? hatirlaticilar.filter((r: any) => ritDone(r.id)).length + '/' + hatirlaticilar.length + ' bugün alındı' : 'İlaç ve benzeri hatırlatmalar'}</div>
               </span>
               <span style={{ color: 'var(--muted)', fontSize: 13 }}>›</span>
             </button>
